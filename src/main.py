@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Company Intelligence Automation - The Executive Engine
-Design philosophy: Elegant orchestration of market intelligence
+Company Intelligence Automation - Strategic Constellation Engine
+Portfolio monitoring across the complete technological transformation spectrum
 """
 
 import asyncio
@@ -16,67 +16,81 @@ import aiohttp
 import requests
 import feedparser
 
-# Production-grade logging architecture
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-class CompanyIntelligenceEngine:
-    """The design vision made manifest - orchestrating intelligence with precision."""
+class StrategicIntelligenceEngine:
+    """Orchestrating intelligence across your 12-position strategic constellation."""
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.companies = [
-            {"symbol": "AAPL", "name": "Apple Inc.", "sector": "Technology"},
-            {"symbol": "MSFT", "name": "Microsoft Corporation", "sector": "Technology"},
-            {"symbol": "GOOGL", "name": "Alphabet Inc.", "sector": "Technology"},
-            {"symbol": "AMZN", "name": "Amazon.com Inc.", "sector": "Technology"},
-            {"symbol": "TSLA", "name": "Tesla Inc.", "sector": "Automotive"}
-        ]
+        self.companies = self._load_strategic_constellation()
+        
+    def _load_strategic_constellation(self):
+        """Load your curated strategic universe."""
+        try:
+            with open('data/companies.json', 'r') as f:
+                companies = json.load(f)
+            self.logger.info(f"✅ Strategic constellation loaded: {len(companies)} positions")
+            return companies
+        except:
+            # Fallback constellation if file load fails
+            return [
+                {"symbol": "AAPL", "name": "Apple Inc.", "sector": "Consumer Technology", "priority": "foundational_core"},
+                {"symbol": "MSFT", "name": "Microsoft Corporation", "sector": "Enterprise Technology", "priority": "foundational_core"},
+                {"symbol": "GOOGL", "name": "Alphabet Inc.", "sector": "Digital Platform", "priority": "foundational_core"},
+                {"symbol": "AMZN", "name": "Amazon.com Inc.", "sector": "E-commerce/Cloud", "priority": "foundational_core"},
+                {"symbol": "TSLA", "name": "Tesla Inc.", "sector": "Sustainable Transport", "priority": "growth_anchor"},
+                {"symbol": "NVDA", "name": "NVIDIA Corporation", "sector": "AI Infrastructure", "priority": "strategic_growth"},
+                {"symbol": "META", "name": "Meta Platforms Inc.", "sector": "Social Platform", "priority": "strategic_growth"},
+                {"symbol": "NFLX", "name": "Netflix Inc.", "sector": "Streaming Entertainment", "priority": "growth_anchor"},
+                {"symbol": "AMD", "name": "Advanced Micro Devices Inc.", "sector": "Semiconductors", "priority": "competitive_growth"},
+                {"symbol": "PLTR", "name": "Palantir Technologies Inc.", "sector": "Data Analytics/AI", "priority": "strategic_growth"},
+                {"symbol": "KOPN", "name": "Kopin Corporation", "sector": "AR/VR Technology", "priority": "speculative_innovation"},
+                {"symbol": "SKYQ", "name": "Sky Quarry Inc.", "sector": "Industrial Technology", "priority": "speculative_innovation"}
+            ]
     
-    async def orchestrate_intelligence_symphony(self):
-        """The main execution - where data becomes insight, insight becomes power."""
-        self.logger.info("🚀 INTELLIGENCE ENGINE ACTIVATION - Design Vision Deployed")
+    async def orchestrate_strategic_intelligence(self):
+        """Execute the complete intelligence symphony."""
+        self.logger.info("🚀 STRATEGIC CONSTELLATION INTELLIGENCE - Activation Sequence")
         
         try:
-            # PHASE 1: Market Intelligence Collection
-            market_data = await self._harvest_market_intelligence()
+            # Phase 1: Market Data Collection Across Constellation
+            market_intelligence = await self._harvest_constellation_data()
             
-            # PHASE 2: News Intelligence Synthesis  
-            news_data = await self._synthesize_news_intelligence()
+            # Phase 2: News Intelligence Synthesis
+            news_intelligence = await self._synthesize_strategic_news()
             
-            # PHASE 3: Executive Report Generation
-            executive_report = self._architect_executive_report(market_data, news_data)
+            # Phase 3: Executive Brief Generation
+            strategic_brief = self._architect_executive_brief(market_intelligence, news_intelligence)
             
-            # PHASE 4: Intelligent Distribution
-            await self._deploy_intelligence_distribution(executive_report)
+            # Phase 4: Intelligence Distribution
+            await self._deploy_strategic_distribution(strategic_brief)
             
-            self.logger.info("✅ INTELLIGENCE SYMPHONY COMPLETE - Design Excellence Achieved")
+            self.logger.info("✅ STRATEGIC CONSTELLATION INTELLIGENCE - Mission Complete")
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ Symphony Disruption: {e}")
-            await self._emergency_notification(str(e))
+            self.logger.error(f"❌ Intelligence disruption: {e}")
+            await self._emergency_alert(str(e))
             return False
     
-    async def _harvest_market_intelligence(self):
-        """Market data collection with design precision."""
-        alpha_vantage_key = os.getenv('ALPHA_VANTAGE_API_KEY')
-        market_intelligence = {}
+    async def _harvest_constellation_data(self):
+        """Collect market data across your strategic universe."""
+        alpha_key = os.getenv('ALPHA_VANTAGE_API_KEY')
+        constellation_data = {}
         
-        self.logger.info("📊 Harvesting Market Intelligence Streams")
+        self.logger.info("📊 Harvesting Strategic Constellation Market Data")
         
-        for company in self.companies:
-            symbol = company['symbol']
+        for position in self.companies:
+            symbol = position['symbol']
             
             try:
-                if alpha_vantage_key:
+                if alpha_key:
                     url = "https://www.alphavantage.co/query"
                     params = {
                         'function': 'GLOBAL_QUOTE',
                         'symbol': symbol,
-                        'apikey': alpha_vantage_key
+                        'apikey': alpha_key
                     }
                     
                     async with aiohttp.ClientSession() as session:
@@ -85,34 +99,36 @@ class CompanyIntelligenceEngine:
                                 data = await response.json()
                                 if 'Global Quote' in data:
                                     quote = data['Global Quote']
-                                    market_intelligence[symbol] = {
+                                    constellation_data[symbol] = {
                                         'price': quote.get('05. price', 'N/A'),
                                         'change': quote.get('09. change', 'N/A'),
                                         'change_percent': quote.get('10. change percent', 'N/A'),
                                         'volume': quote.get('06. volume', 'N/A'),
-                                        'previous_close': quote.get('08. previous close', 'N/A')
+                                        'high': quote.get('03. high', 'N/A'),
+                                        'low': quote.get('04. low', 'N/A'),
+                                        'position_data': position
                                     }
                                     self.logger.info(f"✅ Market data secured for {symbol}")
                 
-                # API rate limiting respect - design elegance
+                # API rate limiting - strategic patience
                 await asyncio.sleep(12)
                 
             except Exception as e:
-                self.logger.warning(f"Market disruption for {symbol}: {e}")
-                market_intelligence[symbol] = {'status': 'disrupted', 'error': str(e)}
+                self.logger.warning(f"Data collection disruption for {symbol}: {e}")
+                constellation_data[symbol] = {'status': 'limited', 'position_data': position}
         
-        return market_intelligence
+        return constellation_data
     
-    async def _synthesize_news_intelligence(self):
-        """News intelligence with sentiment architecture mastery."""
+    async def _synthesize_strategic_news(self):
+        """News intelligence synthesis across strategic positions."""
         newsapi_key = os.getenv('NEWSAPI_KEY')
-        news_intelligence = {}
+        news_matrix = {}
         
-        self.logger.info("📰 Synthesizing News Intelligence Matrix")
+        self.logger.info("📰 Synthesizing Strategic News Intelligence")
         
-        for company in self.companies:
-            symbol = company['symbol']
-            company_name = company['name']
+        for position in self.companies:
+            symbol = position['symbol']
+            company_name = position['name']
             articles = []
             
             try:
@@ -123,7 +139,7 @@ class CompanyIntelligenceEngine:
                         'q': f'"{company_name}"',
                         'language': 'en',
                         'sortBy': 'relevancy',
-                        'pageSize': 8,
+                        'pageSize': 6,
                         'apiKey': newsapi_key
                     }
                     
@@ -134,52 +150,38 @@ class CompanyIntelligenceEngine:
                                 if data.get('status') == 'ok':
                                     articles.extend(data.get('articles', []))
                 
-                # RSS Intelligence Enhancement
-                try:
-                    rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}"
-                    feed = feedparser.parse(rss_url)
-                    for entry in feed.entries[:3]:
-                        articles.append({
-                            'title': entry.get('title', ''),
-                            'description': entry.get('summary', ''),
-                            'url': entry.get('link', ''),
-                            'publishedAt': entry.get('published', ''),
-                            'source': {'name': 'Yahoo Finance RSS'}
-                        })
-                except:
-                    pass
-                
                 # Sentiment Analysis Engine
-                sentiment = self._architect_sentiment_analysis(articles)
+                sentiment = self._analyze_strategic_sentiment(articles)
                 
-                news_intelligence[symbol] = {
+                news_matrix[symbol] = {
                     'article_count': len(articles),
-                    'top_articles': articles[:4],
+                    'top_articles': articles[:3],
                     'sentiment': sentiment,
-                    'intelligence_quality': 'premium' if len(articles) > 3 else 'standard'
+                    'priority': position.get('priority', 'standard')
                 }
                 
-                self.logger.info(f"✅ News intelligence matrix complete for {symbol}")
-                
             except Exception as e:
-                self.logger.warning(f"News synthesis disruption for {symbol}: {e}")
-                news_intelligence[symbol] = {'status': 'limited', 'error': str(e)}
+                self.logger.warning(f"News synthesis limited for {symbol}: {e}")
+                news_matrix[symbol] = {'status': 'limited', 'priority': position.get('priority', 'standard')}
         
-        return news_intelligence
+        return news_matrix
     
-    def _architect_sentiment_analysis(self, articles):
-        """Sentiment analysis with linguistic design excellence."""
+    def _analyze_strategic_sentiment(self, articles):
+        """Advanced sentiment analysis for strategic positioning."""
         if not articles:
             return {'score': 0, 'classification': 'neutral', 'confidence': 0}
         
-        # Linguistic sentiment architecture
+        # Strategic sentiment indicators
         bullish_signals = [
-            'growth', 'profit', 'beat', 'strong', 'bullish', 'upgrade', 'buy', 
-            'surge', 'record', 'outperform', 'positive', 'gains', 'momentum'
+            'growth', 'profit', 'beat', 'strong', 'bullish', 'upgrade', 'buy', 'surge', 
+            'record', 'outperform', 'breakthrough', 'innovation', 'partnership', 'expansion',
+            'accelerating', 'momentum', 'leadership', 'dominance', 'competitive advantage'
         ]
+        
         bearish_signals = [
-            'loss', 'decline', 'miss', 'weak', 'bearish', 'downgrade', 'sell',
-            'crash', 'lawsuit', 'concerns', 'risks', 'challenges', 'pressure'
+            'loss', 'decline', 'miss', 'weak', 'bearish', 'downgrade', 'sell', 'crash',
+            'lawsuit', 'investigation', 'regulatory', 'competition', 'pressure', 'challenges',
+            'slowdown', 'concerns', 'risks', 'disruption', 'volatility'
         ]
         
         sentiment_scores = []
@@ -197,317 +199,320 @@ class CompanyIntelligenceEngine:
         if sentiment_scores:
             avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
             
-            if avg_sentiment > 0.3:
+            if avg_sentiment > 0.25:
                 classification = 'bullish'
-            elif avg_sentiment < -0.3:
-                classification = 'bearish'
+            elif avg_sentiment < -0.25:
+                classification = 'bearish'  
             else:
                 classification = 'neutral'
             
-            confidence = min(abs(avg_sentiment) * 1.5, 1.0)
+            confidence = min(abs(avg_sentiment) * 1.8, 1.0)
             
             return {
                 'score': round(avg_sentiment, 3),
                 'classification': classification,
-                'confidence': round(confidence, 3),
-                'signals_analyzed': len(sentiment_scores)
+                'confidence': round(confidence, 3)
             }
         
-        return {'score': 0, 'classification': 'neutral', 'confidence': 0, 'signals_analyzed': 0}
+        return {'score': 0, 'classification': 'neutral', 'confidence': 0}
     
-    def _architect_executive_report(self, market_data, news_data):
-        """Executive report generation - design thinking at its apex."""
+    def _architect_executive_brief(self, market_data, news_data):
+        """Generate executive-grade strategic intelligence brief."""
         
         timestamp = datetime.now().strftime("%B %d, %Y")
         current_time = datetime.now().strftime("%I:%M %p EST")
         
-        # Intelligence synthesis and alert generation
-        total_companies = len(self.companies)
-        active_alerts = []
-        bullish_count = 0
-        bearish_count = 0
+        # Strategic Analysis
+        total_positions = len(self.companies)
+        foundational_positions = [c for c in self.companies if c.get('priority') == 'foundational_core']
+        growth_positions = [c for c in self.companies if 'growth' in c.get('priority', '')]
+        speculative_positions = [c for c in self.companies if 'speculative' in c.get('priority', '')]
         
-        for company in self.companies:
-            symbol = company['symbol']
-            
-            # Price movement alert architecture
+        # Alert Generation
+        strategic_alerts = []
+        bullish_momentum = 0
+        bearish_signals = 0
+        
+        for position in self.companies:
+            symbol = position['symbol']
             market_info = market_data.get(symbol, {})
-            change_percent = market_info.get('change_percent', '')
+            news_info = news_data.get(symbol, {})
             
+            # Price movement analysis
+            change_percent = market_info.get('change_percent', '')
             if change_percent and change_percent != 'N/A':
                 try:
                     change_val = float(change_percent.replace('%', ''))
-                    if abs(change_val) > 3:
-                        alert_intensity = "🔥 MAJOR" if abs(change_val) > 8 else "⚡ SIGNIFICANT"
-                        active_alerts.append(f"{alert_intensity} price movement in {symbol}: {change_percent}")
+                    threshold = position.get('alert_thresholds', {}).get('price_change_percent', 5.0)
+                    
+                    if abs(change_val) > threshold:
+                        alert_intensity = "🔥 MAJOR" if abs(change_val) > threshold * 1.5 else "⚡ SIGNIFICANT"
+                        strategic_alerts.append(f"{alert_intensity} movement in {symbol}: {change_percent} (threshold: {threshold}%)")
                 except:
                     pass
             
-            # Sentiment alert synthesis
-            sentiment_info = news_data.get(symbol, {}).get('sentiment', {})
-            classification = sentiment_info.get('classification', 'neutral')
-            confidence = sentiment_info.get('confidence', 0)
-            
-            if classification == 'bullish':
-                bullish_count += 1
-            elif classification == 'bearish':
-                bearish_count += 1
-                
-            if classification == 'bearish' and confidence > 0.6:
-                active_alerts.append(f"🚨 BEARISH sentiment detected in {symbol} (confidence: {confidence:.0%})")
+            # Sentiment momentum tracking
+            sentiment = news_info.get('sentiment', {})
+            if sentiment.get('classification') == 'bullish':
+                bullish_momentum += 1
+            elif sentiment.get('classification') == 'bearish':
+                bearish_signals += 1
         
-        # Market sentiment overview
-        if bullish_count > bearish_count:
-            market_mood = "🟢 BULLISH"
-            mood_color = "#10b981"
-        elif bearish_count > bullish_count:
-            market_mood = "🔴 BEARISH"
-            mood_color = "#ef4444"
+        # Portfolio sentiment analysis
+        if bullish_momentum > bearish_signals:
+            portfolio_sentiment = "🟢 BULLISH MOMENTUM"
+            sentiment_color = "#10b981"
+        elif bearish_signals > bullish_momentum:
+            portfolio_sentiment = "🔴 BEARISH PRESSURE"
+            sentiment_color = "#ef4444"
         else:
-            market_mood = "🟡 NEUTRAL"
-            mood_color = "#f59e0b"
+            portfolio_sentiment = "🟡 BALANCED"
+            sentiment_color = "#f59e0b"
         
-        # Executive report HTML architecture
-        html_report = f"""
+        # Executive Brief HTML Architecture
+        html_brief = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
-            <title>Executive Intelligence Brief</title>
+            <title>Strategic Constellation Intelligence Brief</title>
             <style>
                 body {{ 
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif; 
-                    margin: 0; padding: 0; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); 
-                    line-height: 1.6; 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+                    margin: 0; padding: 0; 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    min-height: 100vh; 
                 }}
                 .container {{ 
-                    max-width: 900px; margin: 20px auto; background: white; 
-                    border-radius: 16px; overflow: hidden; 
-                    box-shadow: 0 20px 60px rgba(0,0,0,0.15); 
+                    max-width: 1000px; margin: 0 auto; padding: 20px; 
                 }}
                 .header {{ 
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    color: white; padding: 40px 30px; text-align: center; 
+                    background: rgba(255,255,255,0.95); 
+                    backdrop-filter: blur(20px); 
+                    border-radius: 20px; 
+                    padding: 40px; 
+                    text-align: center; 
+                    margin-bottom: 30px;
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.1);
                 }}
                 .header h1 {{ 
-                    margin: 0; font-size: 2.8em; font-weight: 200; 
-                    text-shadow: 0 2px 4px rgba(0,0,0,0.3); 
+                    margin: 0; font-size: 3em; font-weight: 200; 
+                    background: linear-gradient(135deg, #667eea, #764ba2); 
+                    -webkit-background-clip: text; 
+                    -webkit-text-fill-color: transparent; 
                 }}
-                .header p {{ 
-                    margin: 15px 0 0 0; font-size: 1.2em; opacity: 0.9; 
-                    font-weight: 300; 
+                .strategic-dashboard {{ 
+                    display: grid; 
+                    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); 
+                    gap: 20px; 
+                    margin: 30px 0; 
                 }}
-                .executive-summary {{ 
-                    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); 
-                    padding: 30px; border-bottom: 1px solid #e2e8f0; 
+                .metric-card {{ 
+                    background: rgba(255,255,255,0.9); 
+                    backdrop-filter: blur(10px); 
+                    border-radius: 16px; 
+                    padding: 25px; 
+                    text-align: center; 
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
                 }}
-                .metrics-grid {{ 
-                    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-                    gap: 25px; margin: 25px 0; 
+                .metric-card h3 {{ 
+                    font-size: 2.5em; margin: 0; 
+                    background: linear-gradient(135deg, #667eea, #764ba2); 
+                    -webkit-background-clip: text; 
+                    -webkit-text-fill-color: transparent; 
                 }}
-                .metric {{ 
-                    background: white; padding: 25px; border-radius: 12px; text-align: center; 
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.08); 
-                    border-left: 5px solid #667eea; 
+                .positions-grid {{ 
+                    display: grid; 
+                    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); 
+                    gap: 20px; 
+                    margin: 30px 0; 
                 }}
-                .metric h3 {{ 
-                    font-size: 2.5em; margin: 0; color: #2d3748; font-weight: 700; 
+                .position-card {{ 
+                    background: rgba(255,255,255,0.95); 
+                    backdrop-filter: blur(20px); 
+                    border-radius: 16px; 
+                    padding: 25px; 
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
                 }}
-                .metric p {{ 
-                    margin: 8px 0 0 0; color: #718096; font-size: 0.95em; 
-                    text-transform: uppercase; letter-spacing: 1px; font-weight: 500; 
+                .position-header {{ 
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center; 
+                    margin-bottom: 15px; 
                 }}
-                .company-grid {{ 
-                    display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); 
-                    gap: 20px; padding: 30px; 
+                .symbol {{ 
+                    font-size: 1.5em; 
+                    font-weight: 700; 
+                    color: #2d3748; 
                 }}
-                .company-card {{ 
-                    background: white; border-radius: 12px; padding: 25px; 
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.08); 
-                    border: 1px solid #e2e8f0; transition: all 0.3s ease; 
-                }}
-                .company-header {{ 
-                    display: flex; justify-content: space-between; align-items: center; 
-                    margin-bottom: 20px; 
-                }}
-                .company-name {{ 
-                    font-size: 1.4em; font-weight: 700; color: #2d3748; 
-                }}
-                .price-display {{ 
-                    text-align: right; 
-                }}
-                .stock-price {{ 
-                    font-size: 1.8em; font-weight: 700; 
-                }}
-                .price-change {{ 
-                    font-size: 1em; font-weight: 600; margin-left: 8px; 
+                .price {{ 
+                    font-size: 1.3em; 
+                    font-weight: 700; 
                 }}
                 .bullish {{ color: #10b981; }}
                 .bearish {{ color: #ef4444; }}
                 .neutral {{ color: #718096; }}
-                .company-metrics {{ 
-                    display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; 
+                .priority-badge {{ 
+                    display: inline-block; 
+                    padding: 6px 12px; 
+                    border-radius: 20px; 
+                    font-size: 0.8em; 
+                    font-weight: 600; 
+                    text-transform: uppercase; 
                 }}
-                .metric-item {{ 
-                    background: #f8fafc; padding: 15px; border-radius: 8px; 
-                }}
-                .metric-label {{ 
-                    font-size: 0.85em; color: #718096; margin-bottom: 5px; 
-                    text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; 
-                }}
-                .metric-value {{ 
-                    font-size: 1.1em; font-weight: 700; color: #2d3748; 
-                }}
-                .sentiment-badge {{ 
-                    display: inline-block; padding: 8px 16px; border-radius: 20px; 
-                    font-size: 0.85em; font-weight: 700; text-transform: uppercase; 
-                    letter-spacing: 0.5px; 
-                }}
-                .sentiment-bullish {{ background: #c6f6d5; color: #22543d; }}
-                .sentiment-bearish {{ background: #fed7d7; color: #742a2a; }}
-                .sentiment-neutral {{ background: #e2e8f0; color: #2d3748; }}
+                .foundational {{ background: #e6fffa; color: #234e52; }}
+                .growth {{ background: #fef5e7; color: #744210; }}
+                .speculative {{ background: #fed7d7; color: #742a2a; }}
                 .alerts-section {{ 
-                    background: #fffbeb; border-left: 5px solid #f59e0b; 
-                    padding: 25px 30px; margin: 0; 
+                    background: rgba(255,255,255,0.9); 
+                    backdrop-filter: blur(20px); 
+                    border-radius: 16px; 
+                    padding: 30px; 
+                    margin: 30px 0; 
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
                 }}
-                .alert-item {{ 
-                    background: white; padding: 15px; border-radius: 8px; 
-                    margin: 10px 0; border-left: 4px solid #f59e0b; 
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.05); 
-                }}
-                .footer {{ 
-                    background: #2d3748; color: white; padding: 30px; text-align: center; 
-                }}
-                .footer p {{ margin: 0; opacity: 0.8; }}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>📊 EXECUTIVE INTELLIGENCE BRIEF</h1>
-                    <p>Strategic Market Intelligence • {timestamp} • {current_time}</p>
+                    <h1>STRATEGIC CONSTELLATION</h1>
+                    <h2 style="margin: 10px 0; color: #4a5568;">Intelligence Brief</h2>
+                    <p style="margin: 0; color: #718096; font-size: 1.1em;">{timestamp} • {current_time}</p>
                 </div>
                 
-                <div class="executive-summary">
-                    <h2 style="margin: 0 0 20px 0; color: #2d3748; font-size: 1.8em;">🎯 EXECUTIVE DASHBOARD</h2>
-                    <div class="metrics-grid">
-                        <div class="metric">
-                            <h3>{total_companies}</h3>
-                            <p>Portfolio Companies</p>
-                        </div>
-                        <div class="metric">
-                            <h3>{len(active_alerts)}</h3>
-                            <p>Active Signals</p>
-                        </div>
-                        <div class="metric">
-                            <h3 style="color: {mood_color};">{market_mood}</h3>
-                            <p>Market Sentiment</p>
-                        </div>
-                        <div class="metric">
-                            <h3>{bullish_count}/{bearish_count}</h3>
-                            <p>Bull/Bear Ratio</p>
-                        </div>
+                <div class="strategic-dashboard">
+                    <div class="metric-card">
+                        <h3>{total_positions}</h3>
+                        <p style="margin: 0; color: #718096; font-weight: 600;">Strategic Positions</p>
+                    </div>
+                    <div class="metric-card">
+                        <h3>{len(foundational_positions)}</h3>
+                        <p style="margin: 0; color: #718096; font-weight: 600;">Foundation Pillars</p>
+                    </div>
+                    <div class="metric-card">
+                        <h3>{len(growth_positions)}</h3>
+                        <p style="margin: 0; color: #718096; font-weight: 600;">Growth Engines</p>
+                    </div>
+                    <div class="metric-card">
+                        <h3>{len(speculative_positions)}</h3>
+                        <p style="margin: 0; color: #718096; font-weight: 600;">Innovation Catalysts</p>
+                    </div>
+                    <div class="metric-card">
+                        <h3 style="color: {sentiment_color};">{portfolio_sentiment.split()[1]}</h3>
+                        <p style="margin: 0; color: #718096; font-weight: 600;">Portfolio Sentiment</p>
+                    </div>
+                    <div class="metric-card">
+                        <h3>{len(strategic_alerts)}</h3>
+                        <p style="margin: 0; color: #718096; font-weight: 600;">Active Signals</p>
                     </div>
                 </div>
+                
+                <div class="positions-grid">
         """
         
-        # Company intelligence cards
-        html_report += '<div class="company-grid">'
-        
-        for company in self.companies:
-            symbol = company['symbol']
-            company_name = company['name']
+        # Position Cards by Priority
+        for priority_group in ['foundational_core', 'strategic_growth', 'growth_anchor', 'competitive_growth', 'speculative_innovation']:
+            priority_positions = [c for c in self.companies if c.get('priority') == priority_group]
             
-            market_info = market_data.get(symbol, {})
-            news_info = news_data.get(symbol, {})
-            sentiment_info = news_info.get('sentiment', {})
-            
-            price = market_info.get('price', 'N/A')
-            change_percent = market_info.get('change_percent', 'N/A')
-            volume = market_info.get('volume', 'N/A')
-            
-            # Format volume
-            if volume != 'N/A' and volume:
-                try:
-                    vol_num = int(volume)
-                    if vol_num > 1000000:
-                        volume = f"{vol_num/1000000:.1f}M"
-                    elif vol_num > 1000:
-                        volume = f"{vol_num/1000:.0f}K"
-                except:
-                    pass
-            
-            # Price change styling
-            price_class = 'neutral'
-            if change_percent and change_percent != 'N/A':
-                try:
-                    change_val = float(str(change_percent).replace('%', ''))
-                    price_class = 'bullish' if change_val > 0 else 'bearish' if change_val < 0 else 'neutral'
-                except:
-                    pass
-            
-            # Sentiment styling
-            sentiment_class = sentiment_info.get('classification', 'neutral')
-            sentiment_display = sentiment_class.upper()
-            sentiment_css = f"sentiment-{sentiment_class}"
-            
-            article_count = news_info.get('article_count', 0)
-            
-            html_report += f"""
-                <div class="company-card">
-                    <div class="company-header">
-                        <div class="company-name">{symbol}</div>
-                        <div class="price-display">
-                            <div class="stock-price {price_class}">${price}</div>
-                            <div class="price-change {price_class}">({change_percent})</div>
+            for position in priority_positions:
+                symbol = position['symbol']
+                name = position['name']
+                sector = position.get('sector', 'Technology')
+                priority = position.get('priority', 'standard')
+                
+                market_info = market_data.get(symbol, {})
+                news_info = news_data.get(symbol, {})
+                
+                price = market_info.get('price', 'N/A')
+                change_percent = market_info.get('change_percent', 'N/A')
+                volume = market_info.get('volume', 'N/A')
+                
+                # Format volume
+                if volume != 'N/A' and volume:
+                    try:
+                        vol_num = int(volume)
+                        if vol_num > 1000000:
+                            volume = f"{vol_num/1000000:.1f}M"
+                        elif vol_num > 1000:
+                            volume = f"{vol_num/1000:.0f}K"
+                    except:
+                        pass
+                
+                # Price styling
+                price_class = 'neutral'
+                if change_percent and change_percent != 'N/A':
+                    try:
+                        change_val = float(str(change_percent).replace('%', ''))
+                        price_class = 'bullish' if change_val > 0 else 'bearish' if change_val < 0 else 'neutral'
+                    except:
+                        pass
+                
+                # Priority badge styling
+                priority_class = 'foundational' if 'foundational' in priority else 'growth' if 'growth' in priority else 'speculative'
+                
+                sentiment = news_info.get('sentiment', {})
+                sentiment_class = sentiment.get('classification', 'neutral')
+                article_count = news_info.get('article_count', 0)
+                
+                html_brief += f"""
+                    <div class="position-card">
+                        <div class="position-header">
+                            <div>
+                                <div class="symbol">{symbol}</div>
+                                <div style="color: #718096; font-size: 0.9em; margin-top: 5px;">{name}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="price {price_class}">${price}</div>
+                                <div style="font-size: 0.9em; color: #718096;">({change_percent})</div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin: 15px 0;">
+                            <span class="priority-badge {priority_class}">{priority.replace('_', ' ')}</span>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0;">
+                            <div style="background: #f7fafc; padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.8em; color: #718096;">SECTOR</div>
+                                <div style="font-weight: 600; color: #2d3748;">{sector}</div>
+                            </div>
+                            <div style="background: #f7fafc; padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.8em; color: #718096;">VOLUME</div>
+                                <div style="font-weight: 600; color: #2d3748;">{volume}</div>
+                            </div>
+                            <div style="background: #f7fafc; padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.8em; color: #718096;">NEWS</div>
+                                <div style="font-weight: 600; color: #2d3748;">{article_count} articles</div>
+                            </div>
+                            <div style="background: #f7fafc; padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.8em; color: #718096;">SENTIMENT</div>
+                                <div style="font-weight: 600;" class="{sentiment_class}">{sentiment_class.upper()}</div>
+                            </div>
                         </div>
                     </div>
-                    <div style="color: #718096; margin-bottom: 15px; font-weight: 500;">{company_name}</div>
-                    
-                    <div class="company-metrics">
-                        <div class="metric-item">
-                            <div class="metric-label">Volume</div>
-                            <div class="metric-value">{volume}</div>
-                        </div>
-                        <div class="metric-item">
-                            <div class="metric-label">News Articles</div>
-                            <div class="metric-value">{article_count}</div>
-                        </div>
-                    </div>
-                    
-                    <div style="margin-top: 15px;">
-                        <span class="sentiment-badge {sentiment_css}">{sentiment_display} SENTIMENT</span>
-                    </div>
-                </div>
-            """
+                """
         
-        html_report += '</div>'
+        html_brief += '</div>'
         
-        # Active alerts section
-        if active_alerts:
-            html_report += f"""
+        # Strategic Alerts Section
+        if strategic_alerts:
+            html_brief += f"""
                 <div class="alerts-section">
-                    <h2 style="margin: 0 0 20px 0; color: #92400e; font-size: 1.6em;">⚡ ACTIVE MARKET SIGNALS</h2>
+                    <h2 style="margin: 0 0 20px 0; color: #2d3748;">⚡ STRATEGIC SIGNALS</h2>
             """
-            for alert in active_alerts:
-                html_report += f'<div class="alert-item">{alert}</div>'
-            html_report += '</div>'
-        else:
-            html_report += """
-                <div style="background: #f0fff4; border-left: 5px solid #10b981; padding: 25px 30px;">
-                    <h2 style="margin: 0; color: #22543d; font-size: 1.6em;">✅ ALL SYSTEMS NOMINAL</h2>
-                    <p style="margin: 10px 0 0 0; color: #22543d;">No significant alerts detected. Portfolio operating within normal parameters.</p>
-                </div>
-            """
+            for alert in strategic_alerts:
+                html_brief += f'<div style="background: #fef5e7; border-left: 4px solid #f6ad55; padding: 15px; margin: 10px 0; border-radius: 8px;">{alert}</div>'
+            html_brief += '</div>'
         
         # Footer
-        html_report += f"""
-                <div class="footer">
-                    <p><strong>🚀 COMPANY INTELLIGENCE AUTOMATION</strong></p>
-                    <p style="margin-top: 15px;">
+        html_brief += f"""
+                <div style="background: rgba(255,255,255,0.9); backdrop-filter: blur(20px); border-radius: 16px; padding: 30px; text-align: center; margin-top: 30px;">
+                    <h3 style="margin: 0; color: #2d3748;">🚀 STRATEGIC CONSTELLATION INTELLIGENCE</h3>
+                    <p style="margin: 15px 0 0 0; color: #718096;">
                         Engineered with Design Excellence • Generated {datetime.now().strftime('%Y-%m-%d at %H:%M UTC')}<br>
-                        Next Intelligence Brief: {(datetime.now().replace(day=datetime.now().day + 7) if datetime.now().day <= 24 else datetime.now().replace(month=datetime.now().month + 1, day=1)).strftime('%B %d, %Y')}<br>
-                        Monitoring {total_companies} companies across {len(set(c['sector'] for c in self.companies))} sectors
+                        Next Intelligence Brief: Monday at 9:00 AM EST<br>
+                        Monitoring {total_positions} strategic positions across {len(set(c.get('sector', 'Technology') for c in self.companies))} sectors
                     </p>
                 </div>
             </div>
@@ -515,73 +520,63 @@ class CompanyIntelligenceEngine:
         </html>
         """
         
-        return html_report
+        return html_brief
     
-    async def _deploy_intelligence_distribution(self, html_report):
-        """Intelligent distribution with design precision."""
-        self.logger.info("📧 Deploying Intelligence Distribution Architecture")
+    async def _deploy_strategic_distribution(self, html_brief):
+        """Deploy intelligence across your distribution network."""
+        self.logger.info("📧 Deploying Strategic Intelligence Distribution")
         
         sender_email = os.getenv('SENDER_EMAIL')
         sender_password = os.getenv('SENDER_PASSWORD')
         recipients = [email.strip() for email in os.getenv('RECIPIENT_EMAILS', '').split(',') if email.strip()]
         
-        if not all([sender_email, sender_password, recipients]):
-            raise Exception("Distribution architecture incomplete - verify email configuration")
+        # Dynamic subject generation
+        alert_count = html_brief.count('MAJOR') + html_brief.count('SIGNIFICANT')
+        subject_emoji = "🔥" if alert_count > 2 else "📊"
+        alert_suffix = f" - {alert_count} signals detected" if alert_count > 0 else ""
         
-        # Message architecture
         msg = MIMEMultipart('alternative')
         msg['From'] = sender_email
         msg['To'] = ', '.join(recipients)
+        msg['Subject'] = f"{subject_emoji} Strategic Constellation Brief - {datetime.now().strftime('%B %d, %Y')}{alert_suffix}"
         
-        # Dynamic subject line with intelligence
-        alert_count = html_report.count('MAJOR') + html_report.count('SIGNIFICANT') + html_report.count('BEARISH sentiment')
-        subject_prefix = "🔥" if alert_count > 3 else "📊"
-        alert_suffix = f" ({alert_count} signals)" if alert_count > 0 else ""
+        msg.attach(MIMEText(html_brief, 'html', 'utf-8'))
         
-        msg['Subject'] = f"{subject_prefix} Executive Intelligence Brief - {datetime.now().strftime('%B %d, %Y')}{alert_suffix}"
-        
-        # Attach HTML masterpiece
-        html_part = MIMEText(html_report, 'html', 'utf-8')
-        msg.attach(html_part)
-        
-        # SMTP deployment with design resilience
         try:
             with smtplib.SMTP('smtp.gmail.com', 587) as server:
                 server.starttls()
                 server.login(sender_email, sender_password)
                 server.send_message(msg)
             
-            self.logger.info(f"✅ Intelligence successfully distributed to {len(recipients)} executive(s)")
+            self.logger.info(f"✅ Strategic intelligence distributed to {len(recipients)} executives")
             
         except Exception as e:
             self.logger.error(f"Distribution disruption: {e}")
             raise
     
-    async def _emergency_notification(self, error_message):
-        """Emergency notification system - design reliability architecture."""
+    async def _emergency_alert(self, error_message):
+        """Emergency notification protocol."""
         try:
             admin_emails = [email.strip() for email in os.getenv('ADMIN_EMAILS', os.getenv('SENDER_EMAIL', '')).split(',') if email.strip()]
             
             if admin_emails and admin_emails[0]:
-                emergency_report = f"""
-                <html>
-                <body style="font-family: sans-serif; padding: 20px;">
-                    <div style="background: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px;">
-                        <h2 style="color: #dc2626;">🚨 INTELLIGENCE SYSTEM ALERT</h2>
-                        <p><strong>Timestamp:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
-                        <p><strong>Error:</strong> {error_message}</p>
-                        <p><strong>System:</strong> Company Intelligence Automation</p>
-                        <p>The intelligence gathering system encountered a disruption. Please review the error and system configuration.</p>
+                emergency_html = f"""
+                <html><body style="font-family: sans-serif; padding: 20px;">
+                    <div style="background: #fee2e2; border: 2px solid #ef4444; border-radius: 12px; padding: 25px;">
+                        <h2 style="color: #dc2626; margin: 0;">🚨 STRATEGIC INTELLIGENCE SYSTEM ALERT</h2>
+                        <p style="margin: 15px 0;"><strong>Timestamp:</strong> {datetime.now().isoformat()}</p>
+                        <p style="margin: 15px 0;"><strong>System:</strong> Strategic Constellation Intelligence</p>
+                        <p style="margin: 15px 0;"><strong>Error:</strong> {error_message}</p>
+                        <p style="margin: 15px 0;">Please review system configuration and error logs.</p>
                     </div>
-                </body>
-                </html>
+                </body></html>
                 """
                 
                 msg = MIMEMultipart()
                 msg['From'] = os.getenv('SENDER_EMAIL')
                 msg['To'] = admin_emails[0]
-                msg['Subject'] = f"🚨 Intelligence System Alert - {datetime.now().strftime('%Y-%m-%d')}"
-                msg.attach(MIMEText(emergency_report, 'html'))
+                msg['Subject'] = f"🚨 Strategic Intelligence Alert - {datetime.now().strftime('%Y-%m-%d')}"
+                msg.attach(MIMEText(emergency_html, 'html'))
                 
                 with smtplib.SMTP('smtp.gmail.com', 587) as server:
                     server.starttls()
@@ -591,11 +586,10 @@ class CompanyIntelligenceEngine:
         except Exception as e:
             self.logger.error(f"Emergency notification failed: {e}")
 
-# EXECUTION ORCHESTRATION
 async def main():
-    """The main execution symphony - design vision in motion."""
-    engine = CompanyIntelligenceEngine()
-    success = await engine.orchestrate_intelligence_symphony()
+    """Strategic constellation execution orchestration."""
+    engine = StrategicIntelligenceEngine()
+    success = await engine.orchestrate_strategic_intelligence()
     return 0 if success else 1
 
 if __name__ == "__main__":
