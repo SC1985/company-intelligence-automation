@@ -12,7 +12,7 @@ on:
       copy_sender:
         description: "Also send a copy to SENDER_EMAIL and ADMIN_EMAILS"
         required: false
-        default: "true"
+        default: "false"  # default false in v5 to avoid self-duplication confusion
       smtp_debug:
         description: "Log SMTP wire conversation (no secrets)"
         required: false
@@ -38,19 +38,33 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Sanity check secrets
+      - name: Sanity check & show masked recipients
         env:
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
         run: |
           python - <<'PY'
-          import os, sys
+          import os, re, sys
+          def split(s): return [p.strip() for p in re.split(r"[;,\s]+", s or "") if p.strip()]
+          def mask_local(x): 
+              return ("*"*len(x)) if len(x)<=3 else (x[:2]+"***"+x[-1:])
+          def mask(addr):
+              if "@" not in addr: return "***"
+              l,d = addr.split("@",1)
+              return f"{mask_local(l)}@{d}"
           missing = [k for k in ("SENDER_EMAIL","SENDER_PASSWORD","RECIPIENT_EMAILS") if not os.getenv(k)]
-          if missing:
-              print("Missing required secrets:", ", ".join(missing))
-              sys.exit(1)
-          print("Secrets present: OK")
+          if missing: 
+              print("Missing required secrets:", ", ".join(missing)); sys.exit(1)
+          sender = os.getenv("SENDER_EMAIL")
+          recips = split(os.getenv("RECIPIENT_EMAILS",""))
+          admins = split(os.getenv("ADMIN_EMAILS",""))
+          eq_sender = any(r.lower()==sender.lower() for r in recips)
+          print("Masked sender:", mask(sender))
+          print("Masked recipients:", [mask(r) for r in recips])
+          print("Masked admins:", [mask(a) for a in admins])
+          print("Any recipient equals sender?:", eq_sender)
           PY
 
       - name: Gate to 09:00 America/Chicago (schedule only)
@@ -70,6 +84,10 @@ jobs:
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
-          COPY_SENDER: ${{ github.event.inputs.copy_sender || 'true' }}
+          COPY_SENDER: ${{ github.event.inputs.copy_sender || 'false' }}
           SMTP_DEBUG: ${{ github.event.inputs.smtp_debug || 'false' }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_SHA: ${{ github.sha }}
         run: python src/ci_entrypoint.py
