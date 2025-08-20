@@ -4,6 +4,7 @@ import smtplib
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.header import Header
 
 def _split_recipients(raw: str):
     if not raw:
@@ -11,6 +12,10 @@ def _split_recipients(raw: str):
     # Accept comma, semicolon, or whitespace as delimiters
     parts = re.split(r"[;,\s]+", raw)
     return [p.strip() for p in parts if p.strip()]
+
+def _clean_subject(s: str) -> str:
+    # Prevent header injection and normalize whitespace
+    return " ".join((s or "").replace("\r", " ").replace("\n", " ").split())
 
 def validate_env():
     sender = os.getenv("SENDER_EMAIL")
@@ -34,6 +39,7 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
 
     if subject is None:
         subject = f"📊 Company Intelligence Report — {datetime.now().strftime('%B %d, %Y')}"
+    subject = _clean_subject(subject)
 
     if logger:
         logger.info(f"Preparing email | sender={sender} recipients={len(recipients)} dry_run={dry_run}")
@@ -41,7 +47,10 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
     msg = MIMEMultipart("alternative")
     msg["From"] = sender
     msg["To"] = ", ".join(recipients)
-    msg["Subject"] = subject
+    # Encode non-ASCII safely so the SMTP generator doesn't choke
+    msg["Subject"] = str(Header(subject, "utf-8"))
+
+    # Body
     msg.attach(MIMEText(html, "html", "utf-8"))
 
     if dry_run:
@@ -53,7 +62,13 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
     with smtplib.SMTP("smtp.gmail.com", 587) as server:
         server.starttls()
         server.login(sender, pwd)
-        server.send_message(msg)
+        try:
+            server.send_message(msg)
+        except UnicodeEncodeError:
+            # Absolute fallback: strip emojis/non-ASCII from Subject and retry
+            safe_subject = subject.encode("ascii", "ignore").decode("ascii") or "Weekly Company Intelligence Report"
+            msg.replace_header("Subject", str(Header(safe_subject, "utf-8")))
+            server.send_message(msg)
 
     if logger:
         logger.info(f"Email sent to {len(recipients)} recipients")
