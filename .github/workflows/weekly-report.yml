@@ -2,15 +2,18 @@ name: Executive Intelligence Brief
 
 on:
   schedule:
-    # Fires at 14:00 UTC Mondays. We gate below to 09:00 America/Chicago to keep 9am year-round.
+    # Fires at 14:00 UTC on Mondays
     - cron: "0 14 * * 1"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Do not send email; log only"
+        required: false
+        default: "false"
 
 jobs:
   intelligence-execution:
     runs-on: ubuntu-latest
-    env:
-      TZ: America/Chicago
     permissions:
       contents: read
 
@@ -43,15 +46,14 @@ jobs:
           print("Secrets present: OK")
           PY
 
-      # Keep 14:00 UTC schedule, but only proceed at 09:00 local time
-      - name: Gate to 09:00 America/Chicago
+      - name: Gate to 09:00 America/Chicago (schedule only)
+        if: ${{ github.event_name == 'schedule' }}
         run: |
-          if [ "$(date +%H%M)" != "0900" ]; then
+          if [ "$(TZ=America/Chicago date +%H%M)" != "0900" ]; then
             echo "Not 09:00 CT; exiting."
             exit 0
           fi
 
-      # Optional: flip to true to test end-to-end without sending email
       - name: Run Intelligence Engine
         env:
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
@@ -60,5 +62,6 @@ jobs:
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
-          DRY_RUN: ${{ inputs.dry_run || 'false' }}
-        run: python src/main.py
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          USE_TEMPLATE_FIRST: "true"
+        run: python src/ci_entrypoint.py
