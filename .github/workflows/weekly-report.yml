@@ -1,4 +1,4 @@
-name: Executive Intelligence Brief (Dynamic)
+name: Executive Intelligence Brief (NextGen Dynamic)
 
 on:
   schedule:
@@ -12,7 +12,7 @@ on:
       copy_sender:
         description: "Also send a copy to SENDER_EMAIL and ADMIN_EMAILS"
         required: false
-        default: "false"  # default false in v5 to avoid self-duplication confusion
+        default: "false"
       smtp_debug:
         description: "Log SMTP wire conversation (no secrets)"
         required: false
@@ -36,7 +36,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install matplotlib pillow
 
       - name: Sanity check & show masked recipients
         env:
@@ -48,14 +49,14 @@ jobs:
           python - <<'PY'
           import os, re, sys
           def split(s): return [p.strip() for p in re.split(r"[;,\s]+", s or "") if p.strip()]
-          def mask_local(x): 
+          def mask_local(x):
               return ("*"*len(x)) if len(x)<=3 else (x[:2]+"***"+x[-1:])
           def mask(addr):
               if "@" not in addr: return "***"
               l,d = addr.split("@",1)
               return f"{mask_local(l)}@{d}"
           missing = [k for k in ("SENDER_EMAIL","SENDER_PASSWORD","RECIPIENT_EMAILS") if not os.getenv(k)]
-          if missing: 
+          if missing:
               print("Missing required secrets:", ", ".join(missing)); sys.exit(1)
           sender = os.getenv("SENDER_EMAIL")
           recips = split(os.getenv("RECIPIENT_EMAILS",""))
@@ -75,7 +76,7 @@ jobs:
             exit 0
           fi
 
-      - name: Run Intelligence Engine (dynamic HTML)
+      - name: Run Intelligence Engine (NextGen digest)
         env:
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
@@ -90,4 +91,5 @@ jobs:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_SHA: ${{ github.sha }}
+          NEXTGEN_DIGEST: "true"
         run: python src/ci_entrypoint.py
