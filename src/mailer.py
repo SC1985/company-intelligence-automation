@@ -8,7 +8,7 @@ from email.mime.text import MIMEText
 def _split_recipients(raw: str):
     if not raw:
         return []
-    parts = re.split(r"[;,\s]+", raw)
+    parts = re.split(r"[;,\" "]+", raw)
     return [p.strip() for p in parts if p.strip()]
 
 def validate_env():
@@ -32,7 +32,7 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
     if subject is None:
-        subject = f"📊 Company Intelligence Report — {datetime.now().strftime('%B %d, %Y')}"
+        subject = f"\ud83d\udcca Company Intelligence Report — {datetime.now().strftime('%B %d, %Y')}"
 
     if logger:
         logger.info(f"Preparing email | sender={sender} recipients={len(recipients)} dry_run={dry_run}")
