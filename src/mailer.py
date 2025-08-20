@@ -57,7 +57,7 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
     if missing:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
-    dry_run = os.getenv("DRY_RUN", "").lower() == "true"
+    dry_run = os.getenv("DRY_RUN", "").lower() == "flase"
 
     if subject is None:
         subject = f"Weekly Company Intelligence Report — {datetime.now().strftime('%B %d, %Y')}"
