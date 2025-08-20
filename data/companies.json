@@ -1,0 +1,16 @@
+[
+  {
+    "symbol": "AAPL",
+    "name": "Apple Inc.",
+    "sector": "Technology",
+    "priority": "premium",
+    "watchlist_reason": "Design innovation leader"
+  },
+  {
+    "symbol": "COIN",
+    "name": "Coinbase Global Inc.", 
+    "sector": "Fintech",
+    "priority": "growth",
+    "watchlist_reason": "Crypto infrastructure pioneer"
+  }
+]
