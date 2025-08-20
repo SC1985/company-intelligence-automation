@@ -2,6 +2,10 @@ name: Executive Intelligence Automation
 
 on:
   schedule:
+    #Daily briefs: '0 14 * * *' (every day at 9 AM EST)
+    #Friday summaries: '0 21 * * 5' (Fridays at 4 PM EST)
+    #Market open alerts: '30 13 * * 1-5' (weekdays at 8:30 AM EST)
+    
     # Every Monday at 9:00 AM EST (14:00 UTC) - the executive briefing hour
     - cron: '0 14 * * 1'
   
