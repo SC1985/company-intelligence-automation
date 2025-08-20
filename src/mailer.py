@@ -6,16 +6,21 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.header import Header
 
+_SURROGATE_RE = re.compile(r'[\ud800-\udfff]')
+
 def _split_recipients(raw: str):
     if not raw:
         return []
-    # Accept comma, semicolon, or whitespace as delimiters
     parts = re.split(r"[;,\s]+", raw)
     return [p.strip() for p in parts if p.strip()]
 
 def _clean_subject(s: str) -> str:
-    # Prevent header injection and normalize whitespace
-    return " ".join((s or "").replace("\r", " ").replace("\n", " ").split())
+    # Normalize whitespace and strip CR/LF to prevent header injection
+    s = (s or "").replace("\r", " ").replace("\n", " ")
+    s = " ".join(s.split())
+    # Remove UTF-16 surrogate code units, which trigger 'surrogates not allowed'
+    s = _SURROGATE_RE.sub("", s)
+    return s.strip()
 
 def validate_env():
     sender = os.getenv("SENDER_EMAIL")
@@ -38,7 +43,9 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
     if subject is None:
-        subject = f"📊 Company Intelligence Report — {datetime.now().strftime('%B %d, %Y')}"
+        subject = f"Weekly Company Intelligence Report — {datetime.now().strftime('%B %d, %Y')}"
+
+    # Sanitize subject to remove surrogate code points
     subject = _clean_subject(subject)
 
     if logger:
@@ -47,8 +54,12 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
     msg = MIMEMultipart("alternative")
     msg["From"] = sender
     msg["To"] = ", ".join(recipients)
-    # Encode non-ASCII safely so the SMTP generator doesn't choke
-    msg["Subject"] = str(Header(subject, "utf-8"))
+    try:
+        msg["Subject"] = str(Header(subject, "utf-8"))
+    except UnicodeEncodeError:
+        # Absolute fallback: ASCII-only
+        safe_subject = subject.encode("ascii", "ignore").decode("ascii") or "Weekly Company Intelligence Report"
+        msg["Subject"] = str(Header(safe_subject, "utf-8"))
 
     # Body
     msg.attach(MIMEText(html, "html", "utf-8"))
@@ -62,13 +73,7 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
     with smtplib.SMTP("smtp.gmail.com", 587) as server:
         server.starttls()
         server.login(sender, pwd)
-        try:
-            server.send_message(msg)
-        except UnicodeEncodeError:
-            # Absolute fallback: strip emojis/non-ASCII from Subject and retry
-            safe_subject = subject.encode("ascii", "ignore").decode("ascii") or "Weekly Company Intelligence Report"
-            msg.replace_header("Subject", str(Header(safe_subject, "utf-8")))
-            server.send_message(msg)
+        server.send_message(msg)
 
     if logger:
         logger.info(f"Email sent to {len(recipients)} recipients")
