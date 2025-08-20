@@ -1,9 +1,8 @@
-name: Executive Intelligence Brief
+name: Executive Intelligence Brief (Dynamic)
 
 on:
   schedule:
-    # Fires at 14:00 UTC on Mondays
-    - cron: "0 14 * * 1"
+    - cron: "0 14 * * 1"  # Mondays 14:00 UTC
   workflow_dispatch:
     inputs:
       dry_run:
@@ -54,7 +53,7 @@ jobs:
             exit 0
           fi
 
-      - name: Run Intelligence Engine
+      - name: Run Intelligence Engine (dynamic HTML)
         env:
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
@@ -63,5 +62,4 @@ jobs:
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
-          USE_TEMPLATE_FIRST: "true"
         run: python src/ci_entrypoint.py
