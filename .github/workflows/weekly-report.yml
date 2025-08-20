@@ -9,6 +9,14 @@ on:
         description: "Do not send email; log only"
         required: false
         default: "false"
+      copy_sender:
+        description: "Also send a copy to SENDER_EMAIL and ADMIN_EMAILS"
+        required: false
+        default: "true"
+      smtp_debug:
+        description: "Log SMTP wire conversation (no secrets)"
+        required: false
+        default: "false"
 
 jobs:
   intelligence-execution:
@@ -62,4 +70,6 @@ jobs:
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          COPY_SENDER: ${{ github.event.inputs.copy_sender || 'true' }}
+          SMTP_DEBUG: ${{ github.event.inputs.smtp_debug || 'false' }}
         run: python src/ci_entrypoint.py
