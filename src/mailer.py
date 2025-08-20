@@ -15,6 +15,19 @@ def _split_recipients(raw: str):
     parts = re.split(r"[;,\s]+", raw)
     return [p.strip() for p in parts if p.strip()]
 
+def _mask_local(local: str):
+    if not local:
+        return ""
+    if len(local) <= 3:
+        return "*" * len(local)
+    return local[:2] + "***" + local[-1:]
+
+def _mask_email(addr: str):
+    if not addr or "@" not in addr:
+        return "***"
+    local, domain = addr.split("@", 1)
+    return f"{_mask_local(local)}@{domain}"
+
 def _clean_subject(s: str) -> str:
     s = (s or "").replace("\r", " ").replace("\n", " ")
     s = " ".join(s.split())
@@ -28,7 +41,7 @@ def validate_env():
     pwd = os.getenv("SENDER_PASSWORD")
     recipients = _split_recipients(os.getenv("RECIPIENT_EMAILS", ""))
     admin_emails = _split_recipients(os.getenv("ADMIN_EMAILS", ""))
-    copy_sender = os.getenv("COPY_SENDER", "true").lower() == "true"
+    copy_sender = os.getenv("COPY_SENDER", "false").lower() == "true"  # default false in v5
     smtp_debug = os.getenv("SMTP_DEBUG", "false").lower() == "true"
 
     missing = []
@@ -57,46 +70,59 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
     if missing:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
-    dry_run = os.getenv("DRY_RUN", "").lower() == "flase"
+    dry_run = os.getenv("DRY_RUN", "").lower() == "true"
 
     if subject is None:
         subject = f"Weekly Company Intelligence Report — {datetime.now().strftime('%B %d, %Y')}"
     subject = _clean_subject(subject)
 
     sender_disp = formataddr((cfg["sender_name"] or "", cfg["sender"]))
-    to_header = ", ".join(cfg["recipients"])
 
+    # Logging: show masked addresses
+    masked_to = [_mask_email(r) for r in cfg["recipients"]]
+    masked_admins = [_mask_email(a) for a in cfg["admin_emails"]]
     if logger:
-        logger.info(f"Preparing email | sender={cfg['sender']} recipients={len(cfg['recipients'])} dry_run={dry_run}")
+        eq_sender = any(r.lower() == cfg["sender"].lower() for r in cfg["recipients"])
+        logger.info(f"Recipients(masked)={masked_to} | Admins(masked)={masked_admins} | any_to_equals_sender={eq_sender} | copy_sender={cfg['copy_sender']} | dry_run={dry_run}")
 
     msg = MIMEMultipart("alternative")
     msg["From"] = sender_disp
-    msg["To"] = to_header
-    msg["Subject"] = str(Header(subject, "utf-8"))
+    msg["To"] = ", ".join(cfg["recipients"])
+    try:
+        msg["Subject"] = str(Header(subject, "utf-8"))
+    except UnicodeEncodeError:
+        safe_subject = subject.encode("ascii", "ignore").decode("ascii") or "Weekly Company Intelligence Report"
+        msg["Subject"] = str(Header(safe_subject, "utf-8"))
     if cfg["reply_to"]:
         msg["Reply-To"] = cfg["reply_to"]
-    # Deterministic Message-ID (based on sender's domain)
-    try:
-        domain = cfg["sender"].split("@", 1)[1]
-    except Exception:
-        domain = None
-    msg_id = make_msgid(domain=domain)
-    msg["Message-ID"] = msg_id
 
-    # Body: provide HTML and a minimal text alternative
-    text_alt = re.sub(r"<[^>]+>", " ", html or "")
-    text_alt = re.sub(r"\s+", " ", text_alt).strip() or "This email contains an HTML report."
+    # Add trace headers
+    run_id = os.getenv("GITHUB_RUN_ID", "")
+    run_attempt = os.getenv("GITHUB_RUN_ATTEMPT", "")
+    run_number = os.getenv("GITHUB_RUN_NUMBER", "")
+    sha = os.getenv("GITHUB_SHA", "")[:12]
+    domain_list = sorted({addr.split("@",1)[1] for addr in cfg["recipients"] if "@" in addr})
+    msg["Message-ID"] = make_msgid(domain=(cfg["sender"].split("@",1)[1] if "@" in cfg["sender"] else None))
+    msg["X-GitHub-Run-ID"] = run_id
+    msg["X-GitHub-Run-Attempt"] = run_attempt
+    msg["X-GitHub-Run-Number"] = run_number
+    msg["X-Recipient-Domains"] = ",".join(domain_list)
+    msg["X-Report-Timestamp"] = datetime.utcnow().isoformat() + "Z"
+
+    # Body parts
+    import re as _re
+    text_alt = _re.sub(r"<[^>]+>", " ", html or "")
+    text_alt = _re.sub(r"\s+", " ", text_alt).strip() or "This email contains an HTML report."
     msg.attach(MIMEText(text_alt, "plain", "utf-8"))
     msg.attach(MIMEText(html or "", "html", "utf-8"))
 
     if dry_run:
         if logger:
-            logger.info(f"[DRY_RUN] Would send email to {cfg['recipients']} (plus copy/admin if enabled) "
-                        f"| subject: {subject} | message-id: {msg_id}")
+            logger.info(f"[DRY_RUN] Would send. Subject='{subject}' | To(masked)={masked_to} | Admins(masked)={masked_admins}")
         return
 
-    # Build final recipient list (envelope):
-    to_addrs = list(cfg["recipients"])
+    # Build envelope recipients with dedupe
+    to_addrs = list(dict.fromkeys(cfg["recipients"]))  # preserve order, drop dups
     if cfg["copy_sender"] and cfg["sender"] not in to_addrs:
         to_addrs.append(cfg["sender"])
     for a in cfg["admin_emails"]:
@@ -105,15 +131,15 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
 
     with smtplib.SMTP("smtp.gmail.com", 587) as server:
         if cfg["smtp_debug"]:
-            server.set_debuglevel(1)  # print SMTP conversation to stdout
+            server.set_debuglevel(1)
         server.starttls()
         server.login(cfg["sender"], cfg["pwd"])
         refused = server.sendmail(cfg["sender"], to_addrs, msg.as_string())
         if logger:
-            logger.info(f"SMTP refused recipients map: {refused!r} | message-id: {msg_id}")
+            masked_env = [_mask_email(x) for x in to_addrs]
+            logger.info(f"Envelope recipients(masked)={masked_env}")
+            logger.info(f"SMTP refused recipients map: {refused!r}")
         if refused:
             raise RuntimeError(f"SMTP refused some recipients: {refused}")
         if logger:
-            logger.info(f"Email handed to SMTP for {len(to_addrs)} recipient(s). "
-                        f"Primary To: {len(cfg['recipients'])}, "
-                        f"Copied to sender: {cfg['copy_sender']}, Admins: {len(cfg['admin_emails'])}")
+            logger.info(f"Email handed to SMTP for {len(to_addrs)} recipient(s).")
