@@ -24,12 +24,19 @@ jobs:
       run: |
         pip install --no-cache-dir aiohttp smtplib-ssl
     
-    - name: Execute Intelligence
+    #- name: Execute Intelligence
+     # env:
+     #   ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+     #   NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+     #   SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+      #  SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+     #   RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+    #    ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+    #  run: python src/main.py
+    
+    - name: Execute Quick Test
       env:
-        ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
-        NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
         SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
         SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
         RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
-        ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
-      run: python src/main.py
+      run: python src/quick_test.py
