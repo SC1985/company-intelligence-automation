@@ -35,7 +35,7 @@ async def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger = logging.getLogger("ci-entrypoint")
 
-    use_template_first = os.getenv("USE_TEMPLATE_FIRST", "true").lower() == "true"
+    use_template_first = os.getenv("USE_TEMPLATE_FIRST", "false").lower() == "false"
 
     html = None
     chosen = None
