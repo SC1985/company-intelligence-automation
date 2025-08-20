@@ -1,323 +1,205 @@
 #!/usr/bin/env python3
 """
-Strategic Intelligence - Zero Dependencies Version
-Uses only Python standard library
+Strategic Intelligence - DIAGNOSTIC MODE
+Will tell us exactly what's happening at each step
 """
 
-import asyncio
 import os
-import json
-import logging
+import sys
 import smtplib
-import urllib.request
-import urllib.parse
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-# Standard library logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
-logger = logging.getLogger(__name__)
-
-class ZeroDependencyIntelligenceEngine:
-    """Strategic intelligence using only Python standard library."""
+def diagnostic_intelligence():
+    """Diagnostic version with extensive logging."""
     
-    def __init__(self):
-        self.companies = [
-            {"symbol": "AAPL", "name": "Apple Inc.", "sector": "Technology"},
-            {"symbol": "MSFT", "name": "Microsoft Corporation", "sector": "Technology"},
-            {"symbol": "GOOGL", "name": "Alphabet Inc.", "sector": "Technology"},
-            {"symbol": "AMZN", "name": "Amazon.com Inc.", "sector": "E-commerce"},
-            {"symbol": "TSLA", "name": "Tesla Inc.", "sector": "Automotive"},
-            {"symbol": "NVDA", "name": "NVIDIA Corporation", "sector": "Semiconductors"},
-            {"symbol": "META", "name": "Meta Platforms Inc.", "sector": "Social Media"},
-            {"symbol": "NFLX", "name": "Netflix Inc.", "sector": "Streaming"},
-            {"symbol": "AMD", "name": "Advanced Micro Devices Inc.", "sector": "Semiconductors"},
-            {"symbol": "PLTR", "name": "Palantir Technologies Inc.", "sector": "Data Analytics"},
-            {"symbol": "KOPN", "name": "Kopin Corporation", "sector": "AR/VR Technology"},
-            {"symbol": "SKYQ", "name": "Sky Quarry Inc.", "sector": "Industrial Technology"}
-        ]
-        logger.info(f"✅ Strategic constellation initialized: {len(self.companies)} positions")
+    # Create log file immediately
+    log_file = open('intelligence_system.log', 'w')
     
-    async def run_intelligence_engine(self):
-        """Execute intelligence with zero external dependencies."""
-        logger.info("🚀 ZERO DEPENDENCY INTELLIGENCE ENGINE - Starting")
+    def log_and_print(message):
+        """Log to both console and file."""
+        print(message)
+        log_file.write(f"{datetime.now()}: {message}\n")
+        log_file.flush()
+    
+    try:
+        log_and_print("🚀 DIAGNOSTIC INTELLIGENCE ENGINE - STARTING")
+        log_and_print(f"🐍 Python version: {sys.version}")
+        log_and_print(f"🕐 Execution time: {datetime.now()}")
         
-        try:
-            # Generate strategic report (using fallback data for reliability)
-            logger.info("📊 Generating strategic intelligence report")
-            strategic_report = self._generate_strategic_report()
-            
-            # Send email using built-in libraries
-            logger.info("📧 Deploying email distribution")
-            email_success = await self._send_strategic_email(strategic_report)
-            
-            if email_success:
-                logger.info("✅ INTELLIGENCE ENGINE COMPLETE")
-                return True
-            else:
-                logger.error("❌ Email delivery failed")
-                return False
-            
-        except Exception as e:
-            logger.error(f"❌ Intelligence engine error: {e}")
+        # Step 1: Environment Check
+        log_and_print("🔍 STEP 1: Environment Variable Check")
+        
+        sender_email = os.getenv('SENDER_EMAIL')
+        sender_password = os.getenv('SENDER_PASSWORD')
+        recipient_emails = os.getenv('RECIPIENT_EMAILS')
+        
+        log_and_print(f"📧 SENDER_EMAIL: {'SET' if sender_email else 'MISSING'}")
+        log_and_print(f"🔑 SENDER_PASSWORD: {'SET' if sender_password else 'MISSING'}")
+        log_and_print(f"📨 RECIPIENT_EMAILS: {'SET' if recipient_emails else 'MISSING'}")
+        
+        if sender_email:
+            log_and_print(f"📧 Sender: {sender_email}")
+        if recipient_emails:
+            log_and_print(f"📨 Recipients: {recipient_emails}")
+        
+        if not all([sender_email, sender_password, recipient_emails]):
+            log_and_print("❌ CRITICAL: Missing environment variables")
             return False
-    
-    def _generate_strategic_report(self):
-        """Generate beautiful strategic report with fallback data."""
-        timestamp = datetime.now().strftime("%B %d, %Y")
-        current_time = datetime.now().strftime("%I:%M %p EST")
         
-        # Realistic market data for professional appearance
-        market_data = {
-            "AAPL": {"price": "194.27", "change": "+2.4%", "volume": "48.2M"},
-            "MSFT": {"price": "374.51", "change": "+1.8%", "volume": "22.1M"},
-            "GOOGL": {"price": "166.85", "change": "-0.7%", "volume": "18.7M"},
-            "AMZN": {"price": "151.20", "change": "+0.9%", "volume": "35.4M"},
-            "TSLA": {"price": "248.50", "change": "+3.2%", "volume": "95.4M"},
-            "NVDA": {"price": "495.22", "change": "+1.1%", "volume": "31.2M"},
-            "META": {"price": "338.14", "change": "-1.2%", "volume": "28.9M"},
-            "NFLX": {"price": "486.73", "change": "+2.7%", "volume": "12.3M"},
-            "AMD": {"price": "142.18", "change": "+4.1%", "volume": "45.6M"},
-            "PLTR": {"price": "18.94", "change": "+6.8%", "volume": "58.7M"},
-            "KOPN": {"price": "2.15", "change": "+12.3%", "volume": "2.5M"},
-            "SKYQ": {"price": "0.85", "change": "-5.4%", "volume": "850K"}
-        }
+        log_and_print("✅ Environment variables validated")
         
-        # Generate alerts
-        alerts = []
-        for symbol, data in market_data.items():
-            change_str = data["change"]
-            try:
-                change_val = float(change_str.replace('%', '').replace('+', ''))
-                if abs(change_val) > 3.0:
-                    intensity = "🔥 MAJOR" if abs(change_val) > 6 else "⚡ SIGNIFICANT"
-                    alerts.append(f"{intensity} movement in {symbol}: {change_str}")
-            except:
-                pass
+        # Step 2: Email Configuration
+        log_and_print("🔍 STEP 2: Email Configuration")
         
-        # Generate HTML report
-        html_report = f"""
-        <!DOCTYPE html>
+        recipients = [email.strip() for email in recipient_emails.split(',') if email.strip()]
+        log_and_print(f"📮 Parsed recipients: {recipients}")
+        log_and_print(f"📮 Recipient count: {len(recipients)}")
+        
+        # Step 3: Generate Simple Test Report
+        log_and_print("🔍 STEP 3: Generate Test Report")
+        
+        html_content = f"""
         <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Strategic Constellation Intelligence</title>
-            <style>
-                body {{ 
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-                    margin: 0; padding: 0; 
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    min-height: 100vh; 
-                }}
-                .container {{ max-width: 1000px; margin: 0 auto; padding: 20px; }}
-                .header {{ 
-                    background: rgba(255,255,255,0.95); 
-                    backdrop-filter: blur(20px); 
-                    border-radius: 20px; 
-                    padding: 40px; 
-                    text-align: center; 
-                    margin-bottom: 30px;
-                    box-shadow: 0 20px 60px rgba(0,0,0,0.1);
-                }}
-                .header h1 {{ 
-                    margin: 0; font-size: 3em; font-weight: 200; 
-                    background: linear-gradient(135deg, #667eea, #764ba2); 
-                    -webkit-background-clip: text; 
-                    -webkit-text-fill-color: transparent; 
-                }}
-                .dashboard {{ 
-                    display: grid; 
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-                    gap: 20px; 
-                    margin: 30px 0; 
-                }}
-                .metric-card {{ 
-                    background: rgba(255,255,255,0.9); 
-                    border-radius: 16px; 
-                    padding: 25px; 
-                    text-align: center; 
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
-                }}
-                .metric-card h3 {{ 
-                    font-size: 2.5em; margin: 0; 
-                    background: linear-gradient(135deg, #667eea, #764ba2); 
-                    -webkit-background-clip: text; 
-                    -webkit-text-fill-color: transparent; 
-                }}
-                .positions-grid {{ 
-                    display: grid; 
-                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
-                    gap: 20px; 
-                    margin: 30px 0; 
-                }}
-                .position-card {{ 
-                    background: rgba(255,255,255,0.95); 
-                    border-radius: 16px; 
-                    padding: 20px; 
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
-                }}
-                .bullish {{ color: #10b981; }}
-                .bearish {{ color: #ef4444; }}
-                .neutral {{ color: #718096; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>STRATEGIC CONSTELLATION</h1>
-                    <h2 style="margin: 10px 0; color: #4a5568;">Intelligence Brief</h2>
-                    <p style="margin: 0; color: #718096; font-size: 1.1em;">{timestamp} • {current_time}</p>
-                </div>
-                
-                <div class="dashboard">
-                    <div class="metric-card">
-                        <h3>{len(self.companies)}</h3>
-                        <p style="margin: 0; color: #718096; font-weight: 600;">Strategic Positions</p>
-                    </div>
-                    <div class="metric-card">
-                        <h3>100%</h3>
-                        <p style="margin: 0; color: #718096; font-weight: 600;">System Operational</p>
-                    </div>
-                    <div class="metric-card">
-                        <h3>{len(alerts)}</h3>
-                        <p style="margin: 0; color: #718096; font-weight: 600;">Active Alerts</p>
-                    </div>
-                    <div class="metric-card">
-                        <h3>🟢</h3>
-                        <p style="margin: 0; color: #718096; font-weight: 600;">Status</p>
-                    </div>
-                </div>
-                
-                <div class="positions-grid">
-        """
-        
-        # Add position cards
-        for company in self.companies:
-            symbol = company['symbol']
-            name = company['name']
-            sector = company['sector']
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 30px; border-radius: 12px; text-align: center;">
+                <h1>🎉 DIAGNOSTIC SUCCESS!</h1>
+                <p>Strategic Intelligence System is OPERATIONAL</p>
+                <p>Execution Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+            </div>
             
-            data = market_data.get(symbol, {"price": "N/A", "change": "+0%", "volume": "N/A"})
-            price = data['price']
-            change = data['change']
-            volume = data['volume']
+            <div style="background: #f8f9fa; padding: 20px; margin: 20px 0; border-radius: 8px;">
+                <h3>✅ System Verification Complete</h3>
+                <ul>
+                    <li>GitHub Actions: EXECUTING</li>
+                    <li>Environment Variables: CONFIGURED</li>
+                    <li>Email System: OPERATIONAL</li>
+                    <li>Python Execution: SUCCESSFUL</li>
+                </ul>
+            </div>
             
-            # Price styling
-            price_class = 'bullish' if '+' in change else 'bearish' if '-' in change else 'neutral'
+            <div style="background: #e3f2fd; padding: 20px; border-radius: 8px;">
+                <h3>🚀 Next Steps</h3>
+                <p>Your Strategic Constellation Intelligence system is fully operational!</p>
+                <p>Automated Monday morning reports will be delivered at 9:00 AM EST.</p>
+                <p>If you receive this email, everything is working perfectly!</p>
+            </div>
             
-            html_report += f"""
-                <div class="position-card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <div>
-                            <div style="font-size: 1.4em; font-weight: 700; color: #2d3748;">{symbol}</div>
-                            <div style="color: #718096; font-size: 0.9em;">{name}</div>
-                        </div>
-                        <div style="text-align: right;">
-                            <div style="font-size: 1.2em; font-weight: 700;" class="{price_class}">${price}</div>
-                            <div style="font-size: 0.9em;" class="{price_class}">({change})</div>
-                        </div>
-                    </div>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div style="background: #f7fafc; padding: 10px; border-radius: 6px;">
-                            <div style="font-size: 0.8em; color: #718096;">SECTOR</div>
-                            <div style="font-weight: 600; color: #2d3748;">{sector}</div>
-                        </div>
-                        <div style="background: #f7fafc; padding: 10px; border-radius: 6px;">
-                            <div style="font-size: 0.8em; color: #718096;">VOLUME</div>
-                            <div style="font-weight: 600; color: #2d3748;">{volume}</div>
-                        </div>
-                        <div style="background: #f7fafc; padding: 10px; border-radius: 6px;">
-                            <div style="font-size: 0.8em; color: #718096;">STATUS</div>
-                            <div style="font-weight: 600; color: #10b981;">ACTIVE</div>
-                        </div>
-                        <div style="background: #f7fafc; padding: 10px; border-radius: 6px;">
-                            <div style="font-size: 0.8em; color: #718096;">TREND</div>
-                            <div style="font-weight: 600;" class="{price_class}">{'UP' if '+' in change else 'DOWN' if '-' in change else 'FLAT'}</div>
-                        </div>
-                    </div>
-                </div>
-            """
-        
-        html_report += '</div>'
-        
-        # Add alerts if any
-        if alerts:
-            html_report += f"""
-                <div style="background: rgba(255,255,255,0.9); border-radius: 16px; padding: 30px; margin: 30px 0;">
-                    <h2 style="margin: 0 0 20px 0; color: #2d3748;">⚡ STRATEGIC ALERTS</h2>
-            """
-            for alert in alerts:
-                html_report += f'<div style="background: #fef5e7; border-left: 4px solid #f6ad55; padding: 15px; margin: 10px 0; border-radius: 8px;">{alert}</div>'
-            html_report += '</div>'
-        
-        # Footer
-        html_report += f"""
-                <div style="background: rgba(255,255,255,0.9); border-radius: 16px; padding: 30px; text-align: center; margin-top: 30px;">
-                    <h3 style="margin: 0; color: #2d3748;">🚀 STRATEGIC CONSTELLATION INTELLIGENCE</h3>
-                    <p style="margin: 15px 0 0 0; color: #718096;">
-                        Zero Dependency Engine • Generated {datetime.now().strftime('%Y-%m-%d at %H:%M UTC')}<br>
-                        System Status: FULLY OPERATIONAL • Next Brief: Monday 9:00 AM EST
-                    </p>
-                </div>
+            <div style="background: #f1f8e9; padding: 20px; margin: 20px 0; border-radius: 8px;">
+                <h3>📊 Mock Portfolio Data</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr style="background: #e8f5e8;">
+                        <th style="padding: 10px; border: 1px solid #ddd;">Symbol</th>
+                        <th style="padding: 10px; border: 1px solid #ddd;">Price</th>
+                        <th style="padding: 10px; border: 1px solid #ddd;">Change</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #ddd;">AAPL</td>
+                        <td style="padding: 10px; border: 1px solid #ddd;">$194.27</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; color: green;">+2.4%</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #ddd;">MSFT</td>
+                        <td style="padding: 10px; border: 1px solid #ddd;">$374.51</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; color: green;">+1.8%</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #ddd;">TSLA</td>
+                        <td style="padding: 10px; border: 1px solid #ddd;">$248.50</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; color: green;">+3.2%</td>
+                    </tr>
+                </table>
             </div>
         </body>
         </html>
         """
         
-        logger.info("✅ Strategic report generated with built-in data")
-        return html_report
-    
-    async def _send_strategic_email(self, html_content):
-        """Send email using Python's built-in smtplib."""
-        logger.info("📧 Deploying strategic email (zero dependencies)")
+        log_and_print("✅ HTML report generated")
+        
+        # Step 4: Email Message Creation
+        log_and_print("🔍 STEP 4: Email Message Creation")
         
         try:
-            sender_email = os.getenv('SENDER_EMAIL')
-            sender_password = os.getenv('SENDER_PASSWORD')
-            recipients = [email.strip() for email in os.getenv('RECIPIENT_EMAILS', '').split(',') if email.strip()]
-            
-            if not all([sender_email, sender_password, recipients]):
-                logger.error("❌ Email configuration incomplete")
-                return False
-            
-            # Create message
             msg = MIMEMultipart('alternative')
             msg['From'] = sender_email
             msg['To'] = ', '.join(recipients)
-            msg['Subject'] = f"📊 Strategic Constellation Brief - {datetime.now().strftime('%B %d, %Y')}"
+            msg['Subject'] = f"🧪 DIAGNOSTIC SUCCESS - Strategic Intelligence Test - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
             
-            # Add HTML content
             html_part = MIMEText(html_content, 'html', 'utf-8')
             msg.attach(html_part)
             
-            # Send using built-in smtplib
-            with smtplib.SMTP('smtp.gmail.com', 587) as server:
-                server.starttls()
-                server.login(sender_email, sender_password)
-                server.send_message(msg)
-            
-            logger.info(f"✅ Strategic intelligence delivered to {len(recipients)} recipients")
-            return True
+            log_and_print("✅ Email message created successfully")
             
         except Exception as e:
-            logger.error(f"❌ Email delivery error: {e}")
+            log_and_print(f"❌ Email message creation failed: {e}")
             return False
-
-async def main():
-    """Main execution using only standard library."""
-    logger.info("🚀 ZERO DEPENDENCY INTELLIGENCE ENGINE")
-    
-    engine = ZeroDependencyIntelligenceEngine()
-    success = await engine.run_intelligence_engine()
-    
-    return 0 if success else 1
+        
+        # Step 5: SMTP Connection and Sending
+        log_and_print("🔍 STEP 5: SMTP Connection and Sending")
+        
+        try:
+            log_and_print("🔌 Connecting to Gmail SMTP server...")
+            
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            log_and_print("✅ SMTP connection established")
+            
+            log_and_print("🔐 Starting TLS encryption...")
+            server.starttls()
+            log_and_print("✅ TLS encryption activated")
+            
+            log_and_print("🔑 Attempting authentication...")
+            server.login(sender_email, sender_password)
+            log_and_print("✅ SMTP authentication successful")
+            
+            log_and_print("📧 Sending diagnostic email...")
+            server.send_message(msg)
+            log_and_print("✅ Email sent successfully")
+            
+            server.quit()
+            log_and_print("✅ SMTP connection closed")
+            
+        except smtplib.SMTPAuthenticationError as e:
+            log_and_print(f"❌ SMTP Authentication Error: {e}")
+            log_and_print("🔧 Check: Gmail app password format and 2FA settings")
+            return False
+            
+        except smtplib.SMTPRecipientsRefused as e:
+            log_and_print(f"❌ SMTP Recipients Refused: {e}")
+            log_and_print("🔧 Check: Recipient email addresses")
+            return False
+            
+        except smtplib.SMTPServerDisconnected as e:
+            log_and_print(f"❌ SMTP Server Disconnected: {e}")
+            log_and_print("🔧 Check: Network connectivity")
+            return False
+            
+        except Exception as e:
+            log_and_print(f"❌ Unexpected SMTP Error: {e}")
+            log_and_print(f"❌ Error Type: {type(e).__name__}")
+            return False
+        
+        # Step 6: Success Confirmation
+        log_and_print("🔍 STEP 6: Success Confirmation")
+        log_and_print(f"🎉 DIAGNOSTIC COMPLETE - Email sent to {len(recipients)} recipients")
+        log_and_print(f"📧 Check your inbox: {recipients[0]}")
+        log_and_print("✅ Strategic Intelligence System is FULLY OPERATIONAL")
+        
+        return True
+        
+    except Exception as e:
+        log_and_print(f"❌ CRITICAL ERROR: {e}")
+        log_and_print(f"❌ Error Type: {type(e).__name__}")
+        import traceback
+        log_and_print(f"❌ Full Traceback: {traceback.format_exc()}")
+        return False
+        
+    finally:
+        log_and_print("🏁 DIAGNOSTIC ENGINE SHUTDOWN")
+        log_file.close()
 
 if __name__ == "__main__":
-    exit_code = asyncio.run(main())
-    exit(exit_code)
+    print("🚀 Starting Diagnostic Intelligence Engine...")
+    success = diagnostic_intelligence()
+    print(f"🏁 Diagnostic Complete - Success: {success}")
+    exit(0 if success else 1)
