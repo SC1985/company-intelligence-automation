@@ -1,90 +1,59 @@
-name: Executive Intelligence Automation
+name: Strategic Intelligence Diagnostic
 
 on:
-  schedule:
-    # Every Monday at 9:00 AM EST (14:00 UTC)
-    - cron: '0 14 * * 1'
-  
-  # Manual trigger for testing
   workflow_dispatch:
-    inputs:
-      test_mode:
-        description: 'Run in test mode'
-        required: false
-        default: 'false'
-        type: boolean
-
-env:
-  PYTHON_VERSION: '3.11'
 
 jobs:
-  generate-and-send-report:
+  diagnostic-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     
     steps:
-    - name: 📡 Activate Repository Intelligence
+    - name: 📡 Checkout Repository
       uses: actions/checkout@v4
       
-    - name: 🐍 Configure Python Execution Environment
+    - name: 🐍 Setup Python
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
+        python-version: '3.11'
     
-    - name: ⚡ Deploy Dependencies Architecture
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        echo "🔧 Intelligence infrastructure deployed"
-    
-    - name: 🎯 Validate Intelligence Configuration
+    - name: 🔍 Environment Diagnostic
       env:
-        ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
-        NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+        SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+        SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+        RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+      run: |
+        echo "🔍 Checking environment variables..."
+        echo "SENDER_EMAIL: ${{ secrets.SENDER_EMAIL != '' && 'SET' || 'MISSING' }}"
+        echo "SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD != '' && 'SET' || 'MISSING' }}"
+        echo "RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS != '' && 'SET' || 'MISSING' }}"
+    
+    - name: 🚀 Execute Diagnostic Engine
+      env:
         SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
         SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
         RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
         ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
       run: |
-        echo "🔍 Validating intelligence architecture..."
-        python -c "
-        import os
-        required = ['SENDER_EMAIL', 'SENDER_PASSWORD', 'RECIPIENT_EMAILS']
-        missing = [var for var in required if not os.getenv(var)]
-        if missing:
-          print(f'❌ Missing critical configuration: {missing}')
-          exit(1)
-        print('✅ Intelligence configuration validated')
-        "
-    
-    - name: 🚀 Execute Intelligence Symphony
-      env:
-        ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
-        NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
-        SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-        SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-        RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
-        ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
-        SMTP_SERVER: smtp.gmail.com
-        SMTP_PORT: 587
-      run: |
-        echo "🎼 Orchestrating intelligence symphony..."
+        echo "🚀 Starting diagnostic execution..."
         python src/main.py
-        echo "✅ Executive intelligence brief deployed successfully"
+        echo "✅ Diagnostic execution complete"
     
-    - name: 📊 Archive Intelligence Artifacts
+    - name: 📊 Upload Diagnostic Logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: intelligence-execution-logs-${{ github.run_number }}
+        name: diagnostic-logs-${{ github.run_number }}
         path: |
           *.log
-          intelligence_system.log
-        retention-days: 30
+        retention-days: 7
     
-    - name: 🚨 Emergency Response Protocol
-      if: failure()
+    - name: 📋 Show Log Contents
+      if: always()
       run: |
-        echo "🚨 Intelligence system disruption detected"
-        echo "Check the logs above for detailed error information"
+        echo "📋 Diagnostic log contents:"
+        if [ -f intelligence_system.log ]; then
+          cat intelligence_system.log
+        else
+          echo "❌ No log file found"
+        fi
