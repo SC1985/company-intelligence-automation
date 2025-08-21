@@ -59,14 +59,14 @@ def _mover_chip(ticker: str, pct: float, href: str):
         f'{sign} {escape(ticker)} {pct:+.2f}%</a>'
     )
 
-# ---------- pure-table 52-week range (universal) ----------
+# ---------- pure-table 52-week range (full-width, thick marker) ----------
 
 def _range_bar(range_pct, low52, high52):
     """
-    Pure-table implementation (no CSS positioning, no conditional comments).
-    - Track width is fixed at 260px for 2-column cards.
-    - Left cell = computed px, center cell = 2px marker, right cell = remainder.
-    - Works across Gmail, Outlook (all), Apple Mail.
+    Pure-table implementation (no CSS positioning; works in Gmail/Outlook/Apple Mail).
+    - Track width: 100% of the card
+    - Marker: 4px, rendered as the RIGHT border of the left fill cell (so it never misaligns)
+    - Subtitle: "Near 1‑year high/low" or "At XX% of 52‑week range"
     """
     try:
         pos = float(range_pct) if range_pct is not None else 50.0
@@ -74,28 +74,30 @@ def _range_bar(range_pct, low52, high52):
         pos = 50.0
     if pos < 0: pos = 0.0
     if pos > 100: pos = 100.0
-    total = 260  # px
-    left_px = max(0, min(total - 2, int(round(total * pos / 100.0))))
-    right_px = max(0, total - 2 - left_px)
+
+    # Keep min widths so border renders at extremes
+    left_pct = max(0.5, min(99.5, pos))
+    right_pct = 100.0 - left_pct
+
+    # Status subtitle
+    if pos >= 90.0:
+        status = '<span style="color:#e5e7eb;font-weight:600;">Near 1‑year high</span>'
+    elif pos <= 10.0:
+        status = '<span style="color:#e5e7eb;font-weight:600;">Near 1‑year low</span>'
+    else:
+        status = f'<span style="color:#e5e7eb;">At {pos:.0f}% of 52‑week range</span>'
 
     track = f"""
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="left">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
   <tr>
-    <td>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="{total}">
-        <tr>
-          <td width="{left_px}" height="6" style="background:#2a2a2a;border-radius:4px 0 0 4px;line-height:0;font-size:0;">&nbsp;</td>
-          <td width="2" height="14" style="background:#e5e7eb;line-height:0;font-size:0;">&nbsp;</td>
-          <td width="{right_px}" height="6" style="background:#2a2a2a;border-radius:0 4px 4px 0;line-height:0;font-size:0;">&nbsp;</td>
-        </tr>
-      </table>
-    </td>
+    <td width="{left_pct:.2f}%" height="8" style="background:#2a2a2a;border-radius:4px 0 0 4px;line-height:0;font-size:0;border-right:4px solid #e5e7eb;">&nbsp;</td>
+    <td width="{right_pct:.2f}%" height="8" style="background:#2a2a2a;border-radius:0 4px 4px 0;line-height:0;font-size:0;">&nbsp;</td>
   </tr>
 </table>
 """
     caption = (
         f'<div style="font-size:12px;color:#9aa0a6;margin-top:4px;">'
-        f'Low ${low52:.2f} • High ${high52:.2f}'
+        f'{status} • Low ${low52:.2f} • High ${high52:.2f}'
         '</div>'
     )
 
