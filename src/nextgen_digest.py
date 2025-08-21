@@ -1,5 +1,4 @@
-# src/nextgen_digest.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
 from render_email import render_email
@@ -41,50 +40,39 @@ def _pos_in_range(price, low, high) -> float:
         return 50.0
 
 def _first_url_from_item(a: Dict[str, Any], ticker: str) -> Optional[str]:
-    # Try common fields first
     for k in ("url", "link", "article_url", "story_url", "source_url", "canonicalUrl"):
         v = a.get(k)
         if isinstance(v, str) and v.startswith(("http://", "https://")):
             return v
-    # Some APIs nest url under 'source' or 'meta'
     for k in ("source", "meta"):
         obj = a.get(k)
         if isinstance(obj, dict):
             v = obj.get("url") or obj.get("link")
             if isinstance(v, str) and v.startswith(("http://", "https://")):
                 return v
-    # Fallback to Yahoo Finance news tab for the symbol
     return f"https://finance.yahoo.com/quote/{ticker}/news"
 
 def _coalesce_news_map(news: Any) -> Dict[str, Dict[str, Optional[str]]]:
-    """
-    Return {TICKER: {'title': str|None, 'source': str|None, 'when': str|None, 'url': str|None}}
-    Accepts:
-      - dict keyed by ticker with 'top_articles' or 'articles'
-      - dict with 'items' list where each entry has a 'ticker'/'symbol'
-    """
     out: Dict[str, Dict[str, Optional[str]]] = {}
     if isinstance(news, dict):
-        # Case A: keyed by ticker
-        keyed = True
+        # keyed-by-ticker case
         for k, v in news.items():
-            if isinstance(v, (list, dict)):
-                t = str(k).upper()
-                arts = []
-                if isinstance(v, dict):
-                    arts = v.get("top_articles") or v.get("articles") or v.get("items") or []
-                elif isinstance(v, list):
-                    arts = v
-                if isinstance(arts, list) and arts:
-                    a = arts[0]
-                    title = a.get("title") or a.get("headline")
-                    src = a.get("source")
-                    if isinstance(src, dict):
-                        src = src.get("name") or src.get("id") or src.get("domain")
-                    when = a.get("publishedAt") or a.get("published_at") or a.get("time")
-                    url = _first_url_from_item(a, t)
-                    out[t] = {"title": title, "source": src if isinstance(src, str) else None, "when": when, "url": url}
-        # Case B: flat list under 'items'
+            t = str(k).upper()
+            arts = []
+            if isinstance(v, dict):
+                arts = v.get("top_articles") or v.get("articles") or v.get("items") or []
+            elif isinstance(v, list):
+                arts = v
+            if isinstance(arts, list) and arts:
+                a = arts[0]
+                title = a.get("title") or a.get("headline")
+                src = a.get("source")
+                if isinstance(src, dict):
+                    src = src.get("name") or src.get("id") or src.get("domain")
+                when = a.get("publishedAt") or a.get("published_at") or a.get("time")
+                url = _first_url_from_item(a, t)
+                out[t] = {"title": title, "source": src if isinstance(src, str) else None, "when": when, "url": url}
+        # flat 'items' list case
         items = news.get("items") or news.get("results") or []
         if isinstance(items, list):
             for a in items:
@@ -103,6 +91,51 @@ def _coalesce_news_map(news: Any) -> Dict[str, Dict[str, Optional[str]]]:
                 out[t] = {"title": title, "source": src if isinstance(src, str) else None, "when": when, "url": url}
     return out
 
+def _parse_catalyst(meta: Dict[str, Any], fallback: Optional[str]) -> Optional[Dict[str, str]]:
+    """Extract a simple upcoming catalyst with a date if possible.
+    Looks for earningsDate or nextEvent in the meta block.
+    Returns {'date_str','label'} or None.
+    """
+    # earningsDate may be a list, string, or dict; try common shapes
+    label = None
+    date_str = None
+
+    ed = meta.get("earningsDate")
+    if isinstance(ed, list) and ed:
+        x = ed[0]
+        if isinstance(x, dict) and x.get("fmt"):
+            date_str = x["fmt"]
+            label = "Earnings"
+        elif isinstance(x, str):
+            date_str = x
+            label = "Earnings"
+    elif isinstance(ed, dict) and ed.get("fmt"):
+        date_str = ed["fmt"]
+        label = "Earnings"
+    elif isinstance(ed, str):
+        date_str = ed
+        label = "Earnings"
+
+    ne = meta.get("nextEvent") or meta.get("next_event")
+    if not date_str and isinstance(ne, dict):
+        # e.g., {'date':'2025-08-22','label':'Product Day'}
+        ds = ne.get("date") or ne.get("when") or ne.get("time")
+        if isinstance(ds, str):
+            date_str = ds
+        label = ne.get("label") or ne.get("name") or "Event"
+    elif not date_str and isinstance(ne, str):
+        # Try to split "2025-08-22 Earnings call"
+        parts = ne.split()
+        for p in parts:
+            if len(p) >= 8 and p[4:5] == "-" and p[7:8] == "-":
+                date_str = p
+                label = ne.replace(p, "").strip() or "Event"
+                break
+
+    if not (date_str and label):
+        return None
+    return {"date_str": str(date_str), "label": str(label)}
+
 async def build_nextgen_html(logger) -> str:
     # Use the project engine
     from main import StrategicIntelligenceEngine
@@ -115,8 +148,7 @@ async def build_nextgen_html(logger) -> str:
 
     companies: List[Dict[str, Any]] = []
     up = down = 0
-    winners: List[Dict[str, Any]] = []
-    losers: List[Dict[str, Any]] = []
+    movers: List[Dict[str, Any]] = []
 
     if isinstance(market, dict):
         for ticker, item in market.items():
@@ -124,7 +156,7 @@ async def build_nextgen_html(logger) -> str:
             meta = item.get("position_data") or item.get("meta") or {}
             name = meta.get("name") or meta.get("companyName") or t
 
-            # Spot & timeseries (support multiple shapes)
+            # Simple spot/timeseries handling
             price = item.get("price")
             try:
                 price = float(price) if price is not None else None
@@ -148,10 +180,9 @@ async def build_nextgen_html(logger) -> str:
             if p1d is not None:
                 if p1d >= 0: up += 1
                 else: down += 1
-                winners.append({"ticker": t, "pct": p1d})
-                losers.append({"ticker": t, "pct": p1d})
+                movers.append({"ticker": t, "pct": p1d})
 
-            # 52w markers—use provided bounds if present; else neutral
+            # 52w bounds—use provided bounds if present; else neutral
             low52 = item.get("low_52w"); high52 = item.get("high_52w")
             try:
                 low52 = float(low52) if low52 is not None else 0.0
@@ -167,7 +198,6 @@ async def build_nextgen_html(logger) -> str:
 
             range_pct = _range_pos(latest, low52, high52)
 
-            # News URL + PR URL for CTAs
             nm = news_map.get(t, {})
             news_url = nm.get("url") or f"https://finance.yahoo.com/quote/{t}/news"
             pr_url = f"https://finance.yahoo.com/quote/{t}/press-releases"
@@ -183,14 +213,45 @@ async def build_nextgen_html(logger) -> str:
                 "news_url": news_url, "pr_url": pr_url,
             })
 
-    winners = sorted([m for m in winners if m["pct"] is not None], key=lambda x: x["pct"], reverse=True)[:3]
-    losers = sorted([m for m in losers if m["pct"] is not None], key=lambda x: x["pct"])[:3]
+    # Top movers (step 2)
+    winners = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"], reverse=True)[:3]
+    losers  = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"])[:3]
+
+    # Collect catalysts within 7 days (step 4)
+    catalysts: List[Dict[str, str]] = []
+    now = datetime.now()
+    horizon = now + timedelta(days=7)
+    for c in companies:
+        meta = {"earningsDate": c.get("next_event")} if isinstance(c.get("next_event"), (str, dict, list)) else {}
+        cat = _parse_catalyst(meta, None)
+        if not cat:
+            continue
+        # Try to parse ISO-like YYYY-MM-DD first
+        ds = str(cat["date_str"]).strip()
+        dt = None
+        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%b %d, %Y", "%d %b %Y"):
+            try:
+                dt = datetime.strptime(ds[:19], fmt)  # limit length for ISO strings
+                break
+            except Exception:
+                continue
+        if dt is None:
+            # crude regex-like check for YYYY-MM-DD
+            if len(ds) >= 10 and ds[4:5] == "-" and ds[7:8] == "-":
+                try:
+                    dt = datetime.strptime(ds[:10], "%Y-%m-%d")
+                except Exception:
+                    pass
+        if dt and now <= dt <= horizon:
+            catalysts.append({"date_str": dt.strftime("%b %d"), "ticker": c["ticker"], "label": cat["label"]})
+    catalysts = sorted(catalysts, key=lambda x: x["date_str"])[:8]
 
     summary = {
         "as_of_ct": datetime.now().strftime("%b %d, %Y %H:%M CT"),
         "up_count": up, "down_count": down,
-        "top_winners": winners, "top_losers": losers
+        "top_winners": winners, "top_losers": losers,
+        "catalysts": catalysts,
     }
 
-    html = render_email(summary, companies)
+    html = render_email(summary, companies, catalysts=catalysts)
     return html
