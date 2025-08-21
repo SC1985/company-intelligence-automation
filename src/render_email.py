@@ -64,21 +64,17 @@ def _fmt_ct(value, force_time=None, tz_suffix_policy="auto"):
             dtc = dt
         has_time = not (dtc.hour == 0 and dtc.minute == 0 and dtc.second == 0)
         show_time = force_time if force_time is not None else has_time
+        # Use zero-padded for safety across clients
         if show_time:
-            out = dtc.strftime("%-m/%-d/%Y %H:%M") if hasattr(dtc, "strftime") else str(value)
+            out = dtc.strftime("%m/%d/%Y %H:%M")
         else:
-            out = dtc.strftime("%-m/%-d/%Y") if hasattr(dtc, "strftime") else str(value)
-        # Windows/Outlook may not support %-m; provide zero-padded fallback
-        if "%" in out:  # crude check; strftime never leaves '%'
-            pass
+            out = dtc.strftime("%m/%d/%Y")
         suffix = ""
         if tz_suffix_policy == "always":
             suffix = " CST"
         elif tz_suffix_policy == "auto" and show_time:
             suffix = " CST"
-        # else "never": keep empty
         return out + suffix
-    # If not a datetime after parsing, return as-is
     return str(value)
 
 # ---------- helpers (chips, heat, buttons) ----------
@@ -276,8 +272,8 @@ def render_email(summary, companies, catalysts=None):
 
         range_html = _range_bar(range_pct, float(low52 or 0.0), float(high52 or 0.0))
 
-        # CTAs moved BELOW the 52w range and bullets; use small size to avoid wrapping in 2-col
-        ctas = _button("News", news_url, size="sm") + _button("Press", pr_url, size="sm")
+        # CTAs below bullets; use original size (md) but short labels to avoid wrapping
+        ctas = _button("News", news_url, size="md") + _button("Press", pr_url, size="md")
 
         card = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
@@ -300,16 +296,26 @@ def render_email(summary, companies, catalysts=None):
 """
         card_html.append(card)
 
-    # Build 2-column grid: pair cards into rows with gutters
+    # Build 2-column grid with a center spacer cell (no left/right paddings on columns)
     rows = []
     for i in range(0, len(card_html), 2):
         left = card_html[i]
-        right = card_html[i+1] if i+1 < len(card_html) else '<div style="height:0;"></div>'
-        row = f"""
+        if i+1 < len(card_html):
+            right = card_html[i+1]
+            row = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
   <tr>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-right:6px;">{left}</td>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-left:6px;">{right}</td>
+    <td class="stack-col" width="50%" style="vertical-align:top;">{left}</td>
+    <td class="spacer" width="12" style="width:12px;font-size:0;line-height:0;">&nbsp;</td>
+    <td class="stack-col" width="50%" style="vertical-align:top;">{right}</td>
+  </tr>
+</table>
+"""
+        else:
+            row = f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+  <tr>
+    <td class="stack-col" width="50%" style="vertical-align:top;">{left}</td>
   </tr>
 </table>
 """
@@ -344,6 +350,7 @@ def render_email(summary, companies, catalysts=None):
   <style>
     @media only screen and (max-width: 620px) {{
       .stack-col {{ display:block !important; width:100% !important; max-width:100% !important; }}
+      .spacer {{ display:none !important; width:0 !important; }}
     }}
   </style>
 </head>
