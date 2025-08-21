@@ -1,11 +1,17 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 import json
 import time
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
 
 from render_email import render_email
 
-# ---------- History helpers ----------
+CENTRAL_TZ = ZoneInfo("America/Chicago") if ZoneInfo else None
+
+# ---------- History helpers (unchanged) ----------
 
 def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float], List[float], List[float]]:
     import csv
@@ -199,7 +205,6 @@ async def build_nextgen_html(logger) -> str:
             meta = item.get("position_data") or item.get("meta") or {}
             name = meta.get("name") or meta.get("companyName") or t
 
-            # Quote / series from engine
             price = None
             try:
                 price = float(item.get("price")) if item.get("price") is not None else None
@@ -209,7 +214,6 @@ async def build_nextgen_html(logger) -> str:
             closes = [float(x) for x in item.get("closes", [])] if isinstance(item.get("closes"), list) else []
             dates = item.get("dates", []) or []
 
-            # If series is shallow or missing, fetch robust history
             hist_source = "engine" if len(closes) >= 30 else None
             if len(closes) < 30:
                 src, dt, cl, hi, lo = _get_history(t, alpha_key)
@@ -220,23 +224,36 @@ async def build_nextgen_html(logger) -> str:
 
             latest = closes[-1] if closes else price
 
-            # Window baselines
-            d1 = _nearest(closes, 1) if closes else None
-            w1 = _nearest(closes, 5) if closes else None
-            m1 = _nearest(closes, 21) if closes else None
-            ytd0 = _ytd_ref(dates, closes) if dates and closes else None
+            d1 = closes[-2] if len(closes) >= 2 else None
+            w1 = closes[-6] if len(closes) >= 6 else None
+            m1 = closes[-22] if len(closes) >= 22 else None
+            # YTD baseline: close on last trading day of previous year
+            ytd0 = None
+            if dates and closes:
+                last_year = dates[-1].year - 1
+                for i in range(len(dates)-1, -1, -1):
+                    if dates[i].year == last_year:
+                        ytd0 = closes[i]
+                        break
 
-            p1d = _pct_change(latest, d1) if d1 is not None else None
-            p1w = _pct_change(latest, w1) if w1 is not None else None
-            p1m = _pct_change(latest, m1) if m1 is not None else None
-            pytd = _pct_change(latest, ytd0) if ytd0 is not None else None
+            def pct(curr, prev):
+                try:
+                    if curr is None or prev is None or prev == 0:
+                        return None
+                    return (curr/prev - 1.0) * 100.0
+                except Exception:
+                    return None
+
+            p1d = pct(latest, d1)
+            p1w = pct(latest, w1)
+            p1m = pct(latest, m1)
+            pytd = pct(latest, ytd0)
 
             if p1d is not None:
                 if p1d >= 0: up += 1
                 else: down += 1
                 movers.append({"ticker": t, "pct": p1d})
 
-            # 52w bounds
             low52 = item.get("low_52w"); high52 = item.get("high_52w")
             try:
                 low52 = float(low52) if low52 is not None else None
@@ -249,8 +266,16 @@ async def build_nextgen_html(logger) -> str:
                 low52 = float(min(window))
                 high52 = float(max(window))
 
-            # Compute position in range (0..100)
-            range_pct = _pos_in_range(latest or 0.0, low52 or 0.0, high52 or 0.0)
+            def pos_in_range(price, low, high):
+                try:
+                    price, low, high = float(price), float(low), float(high)
+                    if high <= low:
+                        return 50.0
+                    return max(0.0, min(100.0, (price - low) / (high - low) * 100.0))
+                except Exception:
+                    return 50.0
+
+            range_pct = pos_in_range(latest or 0.0, low52 or 0.0, high52 or 0.0)
 
             nm = news_map.get(t, {})
             news_url = nm.get("url") or f"https://finance.yahoo.com/quote/{t}/news"
@@ -269,7 +294,6 @@ async def build_nextgen_html(logger) -> str:
                 "news_url": news_url, "pr_url": pr_url,
             })
 
-            # Diagnostics in log
             try:
                 import logging
                 logging.getLogger("ci-entrypoint").info(
@@ -280,9 +304,15 @@ async def build_nextgen_html(logger) -> str:
     winners = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"], reverse=True)[:3]
     losers  = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"])[:3]
 
-    # Catalysts — optional
+    # Build "as_of_ct" in Central and format as M/D/Y HH:MM CST (string)
+    if CENTRAL_TZ:
+        now_c = datetime.now(tz=CENTRAL_TZ)
+    else:
+        now_c = datetime.now()
+    as_of_ct = now_c.strftime("%m/%d/%Y %H:%M") + " CST"
+
     summary = {
-        "as_of_ct": datetime.now().strftime("%b %d, %Y %H:%M CT"),
+        "as_of_ct": as_of_ct,
         "up_count": up, "down_count": down,
         "top_winners": winners, "top_losers": losers,
         "catalysts": [],
