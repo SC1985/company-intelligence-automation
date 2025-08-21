@@ -1,4 +1,3 @@
-# src/render_email.py
 from datetime import datetime
 from html import escape
 
@@ -64,24 +63,23 @@ def _mover_chip(ticker: str, pct: float, href: str):
 
 def _range_bar(range_pct, low52, high52):
     """
-    Returns markup for the 52-week range:
-    - Modern clients: CSS bar with an absolutely-positioned marker.
-    - Outlook Desktop (mso): table fallback with a 2px marker cell.
+    Return markup for the 52-week range bar with a marker.
+    - Do not treat 0.0 as falsy (range at extreme low is valid).
+    - Outlook fallback uses a 3-cell table with a 2px marker.
     """
     try:
-        left = float(range_pct if range_pct is not None else 50.0)
+        left = float(range_pct) if range_pct is not None else 50.0
     except Exception:
         left = 50.0
     if left < 0: left = 0.0
     if left > 100: left = 100.0
     right = 100.0 - left
 
-    # For Outlook fallback, assume the inner track is ~260px wide in a 2-col card
+    # For Outlook fallback, assume inner width ≈ 260px in a 2‑column card
     mso_total = 260
     left_px = max(0, min(mso_total - 2, int(round(mso_total * left / 100.0))))
     right_px = max(0, mso_total - 2 - left_px)
 
-    # Modern clients
     modern = (
         '<!--[if !mso]><!-- -->'
         '<div style="position:relative;height:6px;background:#2a2a2a;border-radius:4px;">'
@@ -90,8 +88,6 @@ def _range_bar(range_pct, low52, high52):
         '<!--<![endif]-->'
     )
 
-    # Outlook (mso) fallback: 3-cell table with a 2px marker cell
-    # Note: width attributes in pixels render reliably in Outlook/Word engine.
     mso = (
         '<!--[if mso]>'
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
@@ -101,7 +97,7 @@ def _range_bar(range_pct, low52, high52):
         f'<td style="height:6px;background:#2a2a2a;border-radius:4px;" width="{right_px}"></td>'
         '</tr>'
         '</table>'
-        '<![endif]-->'
+        '<![endif]>'
     )
 
     caption = (
@@ -118,12 +114,6 @@ def _range_bar(range_pct, low52, high52):
 # ---------- main renderer ----------
 
 def render_email(summary, companies, catalysts=None):
-    """
-    Render the email.
-    - summary: dict with up/down counts, winners/losers, etc.
-    - companies: list of dicts, each with price, diffs, range, news_url/pr_url, headline, etc.
-    - catalysts: optional list of {'date_str','ticker','label'} entries to show in a 7-day section.
-    """
     asof = summary.get("as_of_ct", datetime.now().strftime("%b %d, %Y %H:%M CT"))
     up = summary.get("up_count", 0)
     down = summary.get("down_count", 0)
@@ -154,8 +144,14 @@ def render_email(summary, companies, catalysts=None):
         t = c.get("ticker")
         price = c.get("price") or 0.0
         p1d, p1w, p1m, pytd = c.get("pct_1d"), c.get("pct_1w"), c.get("pct_1m"), c.get("pct_ytd")
-        low52, high52 = c.get("low_52w") or 0.0, c.get("high_52w") or 0.0
-        range_pct = c.get("range_pct") or 50.0
+        low52 = c.get("low_52w") if c.get("low_52w") is not None else 0.0
+        high52 = c.get("high_52w") if c.get("high_52w") is not None else 0.0
+        rp = c.get("range_pct")
+        # IMPORTANT: do not treat 0.0 as falsy
+        try:
+            range_pct = float(rp) if rp is not None else 50.0
+        except Exception:
+            range_pct = 50.0
         headline = c.get("headline")
         source = c.get("source")
         when = c.get("when")
@@ -181,7 +177,7 @@ def render_email(summary, companies, catalysts=None):
 
         ctas = _button("Latest News", news_url) + _button("Press Releases", pr_url)
 
-        range_html = _range_bar(range_pct, low52, high52)
+        range_html = _range_bar(range_pct, float(low52 or 0.0), float(high52 or 0.0))
 
         card = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
