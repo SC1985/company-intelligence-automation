@@ -1,3 +1,4 @@
+# src/render_email.py
 from datetime import datetime
 from html import escape
 
@@ -59,10 +60,66 @@ def _mover_chip(ticker: str, pct: float, href: str):
         f'{sign} {escape(ticker)} {pct:+.2f}%</a>'
     )
 
+# ---------- bulletproof 52-week range (works in Outlook Desktop) ----------
+
+def _range_bar(range_pct, low52, high52):
+    """
+    Returns markup for the 52-week range:
+    - Modern clients: CSS bar with an absolutely-positioned marker.
+    - Outlook Desktop (mso): table fallback with a 2px marker cell.
+    """
+    try:
+        left = float(range_pct if range_pct is not None else 50.0)
+    except Exception:
+        left = 50.0
+    if left < 0: left = 0.0
+    if left > 100: left = 100.0
+    right = 100.0 - left
+
+    # For Outlook fallback, assume the inner track is ~260px wide in a 2-col card
+    mso_total = 260
+    left_px = max(0, min(mso_total - 2, int(round(mso_total * left / 100.0))))
+    right_px = max(0, mso_total - 2 - left_px)
+
+    # Modern clients
+    modern = (
+        '<!--[if !mso]><!-- -->'
+        '<div style="position:relative;height:6px;background:#2a2a2a;border-radius:4px;">'
+        f'  <div style="position:absolute;left:{left:.2f}%;top:-4px;width:2px;height:14px;background:#e5e7eb;"></div>'
+        '</div>'
+        '<!--<![endif]-->'
+    )
+
+    # Outlook (mso) fallback: 3-cell table with a 2px marker cell
+    # Note: width attributes in pixels render reliably in Outlook/Word engine.
+    mso = (
+        '<!--[if mso]>'
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
+        '<tr>'
+        f'<td style="height:6px;background:#2a2a2a;border-radius:4px;" width="{left_px}"></td>'
+        '<td style="height:14px;background:#e5e7eb;" width="2"></td>'
+        f'<td style="height:6px;background:#2a2a2a;border-radius:4px;" width="{right_px}"></td>'
+        '</tr>'
+        '</table>'
+        '<![endif]-->'
+    )
+
+    caption = (
+        f'<div style="font-size:12px;color:#9aa0a6;margin-top:4px;">'
+        f'Low ${low52:.2f} • High ${high52:.2f}'
+        '</div>'
+    )
+
+    return (
+        '<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'
+        + modern + mso + caption
+    )
+
 # ---------- main renderer ----------
 
 def render_email(summary, companies, catalysts=None):
-    """Render the email.
+    """
+    Render the email.
     - summary: dict with up/down counts, winners/losers, etc.
     - companies: list of dicts, each with price, diffs, range, news_url/pr_url, headline, etc.
     - catalysts: optional list of {'date_str','ticker','label'} entries to show in a 7-day section.
@@ -83,13 +140,11 @@ def render_email(summary, companies, catalysts=None):
     # Build mover chips
     winners_html = "".join(
         _mover_chip(m.get("ticker",""), float(m.get("pct",0) or 0), news_map.get(m.get("ticker"), "#"))
-        for m in movers_up
-        if m.get("ticker")
+        for m in movers_up if m.get("ticker")
     )
     losers_html = "".join(
         _mover_chip(m.get("ticker",""), float(m.get("pct",0) or 0), news_map.get(m.get("ticker"), "#"))
-        for m in movers_down
-        if m.get("ticker")
+        for m in movers_down if m.get("ticker")
     )
 
     # Build company card HTMLs (individual cards)
@@ -126,6 +181,8 @@ def render_email(summary, companies, catalysts=None):
 
         ctas = _button("Latest News", news_url) + _button("Press Releases", pr_url)
 
+        range_html = _range_bar(range_pct, low52, high52)
+
         card = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
   <tr>
@@ -137,11 +194,7 @@ def render_email(summary, companies, catalysts=None):
       <div style="margin-top:10px;">{ctas}</div>
 
       <div style="margin-top:12px;">
-        <div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>
-        <div style="position:relative;height:6px;background:#2a2a2a;border-radius:4px;">
-          <div style="position:absolute;left:{range_pct:.2f}%;top:-4px;width:2px;height:14px;background:#e5e7eb;"></div>
-        </div>
-        <div style="font-size:12px;color:#9aa0a6;margin-top:4px;">Low ${low52:.2f} • High ${high52:.2f}</div>
+        {range_html}
       </div>
 
       <ul style="margin:10px 0 0 16px;padding:0;color:#e5e7eb;font-size:13px;line-height:1.4;">
@@ -208,25 +261,25 @@ def render_email(summary, companies, catalysts=None):
           </span>
         </td></tr>
 
-        <!-- Header band kept minimal per request (step 1 omitted) -->
+        <!-- Header band -->
         <tr><td style="padding:12px 14px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
           <div style="font-weight:700;font-size:18px;color:#fff;">Weekly Company Intelligence Digest</div>
           <div style="font-size:13px;color:#9aa0a6;margin-top:2px;">{len(companies)} companies • {up} ↑ / {down} ↓ • Data as of {asof}</div>
           <div style="margin-top:8px;">{heat}</div>
         </td></tr>
 
-        <!-- Top movers strip (step 2) -->
+        <!-- Top movers strip -->
         <tr><td style="padding:12px 14px 0;">
           <div style="margin:12px 0 6px;color:#e5e7eb;font-weight:700;">Top movers</div>
           <div>{winners_html}{losers_html}</div>
         </td></tr>
 
-        <!-- 2-column company grid (step 3 with 2-col layout, step 5 spacing) -->
+        <!-- 2-column company grid -->
         <tr><td style="padding-top:8px;">
           {''.join(rows)}
         </td></tr>
 
-        <!-- Upcoming catalysts (step 4) -->
+        <!-- Upcoming catalysts -->
         {f'<tr><td style="padding-top:8px;">{catalysts_html}</td></tr>' if catalysts_html else ''}
 
         <tr><td style="padding:16px 14px;color:#9aa0a6;font-size:12px;text-align:center;">
