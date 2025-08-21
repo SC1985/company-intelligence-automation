@@ -1,3 +1,4 @@
+
 from datetime import datetime, timezone
 from html import escape
 from email.utils import parsedate_to_datetime
@@ -51,11 +52,6 @@ def _parse_to_dt(value):
     return None
 
 def _fmt_ct(value, force_time=None, tz_suffix_policy="auto"):
-    """
-    Return a formatted date/time in Central.
-    - force_time: True -> show HH:MM; False -> hide time; None -> auto (show time only if hh:mm:ss not zero)
-    - tz_suffix_policy: "auto" -> add ' CST' only if time shown; "always" -> always add; "never" -> never add
-    """
     dt = _parse_to_dt(value) or value
     if isinstance(dt, datetime):
         try:
@@ -64,7 +60,6 @@ def _fmt_ct(value, force_time=None, tz_suffix_policy="auto"):
             dtc = dt
         has_time = not (dtc.hour == 0 and dtc.minute == 0 and dtc.second == 0)
         show_time = force_time if force_time is not None else has_time
-        # Use zero-padded for safety across clients
         if show_time:
             out = dtc.strftime("%m/%d/%Y %H:%M")
         else:
@@ -76,8 +71,6 @@ def _fmt_ct(value, force_time=None, tz_suffix_policy="auto"):
             suffix = " CST"
         return out + suffix
     return str(value)
-
-# ---------- helpers (chips, heat, buttons) ----------
 
 def _chip(label: str, value):
     try:
@@ -102,7 +95,7 @@ def _heat_square(pct):
     if pct is None:
         c = "#2a2a2a"
     else:
-        mag = min(abs(pct) / 5.0, 1.0)  # scale intensity
+        mag = min(abs(pct) / 5.0, 1.0)
         c = (
             f"rgba(52,211,153,{0.25+0.75*mag:.2f})" if pct >= 0
             else f"rgba(248,113,113,{0.25+0.75*mag:.2f})"
@@ -116,8 +109,6 @@ def _button(label: str, url: str, size="md"):
     safe_label = escape(label)
     safe_url = url or "#"
     pad = "8px 12px"; fz = "13px"
-    if size == "sm":
-        pad = "5px 8px"; fz = "11px"
     return (
         f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer" '
         f'style="display:inline-block;padding:{pad};margin-right:6px;'
@@ -137,8 +128,6 @@ def _mover_chip(ticker: str, pct: float, href: str):
         f'{sign} {escape(ticker)} {pct:+.2f}%</a>'
     )
 
-# ---------- 52-week range (v5 mobile-robust via TD widths + nested tables) ----------
-
 def _range_bar(range_pct, low52, high52):
     try:
         pos = float(range_pct) if range_pct is not None else 50.0
@@ -156,7 +145,6 @@ def _range_bar(range_pct, low52, high52):
     if right == 0.0:
         right = 0.2; left = max(0.0, 100.0 - marker_pct - right)
 
-    # Status subtitle
     if pos >= 90.0:
         status = '<span style="color:#e5e7eb;font-weight:600;">Near 1‑year high</span>'
     elif pos <= 10.0:
@@ -196,9 +184,7 @@ def _range_bar(range_pct, low52, high52):
         + track + caption
     )
 
-# ---------- main renderer ----------
-
-def render_email(summary, companies, catalysts=None):
+def render_email(summary, companies, catalysts=None, cryptos=None):
     asof = _fmt_ct(summary.get("as_of_ct") or datetime.now(), force_time=True, tz_suffix_policy="always")
 
     up = summary.get("up_count", 0)
@@ -206,14 +192,11 @@ def render_email(summary, companies, catalysts=None):
     movers_up = summary.get("top_winners", [])
     movers_down = summary.get("top_losers", [])
     catalysts = catalysts or summary.get("catalysts") or []
+    cryptos = cryptos or []
 
-    # Heat strip
     heat = "".join(_heat_square(c.get("pct_1d")) for c in companies)
-
-    # Map ticker -> news url for mover chips
     news_map = {c.get("ticker"): (c.get("news_url") or f"https://finance.yahoo.com/quote/{c.get('ticker')}/news") for c in companies}
 
-    # Build mover chips
     winners_html = "".join(
         _mover_chip(m.get("ticker",""), float(m.get("pct",0) or 0), news_map.get(m.get("ticker"), "#"))
         for m in movers_up if m.get("ticker")
@@ -223,9 +206,7 @@ def render_email(summary, companies, catalysts=None):
         for m in movers_down if m.get("ticker")
     )
 
-    # Build company card HTMLs (individual cards)
-    card_html = []
-    for c in companies:
+    def _build_card(c):
         name = c.get("name") or c.get("ticker")
         t = c.get("ticker")
         price = c.get("price") or 0.0
@@ -240,7 +221,6 @@ def render_email(summary, companies, catalysts=None):
         headline = c.get("headline")
         source = c.get("source")
         when = c.get("when")
-        # Normalize 'when': auto time detection; add CST only if time is shown
         when_fmt = _fmt_ct(when, force_time=None, tz_suffix_policy="auto") if when else None
 
         next_event = c.get("next_event")
@@ -271,38 +251,33 @@ def render_email(summary, companies, catalysts=None):
         bullets_html = "".join(f"<li>{escape(b)}</li>" for b in bullets)
 
         range_html = _range_bar(range_pct, float(low52 or 0.0), float(high52 or 0.0))
-
-        # CTAs below bullets; use original size (md) but short labels to avoid wrapping
         ctas = _button("News", news_url, size="md") + _button("Press", pr_url, size="md")
 
-        card = f"""
+        price_fmt = f"${price:.4f}" if str(t).endswith("-USD") else f"${price:.2f}"
+        return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
   <tr>
     <td style="padding:12px 14px;">
       <div style="font-weight:700;font-size:16px;line-height:1.3;color:#fff;">{escape(str(name))} <span style="color:#9aa0a6;">({escape(str(t))})</span></div>
-      <div style="margin-top:2px;font-size:14px;color:#e5e7eb;">${price:.2f}</div>
+      <div style="margin-top:2px;font-size:14px;color:#e5e7eb;">{price_fmt}</div>
       <div style="margin-top:8px;">{chips}</div>
-
       <div style="margin-top:12px;">{range_html}</div>
-
       <ul style="margin:10px 0 0 16px;padding:0;color:#e5e7eb;font-size:13px;line-height:1.4;">
         {bullets_html}
       </ul>
-
       <div style="margin-top:10px;">{ctas}</div>
     </td>
   </tr>
 </table>
 """
-        card_html.append(card)
 
-    # Build 2-column grid with a center spacer cell (no left/right paddings on columns)
-    rows = []
-    for i in range(0, len(card_html), 2):
-        left = card_html[i]
-        if i+1 < len(card_html):
-            right = card_html[i+1]
-            row = f"""
+    def _grid(cards):
+        rows = []
+        for i in range(0, len(cards), 2):
+            left = cards[i]
+            if i+1 < len(cards):
+                right = cards[i+1]
+                row = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
   <tr>
     <td class="stack-col" width="50%" style="vertical-align:top;">{left}</td>
@@ -311,17 +286,20 @@ def render_email(summary, companies, catalysts=None):
   </tr>
 </table>
 """
-        else:
-            row = f"""
+            else:
+                row = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
   <tr>
     <td class="stack-col" width="50%" style="vertical-align:top;">{left}</td>
   </tr>
 </table>
 """
-        rows.append(row)
+            rows.append(row)
+        return ''.join(rows)
 
-    # Upcoming catalysts module (if provided) — normalize date strings too
+    company_cards = [_build_card(c) for c in companies]
+    crypto_cards = [_build_card(x) for x in cryptos] if cryptos else []
+
     catalysts_html = ""
     if catalysts:
         items_html = []
@@ -339,7 +317,6 @@ def render_email(summary, companies, catalysts=None):
 </table>
 """
 
-    # ---------- full email ----------
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -364,25 +341,21 @@ def render_email(summary, companies, catalysts=None):
           </span>
         </td></tr>
 
-        <!-- Header band -->
         <tr><td style="padding:12px 14px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
           <div style="font-weight:700;font-size:18px;color:#fff;">Weekly Company Intelligence Digest</div>
           <div style="font-size:13px;color:#9aa0a6;margin-top:2px;">{len(companies)} companies • {up} ↑ / {down} ↓ • Data as of {asof}</div>
           <div style="margin-top:8px;">{heat}</div>
         </td></tr>
 
-        <!-- Top movers strip -->
         <tr><td style="padding:12px 14px 0;">
           <div style="margin:12px 0 6px;color:#e5e7eb;font-weight:700;">Top movers</div>
           <div>{winners_html}{losers_html}</div>
         </td></tr>
 
-        <!-- 2-column company grid -->
-        <tr><td style="padding-top:8px;">
-          {''.join(rows)}
-        </td></tr>
+        <tr><td style="padding-top:8px;">{_grid(company_cards)}</td></tr>
 
-        <!-- Upcoming catalysts -->
+        {f'<tr><td style="padding:12px 0;color:#e5e7eb;font-weight:700;">Digital Assets</td></tr><tr><td>{_grid(crypto_cards)}</td></tr>' if crypto_cards else ''}
+
         {f'<tr><td style="padding-top:8px;">{catalysts_html}</td></tr>' if catalysts_html else ''}
 
         <tr><td style="padding:16px 14px;color:#9aa0a6;font-size:12px;text-align:center;">
