@@ -269,27 +269,24 @@ async def build_nextgen_html(logger) -> str:
                 "news_url": news_url, "pr_url": pr_url,
             })
 
-            # Detailed log for troubleshooting
+            # Diagnostics in log
             try:
                 import logging
                 logging.getLogger("ci-entrypoint").info(
-                    f"{t}: bars={len(closes)} src={hist_source} last={price_show} "
-                    f"lo52={low52} hi52={high52} pos%={range_pct:.2f}")
+                    f"{t}: bars={len(closes)} src={hist_source} last={price_show} lo52={low52} hi52={high52} pos%={range_pct:.2f}")
             except Exception:
                 pass
 
     winners = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"], reverse=True)[:3]
     losers  = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"])[:3]
 
-    # Catalysts — optional; omitted for simplicity here
-    catalysts: List[Dict[str, str]] = []
-
+    # Catalysts — optional
     summary = {
         "as_of_ct": datetime.now().strftime("%b %d, %Y %H:%M CT"),
         "up_count": up, "down_count": down,
         "top_winners": winners, "top_losers": losers,
-        "catalysts": catalysts,
+        "catalysts": [],
     }
 
-    html = render_email(summary, companies, catalysts=catalysts)
+    html = render_email(summary, companies)
     return html
