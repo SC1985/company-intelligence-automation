@@ -15,51 +15,6 @@
     "sector_allocation": "Consumer Ecosystem"
   },
   {
-    "symbol": "MSFT",
-    "name": "Microsoft Corporation",
-    "sector": "Enterprise Technology",
-    "market_cap_category": "mega",
-    "priority": "foundational_core",
-    "investment_thesis": "Cloud computing dominance with AI integration across enterprise software stack",
-    "risk_profile": "low_moderate",
-    "catalyst_watch": ["Azure growth rates", "AI integration adoption", "enterprise software expansion"],
-    "alert_thresholds": {
-      "price_change_percent": 3.0,
-      "volume_spike_multiplier": 150.0
-    },
-    "sector_allocation": "Enterprise Infrastructure"
-  },
-  {
-    "symbol": "GOOGL",
-    "name": "Alphabet Inc.",
-    "sector": "Digital Platform",
-    "market_cap_category": "mega",
-    "priority": "foundational_core", 
-    "investment_thesis": "Search advertising monopoly evolving into AI-first platform with cloud scaling",
-    "risk_profile": "low_moderate",
-    "catalyst_watch": ["AI search integration", "cloud market share", "regulatory outcomes"],
-    "alert_thresholds": {
-      "price_change_percent": 3.5,
-      "volume_spike_multiplier": 150.0
-    },
-    "sector_allocation": "Digital Advertising"
-  },
-  {
-    "symbol": "AMZN",
-    "name": "Amazon.com Inc.",
-    "sector": "E-commerce/Cloud",
-    "market_cap_category": "mega",
-    "priority": "foundational_core",
-    "investment_thesis": "E-commerce infrastructure with AWS profit engine and logistics network effects",
-    "risk_profile": "moderate",
-    "catalyst_watch": ["AWS growth acceleration", "retail margin expansion", "logistics automation"],
-    "alert_thresholds": {
-      "price_change_percent": 3.5,
-      "volume_spike_multiplier": 150.0
-    },
-    "sector_allocation": "Commerce Infrastructure"
-  },
-  {
     "symbol": "TSLA",
     "name": "Tesla Inc.",
     "sector": "Sustainable Transport",
@@ -103,21 +58,6 @@
       "volume_spike_multiplier": 175.0
     },
     "sector_allocation": "Social Infrastructure"
-  },
-  {
-    "symbol": "NFLX",
-    "name": "Netflix Inc.",
-    "sector": "Streaming Entertainment",
-    "market_cap_category": "large",
-    "priority": "growth_anchor",
-    "investment_thesis": "Global streaming content platform with advertising tier and gaming expansion",
-    "risk_profile": "moderate_high",
-    "catalyst_watch": ["subscriber growth", "ad tier adoption", "content ROI optimization"],
-    "alert_thresholds": {
-      "price_change_percent": 4.5,
-      "volume_spike_multiplier": 200.0
-    },
-    "sector_allocation": "Digital Entertainment"
   },
   {
     "symbol": "AMD",
