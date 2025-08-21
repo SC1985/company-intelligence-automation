@@ -39,7 +39,6 @@ def _heat_square(pct):
 def _button(label: str, url: str):
     safe_label = escape(label)
     safe_url = url or "#"
-    # email-safe button (inline styles only)
     return (
         f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer" '
         'style="display:inline-block;padding:8px 12px;margin-right:8px;'
@@ -59,14 +58,13 @@ def _mover_chip(ticker: str, pct: float, href: str):
         f'{sign} {escape(ticker)} {pct:+.2f}%</a>'
     )
 
-# ---------- pure-table 52-week range (full-width, thick marker) ----------
+# ---------- 52-week range (mobile-safe, no borders/positioning) ----------
 
 def _range_bar(range_pct, low52, high52):
     """
-    Pure-table implementation (no CSS positioning; works in Gmail/Outlook/Apple Mail).
-    - Track width: 100% of the card
-    - Marker: 4px, rendered as the RIGHT border of the left fill cell (so it never misaligns)
-    - Subtitle: "Near 1‑year high/low" or "At XX% of 52‑week range"
+    Two-cell track (100% width). Marker is a nested 4px table aligned to the RIGHT
+    edge of the LEFT cell (so it's always flush at the true position).
+    Works consistently on Gmail/Apple Mail/Outlook (desktop & mobile).
     """
     try:
         pos = float(range_pct) if range_pct is not None else 50.0
@@ -75,11 +73,27 @@ def _range_bar(range_pct, low52, high52):
     if pos < 0: pos = 0.0
     if pos > 100: pos = 100.0
 
-    # Keep min widths so border renders at extremes
+    # Prevent zero-width extreme from hiding marker
     left_pct = max(0.5, min(99.5, pos))
     right_pct = 100.0 - left_pct
 
-    # Status subtitle
+    # Marker table (4px) aligned right inside left segment
+    marker = (
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="right">'
+        '<tr><td width="4" height="12" style="background:#e5e7eb;line-height:0;font-size:0;">&nbsp;</td></tr>'
+        '</table>'
+    )
+
+    track = f"""
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+  <tr>
+    <td width="{left_pct:.2f}%" height="8" style="background:#2a2a2a;border-radius:4px 0 0 4px;line-height:0;font-size:0;">{marker}</td>
+    <td width="{right_pct:.2f}%" height="8" style="background:#2a2a2a;border-radius:0 4px 4px 0;line-height:0;font-size:0;">&nbsp;</td>
+  </tr>
+</table>
+"""
+
+    # Subtitle
     if pos >= 90.0:
         status = '<span style="color:#e5e7eb;font-weight:600;">Near 1‑year high</span>'
     elif pos <= 10.0:
@@ -87,14 +101,6 @@ def _range_bar(range_pct, low52, high52):
     else:
         status = f'<span style="color:#e5e7eb;">At {pos:.0f}% of 52‑week range</span>'
 
-    track = f"""
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-  <tr>
-    <td width="{left_pct:.2f}%" height="8" style="background:#2a2a2a;border-radius:4px 0 0 4px;line-height:0;font-size:0;border-right:4px solid #e5e7eb;">&nbsp;</td>
-    <td width="{right_pct:.2f}%" height="8" style="background:#2a2a2a;border-radius:0 4px 4px 0;line-height:0;font-size:0;">&nbsp;</td>
-  </tr>
-</table>
-"""
     caption = (
         f'<div style="font-size:12px;color:#9aa0a6;margin-top:4px;">'
         f'{status} • Low ${low52:.2f} • High ${high52:.2f}'
@@ -196,16 +202,24 @@ def render_email(summary, companies, catalysts=None):
 """
         card_html.append(card)
 
-    # Build 2-column grid: pair cards into rows with gutters
+    # Build 2-column grid: "hybrid" inline-block tables so mobile stacks without media queries
     rows = []
+    # Max column width when two-up inside 600px container
+    col_px = 290
     for i in range(0, len(card_html), 2):
         left = card_html[i]
         right = card_html[i+1] if i+1 < len(card_html) else '<div style="height:0;"></div>'
         row = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
   <tr>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-right:6px;">{left}</td>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-left:6px;">{right}</td>
+    <td style="padding:0; text-align:left; font-size:0;">
+      <table role="presentation" align="left" width="{col_px}" style="width:100%; max-width:{col_px}px; display:inline-block; vertical-align:top;">
+        <tr><td style="padding-right:6px;">{left}</td></tr>
+      </table>
+      <table role="presentation" align="left" width="{col_px}" style="width:100%; max-width:{col_px}px; display:inline-block; vertical-align:top;">
+        <tr><td style="padding-left:6px;">{right}</td></tr>
+      </table>
+    </td>
   </tr>
 </table>
 """
@@ -236,6 +250,7 @@ def render_email(summary, companies, catalysts=None):
   <meta name="supported-color-schemes" content="dark light">
   <title>Weekly Company Intelligence Digest</title>
   <style>
+    /* Media query still included for clients that support it; hybrid columns work without it */
     @media only screen and (max-width: 620px) {{
       .stack-col {{ display:block !important; width:100% !important; max-width:100% !important; }}
     }}
@@ -264,7 +279,7 @@ def render_email(summary, companies, catalysts=None):
           <div>{winners_html}{losers_html}</div>
         </td></tr>
 
-        <!-- 2-column company grid -->
+        <!-- 2-column company grid (hybrid stacking) -->
         <tr><td style="padding-top:8px;">
           {''.join(rows)}
         </td></tr>
