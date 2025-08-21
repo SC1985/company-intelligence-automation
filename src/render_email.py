@@ -1,6 +1,7 @@
-# src/render_email.py
 from datetime import datetime
 from html import escape
+
+# ---------- helpers (chips, heat, buttons) ----------
 
 def _chip(label: str, value):
     try:
@@ -47,16 +48,52 @@ def _button(label: str, url: str):
         f'{safe_label} →</a>'
     )
 
-def render_email(summary, companies):
+def _mover_chip(ticker: str, pct: float, href: str):
+    sign = "▲" if pct >= 0 else "▼"
+    color = "#34d399" if pct >= 0 else "#f87171"
+    return (
+        f'<a href="{href}" target="_blank" rel="noopener noreferrer" '
+        'style="display:inline-block;margin:0 8px 8px 0;padding:6px 10px;'
+        'border:1px solid #374151;border-radius:999px;background:#111;'
+        f'color:{color};font-size:12px;text-decoration:none;">'
+        f'{sign} {escape(ticker)} {pct:+.2f}%</a>'
+    )
+
+# ---------- main renderer ----------
+
+def render_email(summary, companies, catalysts=None):
+    """Render the email.
+    - summary: dict with up/down counts, winners/losers, etc.
+    - companies: list of dicts, each with price, diffs, range, news_url/pr_url, headline, etc.
+    - catalysts: optional list of {'date_str','ticker','label'} entries to show in a 7-day section.
+    """
     asof = summary.get("as_of_ct", datetime.now().strftime("%b %d, %Y %H:%M CT"))
     up = summary.get("up_count", 0)
     down = summary.get("down_count", 0)
     movers_up = summary.get("top_winners", [])
     movers_down = summary.get("top_losers", [])
+    catalysts = catalysts or summary.get("catalysts") or []
 
+    # Heat strip
     heat = "".join(_heat_square(c.get("pct_1d")) for c in companies)
 
-    cards = []
+    # Map ticker -> news url for mover chips
+    news_map = {c.get("ticker"): (c.get("news_url") or f"https://finance.yahoo.com/quote/{c.get('ticker')}/news") for c in companies}
+
+    # Build mover chips
+    winners_html = "".join(
+        _mover_chip(m.get("ticker",""), float(m.get("pct",0) or 0), news_map.get(m.get("ticker"), "#"))
+        for m in movers_up
+        if m.get("ticker")
+    )
+    losers_html = "".join(
+        _mover_chip(m.get("ticker",""), float(m.get("pct",0) or 0), news_map.get(m.get("ticker"), "#"))
+        for m in movers_down
+        if m.get("ticker")
+    )
+
+    # Build company card HTMLs (individual cards)
+    card_html = []
     for c in companies:
         name = c.get("name") or c.get("ticker")
         t = c.get("ticker")
@@ -87,7 +124,6 @@ def render_email(summary, companies):
                 pass
         bullets_html = "".join(f"<li>{escape(b)}</li>" for b in bullets)
 
-        # CTA area (replaces the sparkline)
         ctas = _button("Latest News", news_url) + _button("Press Releases", pr_url)
 
         card = f"""
@@ -115,17 +151,40 @@ def render_email(summary, companies):
   </tr>
 </table>
 """
-        cards.append(card)
+        card_html.append(card)
 
-    winners_html = "".join(
-        f'<div style="margin-right:12px;"><strong style="color:#34d399;">▲ {escape(str(m.get("ticker")))}</strong> {m.get("pct",0):+.2f}%</div>'
-        for m in movers_up
-    )
-    losers_html = "".join(
-        f'<div style="margin-right:12px;"><strong style="color:#f87171;">▼ {escape(str(m.get("ticker")))}</strong> {m.get("pct",0):+.2f}%</div>'
-        for m in movers_down
-    )
+    # Build 2-column grid: pair cards into rows with gutters
+    rows = []
+    for i in range(0, len(card_html), 2):
+        left = card_html[i]
+        right = card_html[i+1] if i+1 < len(card_html) else '<div style="height:0;"></div>'
+        row = f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+  <tr>
+    <td class="stack-col" width="50%" style="vertical-align:top;padding-right:6px;">{left}</td>
+    <td class="stack-col" width="50%" style="vertical-align:top;padding-left:6px;">{right}</td>
+  </tr>
+</table>
+"""
+        rows.append(row)
 
+    # Upcoming catalysts module (if provided)
+    catalysts_html = ""
+    if catalysts:
+        items_html = "".join(
+            f'<div style="font-size:13px;color:#e5e7eb;margin:4px 0;">{escape(c.get("date_str",""))} • <strong>{escape(c.get("ticker",""))}</strong> • {escape(c.get("label",""))}</div>'
+            for c in catalysts[:8]
+        )
+        catalysts_html = f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
+  <tr><td style="padding:12px 14px;">
+    <div style="font-weight:700;color:#fff;margin-bottom:6px;">Next 7 days</div>
+    {items_html}
+  </td></tr>
+</table>
+"""
+
+    # ---------- full email ----------
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -133,6 +192,11 @@ def render_email(summary, companies):
   <meta name="color-scheme" content="dark light">
   <meta name="supported-color-schemes" content="dark light">
   <title>Weekly Company Intelligence Digest</title>
+  <style>
+    @media only screen and (max-width: 620px) {{
+      .stack-col {{ display:block !important; width:100% !important; max-width:100% !important; }}
+    }}
+  </style>
 </head>
 <body style="margin:0;background:#0b0b0c;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b0c;">
@@ -144,28 +208,26 @@ def render_email(summary, companies):
           </span>
         </td></tr>
 
+        <!-- Header band kept minimal per request (step 1 omitted) -->
         <tr><td style="padding:12px 14px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
           <div style="font-weight:700;font-size:18px;color:#fff;">Weekly Company Intelligence Digest</div>
           <div style="font-size:13px;color:#9aa0a6;margin-top:2px;">{len(companies)} companies • {up} ↑ / {down} ↓ • Data as of {asof}</div>
           <div style="margin-top:8px;">{heat}</div>
         </td></tr>
 
-        <tr><td style="padding:12px 0;">
-          <table role="presentation" width="100%">
-            <tr>
-              <td style="padding:0 14px;">
-                <div style="font-weight:700;color:#e5e7eb;margin-bottom:6px;">Top movers</div>
-                <div style="display:flex;flex-wrap:wrap;color:#e5e7eb;">
-                  {winners_html}{losers_html}
-                </div>
-              </td>
-            </tr>
-          </table>
+        <!-- Top movers strip (step 2) -->
+        <tr><td style="padding:12px 14px 0;">
+          <div style="margin:12px 0 6px;color:#e5e7eb;font-weight:700;">Top movers</div>
+          <div>{winners_html}{losers_html}</div>
         </td></tr>
 
+        <!-- 2-column company grid (step 3 with 2-col layout, step 5 spacing) -->
         <tr><td style="padding-top:8px;">
-          {''.join(cards)}
+          {''.join(rows)}
         </td></tr>
+
+        <!-- Upcoming catalysts (step 4) -->
+        {f'<tr><td style="padding-top:8px;">{catalysts_html}</td></tr>' if catalysts_html else ''}
 
         <tr><td style="padding:16px 14px;color:#9aa0a6;font-size:12px;text-align:center;">
           Sources: price close & ranges; curated headlines. Times shown are Central Time.
