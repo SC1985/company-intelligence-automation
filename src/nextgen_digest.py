@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 import json
 import time
@@ -233,8 +233,7 @@ async def build_nextgen_html(logger) -> str:
                 last_year = dates[-1].year - 1
                 for i in range(len(dates)-1, -1, -1):
                     if dates[i].year == last_year:
-                        ytd0 = closes[i]
-                        break
+                        ytd0 = closes[i]; break
 
             def pct(curr, prev):
                 try:
@@ -304,15 +303,10 @@ async def build_nextgen_html(logger) -> str:
     winners = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"], reverse=True)[:3]
     losers  = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"])[:3]
 
-    # Build "as_of_ct" in Central and format as M/D/Y HH:MM CST (string)
-    if CENTRAL_TZ:
-        now_c = datetime.now(tz=CENTRAL_TZ)
-    else:
-        now_c = datetime.now()
-    as_of_ct = now_c.strftime("%m/%d/%Y %H:%M") + " CST"
-
+    # Pass a datetime; renderer will format to 'M/D/Y HH:MM CST'
+    now_c = datetime.now(tz=CENTRAL_TZ) if CENTRAL_TZ else datetime.now()
     summary = {
-        "as_of_ct": as_of_ct,
+        "as_of_ct": now_c,
         "up_count": up, "down_count": down,
         "top_winners": winners, "top_losers": losers,
         "catalysts": [],
