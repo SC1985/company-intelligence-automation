@@ -20,7 +20,6 @@ def _load_entities() -> List[Dict[str, Any]]:
         data = json.load(f)
     if isinstance(data, list):
         return data
-    # also support nested shapes: {"equities":[...], "digital_assets":[...]} etc.
     items: List[Dict[str, Any]] = []
     for key in ("equities", "companies", "digital_assets", "assets", "items"):
         arr = data.get(key)
@@ -30,10 +29,21 @@ def _load_entities() -> List[Dict[str, Any]]:
         raise ValueError("companies.json did not contain a recognized list of entities")
     return items
 
+# -------------------- HTTP helpers --------------------
+
+def _http_get_json(url: str, timeout: float = 25.0) -> Optional[Dict[str, Any]]:
+    try:
+        from urllib.request import urlopen, Request
+        req = Request(url, headers={"User-Agent": "ci-digest/1.0 (+https://example.local)"})
+        with urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+        return json.loads(raw.decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+
 # -------------------- History helpers (equities) --------------------
 
 def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float]]:
-    # simple close-only fetch from Stooq; returns (dates, closes)
     import csv
     from urllib.request import urlopen
     candidates = [symbol.lower(), f"{symbol.lower()}.us"]
@@ -47,7 +57,7 @@ def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float]]:
             dt, cl = [], []
             for row in csv.DictReader(raw.splitlines()):
                 ds = row.get("Date"); cs = row.get("Close")
-                if not ds or not cs: 
+                if not ds or not cs:
                     continue
                 try:
                     d = datetime.fromisoformat(ds)
@@ -55,7 +65,7 @@ def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float]]:
                 except Exception:
                     continue
                 dt.append(d); cl.append(c)
-            if len(cl) >= 30: 
+            if len(cl) >= 30:
                 return dt, cl
         except Exception:
             continue
@@ -86,14 +96,14 @@ def _fetch_alpha_vantage_equity(symbol: str, api_key: Optional[str]) -> Tuple[Li
         for k in keys[-500:]:
             row = ts.get(k) or {}
             ac = row.get("5. adjusted close") or row.get("4. close")
-            if ac is None: 
+            if ac is None:
                 continue
             try:
                 dt.append(datetime.fromisoformat(k))
                 cl.append(float(str(ac).replace(",", "")))
             except Exception:
                 continue
-        if cl: 
+        if cl:
             time.sleep(12)  # free-tier pacing
         return dt, cl
     except Exception:
@@ -101,14 +111,39 @@ def _fetch_alpha_vantage_equity(symbol: str, api_key: Optional[str]) -> Tuple[Li
 
 def _get_equity_series(symbol: str, alpha_key: Optional[str]) -> Tuple[str, List[datetime], List[float]]:
     dt, cl = _fetch_stooq(symbol)
-    if len(cl) >= 30: 
+    if len(cl) >= 30:
         return "stooq", dt, cl
     dt, cl = _fetch_alpha_vantage_equity(symbol, alpha_key)
-    if len(cl) >= 30: 
+    if len(cl) >= 30:
         return "alphavantage", dt, cl
     return "none", [], []
 
-# -------------------- History helpers (crypto via Alpha Vantage) --------------------
+# -------------------- History helpers (crypto) --------------------
+
+# CoinGecko IDs; can be overridden by companies.json field "coingecko_id"
+COINGECKO_IDS = {
+    "BTC-USD": "bitcoin",
+    "ETH-USD": "ethereum",
+    "DOGE-USD": "dogecoin",
+    "XRP-USD": "ripple",
+}
+
+def _fetch_coingecko_crypto(symbol_usd: str, id_hint: Optional[str] = None) -> Tuple[List[datetime], List[float]]:
+    # Returns daily closes (UTC) for up to ~400 days
+    cid = (id_hint or COINGECKO_IDS.get(symbol_usd) or symbol_usd.replace("-USD", "").lower())
+    url = f"https://api.coingecko.com/api/v3/coins/{cid}/market_chart?vs_currency=usd&days=400"
+    data = _http_get_json(url)
+    if not data or "prices" not in data:
+        return [], []
+    dt, cl = [], []
+    for ts, price in data.get("prices", []):
+        try:
+            d = datetime.utcfromtimestamp(float(ts) / 1000.0)
+            p = float(price)
+        except Exception:
+            continue
+        dt.append(d); cl.append(p)
+    return dt, cl
 
 def _fetch_alpha_vantage_crypto(symbol_usd: str, alpha_key: Optional[str]) -> Tuple[List[datetime], List[float]]:
     if not alpha_key:
@@ -116,7 +151,7 @@ def _fetch_alpha_vantage_crypto(symbol_usd: str, alpha_key: Optional[str]) -> Tu
     from urllib.request import urlopen
     from urllib.parse import urlencode
     try:
-        symbol = symbol_usd.replace("-USD", "")  # "BTC-USD" -> "BTC"
+        symbol = symbol_usd.replace("-USD", "")
         qs = urlencode({
             "function": "DIGITAL_CURRENCY_DAILY",
             "symbol": symbol,
@@ -162,16 +197,24 @@ def _pct(curr: Optional[float], prev: Optional[float]) -> Optional[float]:
 def _pos_in_range(price, low, high) -> float:
     try:
         price, low, high = float(price), float(low), float(high)
-        if high <= low: 
+        if high <= low:
             return 50.0
         return max(0.0, min(100.0, (price - low)/(high - low)*100.0))
     except Exception:
         return 50.0
 
+def _nearest(series: List[float], k_back: int) -> Optional[float]:
+    if not series:
+        return None
+    idx = len(series) - 1 - k_back
+    if 0 <= idx < len(series):
+        return series[idx]
+    return None
+
 # -------------------- Main builder --------------------
 
 async def build_nextgen_html(logger) -> str:
-    # optional news (engine may provide it)
+    # Attempt engine-provided news (optional)
     try:
         from main import StrategicIntelligenceEngine
         engine = StrategicIntelligenceEngine()
@@ -188,10 +231,20 @@ async def build_nextgen_html(logger) -> str:
     up = down = 0
     movers: List[Dict[str, Any]] = []
 
-    # Minimal per-ticker news coalescing (safe fallback)
     def _news_url_for(t: str) -> str:
         return f"https://finance.yahoo.com/quote/{t}/news"
 
+    # Pace crypto calls to be friendly to providers
+    last_call_ts = 0.0
+    def _pace(min_interval=2.0):
+        nonlocal last_call_ts
+        now = time.time()
+        delta = now - last_call_ts
+        if delta < min_interval:
+            time.sleep(min_interval - delta)
+        last_call_ts = time.time()
+
+    # Build lists
     for e in entities:
         sym = str(e.get("symbol") or "").upper()
         if not sym:
@@ -200,23 +253,33 @@ async def build_nextgen_html(logger) -> str:
         is_crypto = (e.get("asset_class","").lower() == "crypto") or sym.endswith("-USD")
 
         if is_crypto:
-            # Try to fetch; if it fails, still render a placeholder card
-            dts, cls = _fetch_alpha_vantage_crypto(sym, alpha_key)
-            if cls:
-                latest = cls[-1]
-                d1 = cls[-2] if len(cls) >= 2 else None
-                w1 = cls[-8] if len(cls) >= 8 else None
-                m1 = cls[-31] if len(cls) >= 31 else None
-                # 52w from ~365 days if available
-                window = cls[-365:] if len(cls) >= 365 else cls
+            # Try CoinGecko first (no key), then Alpha Vantage, else placeholder
+            cid = e.get("coingecko_id")
+            _pace(2.0)
+            dt, cl = _fetch_coingecko_crypto(sym, id_hint=cid)
+            provider = "coingecko" if cl else None
+
+            if not cl:
+                _pace(15.0)  # AV free-tier pacing
+                dt, cl = _fetch_alpha_vantage_crypto(sym, alpha_key)
+                provider = "alphavantage" if cl else None
+
+            if cl:
+                latest = cl[-1]
+                d1 = _nearest(cl, 1)
+                w1 = _nearest(cl, 7)
+                m1 = _nearest(cl, 30)
+                window = cl[-365:] if len(cl) >= 365 else cl
                 low52, high52 = float(min(window)), float(max(window))
                 range_pct = _pos_in_range(latest, low52, high52)
+                # YTD baseline = last close of previous year
                 pytd = None
-                if dts:
-                    last_year = dts[-1].year - 1
-                    for i in range(len(dts)-1, -1, -1):
-                        if dts[i].year == last_year:
-                            pytd = _pct(latest, cls[i]); break
+                if dt:
+                    last_year = dt[-1].year - 1
+                    for i in range(len(dt)-1, -1, -1):
+                        if dt[i].year == last_year:
+                            pytd = _pct(latest, cl[i]); break
+
                 cryptos.append({
                     "name": name, "ticker": sym, "price": latest,
                     "pct_1d": _pct(latest, d1), "pct_1w": _pct(latest, w1),
@@ -230,15 +293,15 @@ async def build_nextgen_html(logger) -> str:
                         "ETH-USD":"https://blog.ethereum.org",
                         "DOGE-USD":"https://blog.dogecoin.com",
                         "XRP-USD":"https://ripple.com/insights/"
-                    }.get(sym, _news_url_for(sym))
+                    }.get(sym, _news_url_for(sym)),
                 })
                 try:
                     import logging
-                    logging.getLogger("ci-entrypoint").info(f"{sym}: crypto bars={len(cls)} last={latest:.6f} pos%={range_pct:.2f}")
+                    logging.getLogger("ci-entrypoint").info(f"{sym}: crypto provider={provider} bars={len(cl)} last={latest:.6f} pos%={range_pct:.2f}")
                 except Exception:
                     pass
             else:
-                # FAIL-OPEN: still render a card so the section appears
+                # Still render a card so section remains visible
                 cryptos.append({
                     "name": name, "ticker": sym, "price": 0.0,
                     "pct_1d": None, "pct_1w": None, "pct_1m": None, "pct_ytd": None,
@@ -250,12 +313,12 @@ async def build_nextgen_html(logger) -> str:
                 })
                 try:
                     import logging
-                    logging.getLogger("ci-entrypoint").warning(f"{sym}: crypto history unavailable (key missing or throttled) – rendering placeholder")
+                    logging.getLogger("ci-entrypoint").warning(f"{sym}: crypto providers unavailable – rendering placeholder")
                 except Exception:
                     pass
             continue
 
-        # ---- Equities (same logic, with robust fallback) ----
+        # ---- Equities ----
         src, dt, cl = _get_equity_series(sym, alpha_key)
         if not cl:
             try:
@@ -268,7 +331,6 @@ async def build_nextgen_html(logger) -> str:
         d1 = cl[-2] if len(cl) >= 2 else None
         w1 = cl[-6] if len(cl) >= 6 else None
         m1 = cl[-22] if len(cl) >= 22 else None
-        # 52w from last 252 closes (~1y)
         window = cl[-252:] if len(cl) >= 252 else cl
         low52, high52 = float(min(window)), float(max(window))
         range_pct = _pos_in_range(latest, low52, high52)
