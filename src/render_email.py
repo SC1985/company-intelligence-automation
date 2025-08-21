@@ -59,47 +59,40 @@ def _mover_chip(ticker: str, pct: float, href: str):
         f'{sign} {escape(ticker)} {pct:+.2f}%</a>'
     )
 
-# ---------- bulletproof 52-week range (works in Outlook Desktop) ----------
+# ---------- pure-table 52-week range (universal) ----------
 
 def _range_bar(range_pct, low52, high52):
     """
-    Return markup for the 52-week range bar with a marker.
-    - Do not treat 0.0 as falsy (range at extreme low is valid).
-    - Outlook fallback uses a 3-cell table with a 2px marker.
+    Pure-table implementation (no CSS positioning, no conditional comments).
+    - Track width is fixed at 260px for 2-column cards.
+    - Left cell = computed px, center cell = 2px marker, right cell = remainder.
+    - Works across Gmail, Outlook (all), Apple Mail.
     """
     try:
-        left = float(range_pct) if range_pct is not None else 50.0
+        pos = float(range_pct) if range_pct is not None else 50.0
     except Exception:
-        left = 50.0
-    if left < 0: left = 0.0
-    if left > 100: left = 100.0
-    right = 100.0 - left
+        pos = 50.0
+    if pos < 0: pos = 0.0
+    if pos > 100: pos = 100.0
+    total = 260  # px
+    left_px = max(0, min(total - 2, int(round(total * pos / 100.0))))
+    right_px = max(0, total - 2 - left_px)
 
-    # For Outlook fallback, assume inner width ≈ 260px in a 2‑column card
-    mso_total = 260
-    left_px = max(0, min(mso_total - 2, int(round(mso_total * left / 100.0))))
-    right_px = max(0, mso_total - 2 - left_px)
-
-    modern = (
-        '<!--[if !mso]><!-- -->'
-        '<div style="position:relative;height:6px;background:#2a2a2a;border-radius:4px;">'
-        f'  <div style="position:absolute;left:{left:.2f}%;top:-4px;width:2px;height:14px;background:#e5e7eb;"></div>'
-        '</div>'
-        '<!--<![endif]-->'
-    )
-
-    mso = (
-        '<!--[if mso]>'
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
-        '<tr>'
-        f'<td style="height:6px;background:#2a2a2a;border-radius:4px;" width="{left_px}"></td>'
-        '<td style="height:14px;background:#e5e7eb;" width="2"></td>'
-        f'<td style="height:6px;background:#2a2a2a;border-radius:4px;" width="{right_px}"></td>'
-        '</tr>'
-        '</table>'
-        '<![endif]>'
-    )
-
+    track = f"""
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="left">
+  <tr>
+    <td>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="{total}">
+        <tr>
+          <td width="{left_px}" height="6" style="background:#2a2a2a;border-radius:4px 0 0 4px;line-height:0;font-size:0;">&nbsp;</td>
+          <td width="2" height="14" style="background:#e5e7eb;line-height:0;font-size:0;">&nbsp;</td>
+          <td width="{right_px}" height="6" style="background:#2a2a2a;border-radius:0 4px 4px 0;line-height:0;font-size:0;">&nbsp;</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+"""
     caption = (
         f'<div style="font-size:12px;color:#9aa0a6;margin-top:4px;">'
         f'Low ${low52:.2f} • High ${high52:.2f}'
@@ -108,7 +101,7 @@ def _range_bar(range_pct, low52, high52):
 
     return (
         '<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'
-        + modern + mso + caption
+        + track + caption
     )
 
 # ---------- main renderer ----------
@@ -147,7 +140,6 @@ def render_email(summary, companies, catalysts=None):
         low52 = c.get("low_52w") if c.get("low_52w") is not None else 0.0
         high52 = c.get("high_52w") if c.get("high_52w") is not None else 0.0
         rp = c.get("range_pct")
-        # IMPORTANT: do not treat 0.0 as falsy
         try:
             range_pct = float(rp) if rp is not None else 50.0
         except Exception:
