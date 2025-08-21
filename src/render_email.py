@@ -59,14 +59,15 @@ def _mover_chip(ticker: str, pct: float, href: str):
         f'{sign} {escape(ticker)} {pct:+.2f}%</a>'
     )
 
-# ---------- 52-week range (mobile-robust via <colgroup>) ----------
+# ---------- 52-week range (v5 mobile-robust via TD widths + nested tables) ----------
 
 def _range_bar(range_pct, low52, high52):
     """
-    Mobile-robust track using <colgroup> with percentage widths and bgcolor attributes.
-    - Three columns: [left%] [marker%] [right%], sum to 100.
-    - Marker width ~1.4% (scales with screen width), centered on pos.
-    - Uses bgcolor + height attributes for maximum client support.
+    Bulletproof mobile rendering:
+    - Outer table width=100% (+ inline width) so it occupies the full card.
+    - Three TDs use percentage widths (left/marker/right) that sum to 100.
+    - Each TD contains an inner 100%-width table to force expansion in Gmail/Outlook mobile.
+    - Uses bgcolor + height attributes (these have better support than CSS alone).
     """
     try:
         pos = float(range_pct) if range_pct is not None else 50.0
@@ -75,16 +76,16 @@ def _range_bar(range_pct, low52, high52):
     if pos < 0: pos = 0.0
     if pos > 100: pos = 100.0
 
-    marker_pct = 1.4  # ~4 px on 320px, ~8 px on 600px
+    marker_pct = 1.6  # ~5 px on 320px, ~10 px on 600px
     # Center the marker around pos; keep within [0,100]
     left = max(0.0, min(100.0 - marker_pct, pos - marker_pct / 2.0))
     right = max(0.0, 100.0 - marker_pct - left)
 
-    # Guard against 0-width cells in picky clients
+    # Guard tiny extremes so clients don't collapse to 0
     if left == 0.0:
-        left = 0.1; right = max(0.0, 100.0 - marker_pct - left)
+        left = 0.2; right = max(0.0, 100.0 - marker_pct - left)
     if right == 0.0:
-        right = 0.1; left = max(0.0, 100.0 - marker_pct - right)
+        right = 0.2; left = max(0.0, 100.0 - marker_pct - right)
 
     # Status subtitle
     if pos >= 90.0:
@@ -95,16 +96,23 @@ def _range_bar(range_pct, low52, high52):
         status = f'<span style="color:#e5e7eb;">At {pos:.0f}% of 52‑week range</span>'
 
     track = f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;">
-  <colgroup>
-    <col width="{left:.2f}%">
-    <col width="{marker_pct:.2f}%">
-    <col width="{right:.2f}%">
-  </colgroup>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;min-width:100%;">
   <tr>
-    <td height="8" bgcolor="#2a2a2a" style="background:#2a2a2a;line-height:0;font-size:0;border-radius:4px 0 0 4px;">&nbsp;</td>
-    <td height="12" bgcolor="#e5e7eb" style="background:#e5e7eb;line-height:0;font-size:0;">&nbsp;</td>
-    <td height="8" bgcolor="#2a2a2a" style="background:#2a2a2a;line-height:0;font-size:0;border-radius:0 4px 4px 0;">&nbsp;</td>
+    <td width="{left:.2f}%" valign="middle" bgcolor="#2a2a2a" style="background:#2a2a2a;line-height:0;font-size:0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr><td height="8" style="line-height:0;font-size:0;">&nbsp;</td></tr>
+      </table>
+    </td>
+    <td width="{marker_pct:.2f}%" valign="middle" bgcolor="#e5e7eb" style="background:#e5e7eb;line-height:0;font-size:0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr><td height="12" style="line-height:0;font-size:0;">&nbsp;</td></tr>
+      </table>
+    </td>
+    <td width="{right:.2f}%" valign="middle" bgcolor="#2a2a2a" style="background:#2a2a2a;line-height:0;font-size:0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr><td height="8" style="line-height:0;font-size:0;">&nbsp;</td></tr>
+      </table>
+    </td>
   </tr>
 </table>
 """
