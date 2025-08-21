@@ -152,14 +152,6 @@
     "sector_allocation": "Industrial Innovation"
   },
   {
-    "symbol": "XRP-USD",
-    "name": "XRP (Crypto)",
-    "asset_class": "crypto",
-    "sector": "Digital Assets",
-    "priority": "watch",
-    "sector_allocation": "Digital Assets"
-  },
-  {
     "symbol": "BTC-USD",
     "name": "Bitcoin",
     "asset_class": "crypto",
@@ -178,6 +170,14 @@
   {
     "symbol": "DOGE-USD",
     "name": "Dogecoin",
+    "asset_class": "crypto",
+    "sector": "Digital Assets",
+    "priority": "watch",
+    "sector_allocation": "Digital Assets"
+  },
+  {
+    "symbol": "XRP-USD",
+    "name": "XRP (Crypto)",
     "asset_class": "crypto",
     "sector": "Digital Assets",
     "priority": "watch",
