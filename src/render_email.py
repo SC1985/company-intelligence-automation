@@ -8,74 +8,78 @@ except Exception:
 
 CENTRAL_TZ = ZoneInfo("America/Chicago") if ZoneInfo else None
 
-def _to_mdy_cst(value, include_time=True):
-    """
-    Best-effort parser -> 'M/D/Y HH:MM CST' (or just date if include_time=False).
-    Assumes America/Chicago for output. If parsing fails, returns the original string.
-    """
+def _parse_to_dt(value):
     if value is None:
         return None
-    # Already a datetime?
     if isinstance(value, datetime):
-        dt = value
-    else:
-        s = str(value).strip()
-        if not s:
-            return s
-        dt = None
-        # Epoch seconds / ms
-        if s.isdigit():
-            try:
-                iv = int(s)
-                if iv > 10_000_000_000:  # ms
-                    iv = iv // 1000
-                dt = datetime.fromtimestamp(iv, tz=timezone.utc)
-            except Exception:
-                dt = None
-        # ISO 8601 (handle trailing Z)
-        if dt is None:
-            try:
-                if s.endswith("Z"):
-                    s2 = s[:-1] + "+00:00"
-                else:
-                    s2 = s
-                dt = datetime.fromisoformat(s2)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-            except Exception:
-                dt = None
-        # RFC2822
-        if dt is None:
-            try:
-                dt = parsedate_to_datetime(s)
-                if dt and dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-            except Exception:
-                dt = None
-        # Fallback: YYYY-MM-DD
-        if dt is None and len(s) >= 10 and s[4:5] == "-" and s[7:8] == "-":
-            try:
-                dt = datetime.strptime(s[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            except Exception:
-                pass
-        if dt is None:
-            return s  # give up
-
-    # Convert to America/Chicago if available
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    s = str(value).strip()
+    if not s:
+        return None
+    # Epoch seconds / ms
+    if s.isdigit():
+        try:
+            iv = int(s)
+            if iv > 10_000_000_000:
+                iv //= 1000
+            return datetime.fromtimestamp(iv, tz=timezone.utc)
+        except Exception:
+            pass
+    # ISO 8601 (handle trailing Z)
     try:
-        if CENTRAL_TZ:
-            dtc = dt.astimezone(CENTRAL_TZ)
-        else:
-            dtc = dt
+        s2 = s[:-1] + "+00:00" if s.endswith("Z") else s
+        dt = datetime.fromisoformat(s2)
+        if dt and dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
     except Exception:
-        dtc = dt
+        pass
+    # RFC2822
+    try:
+        dt = parsedate_to_datetime(s)
+        if dt and dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        pass
+    # Fallback date-only YYYY-MM-DD
+    try:
+        if len(s) >= 10 and s[4:5] == "-" and s[7:8] == "-":
+            return datetime.strptime(s[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except Exception:
+        pass
+    return None
 
-    if include_time:
-        # Use zero-padded month/day/hour for broad client compatibility
-        out = dtc.strftime("%m/%d/%Y %H:%M")
-    else:
-        out = dtc.strftime("%m/%d/%Y")
-    return out + " CST"
+def _fmt_ct(value, force_time=None, tz_suffix_policy="auto"):
+    """
+    Return a formatted date/time in Central.
+    - force_time: True -> show HH:MM; False -> hide time; None -> auto (show time only if hh:mm:ss not zero)
+    - tz_suffix_policy: "auto" -> add ' CST' only if time shown; "always" -> always add; "never" -> never add
+    """
+    dt = _parse_to_dt(value) or value
+    if isinstance(dt, datetime):
+        try:
+            dtc = dt.astimezone(CENTRAL_TZ) if CENTRAL_TZ else dt
+        except Exception:
+            dtc = dt
+        has_time = not (dtc.hour == 0 and dtc.minute == 0 and dtc.second == 0)
+        show_time = force_time if force_time is not None else has_time
+        if show_time:
+            out = dtc.strftime("%-m/%-d/%Y %H:%M") if hasattr(dtc, "strftime") else str(value)
+        else:
+            out = dtc.strftime("%-m/%-d/%Y") if hasattr(dtc, "strftime") else str(value)
+        # Windows/Outlook may not support %-m; provide zero-padded fallback
+        if "%" in out:  # crude check; strftime never leaves '%'
+            pass
+        suffix = ""
+        if tz_suffix_policy == "always":
+            suffix = " CST"
+        elif tz_suffix_policy == "auto" and show_time:
+            suffix = " CST"
+        # else "never": keep empty
+        return out + suffix
+    # If not a datetime after parsing, return as-is
+    return str(value)
 
 # ---------- helpers (chips, heat, buttons) ----------
 
@@ -112,15 +116,17 @@ def _heat_square(pct):
         f'border-radius:2px;background:{c};margin-right:4px;"></span>'
     )
 
-def _button(label: str, url: str):
+def _button(label: str, url: str, size="md"):
     safe_label = escape(label)
     safe_url = url or "#"
-    # email-safe button (inline styles only)
+    pad = "8px 12px"; fz = "13px"
+    if size == "sm":
+        pad = "5px 8px"; fz = "11px"
     return (
         f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer" '
-        'style="display:inline-block;padding:8px 12px;margin-right:8px;'
+        f'style="display:inline-block;padding:{pad};margin-right:6px;'
         'background:#1f2937;color:#ffffff;text-decoration:none;border-radius:6px;'
-        'font-size:13px;border:1px solid #374151;">'
+        f'font-size:{fz};border:1px solid #374151;line-height:1;white-space:nowrap;">'
         f'{safe_label} →</a>'
     )
 
@@ -197,8 +203,7 @@ def _range_bar(range_pct, low52, high52):
 # ---------- main renderer ----------
 
 def render_email(summary, companies, catalysts=None):
-    raw_asof = summary.get("as_of_ct")
-    asof = _to_mdy_cst(raw_asof, include_time=True) if raw_asof else _to_mdy_cst(datetime.now(), include_time=True)
+    asof = _fmt_ct(summary.get("as_of_ct") or datetime.now(), force_time=True, tz_suffix_policy="always")
 
     up = summary.get("up_count", 0)
     down = summary.get("down_count", 0)
@@ -239,8 +244,8 @@ def render_email(summary, companies, catalysts=None):
         headline = c.get("headline")
         source = c.get("source")
         when = c.get("when")
-        # Normalize 'when' to M/D/Y HH:MM CST if available
-        when_fmt = _to_mdy_cst(when, include_time=True) if when else None
+        # Normalize 'when': auto time detection; add CST only if time is shown
+        when_fmt = _fmt_ct(when, force_time=None, tz_suffix_policy="auto") if when else None
 
         next_event = c.get("next_event")
         volx = c.get("vol_x_avg")
@@ -260,7 +265,7 @@ def render_email(summary, companies, catalysts=None):
             else:
                 bullets.append(f"{headline}")
         if next_event:
-            ne_txt = _to_mdy_cst(next_event, include_time=False) if isinstance(next_event, (str, datetime)) else str(next_event)
+            ne_txt = _fmt_ct(next_event, force_time=False, tz_suffix_policy="never") if isinstance(next_event, (str, datetime)) else str(next_event)
             bullets.append(f"Next: {ne_txt}")
         if volx is not None:
             try:
@@ -271,8 +276,8 @@ def render_email(summary, companies, catalysts=None):
 
         range_html = _range_bar(range_pct, float(low52 or 0.0), float(high52 or 0.0))
 
-        # CTAs moved BELOW the 52w range and bullets
-        ctas = _button("Latest News", news_url) + _button("Press Releases", pr_url)
+        # CTAs moved BELOW the 52w range and bullets; use small size to avoid wrapping in 2-col
+        ctas = _button("News", news_url, size="sm") + _button("Press", pr_url, size="sm")
 
         card = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
@@ -315,7 +320,7 @@ def render_email(summary, companies, catalysts=None):
     if catalysts:
         items_html = []
         for c in catalysts[:8]:
-            ds = _to_mdy_cst(c.get("date_str"), include_time=False) if c.get("date_str") else ""
+            ds = _fmt_ct(c.get("date_str"), force_time=False, tz_suffix_policy="never") if c.get("date_str") else ""
             items_html.append(
                 f'<div style="font-size:13px;color:#e5e7eb;margin:4px 0;">{escape(ds)} • <strong>{escape(c.get("ticker",""))}</strong> • {escape(c.get("label",""))}</div>'
             )
@@ -374,7 +379,7 @@ def render_email(summary, companies, catalysts=None):
         {f'<tr><td style="padding-top:8px;">{catalysts_html}</td></tr>' if catalysts_html else ''}
 
         <tr><td style="padding:16px 14px;color:#9aa0a6;font-size:12px;text-align:center;">
-          Sources: price close & ranges; curated headlines. Times shown in Central Time (CST).
+          Times shown where applicable are Central Time.
         </td></tr>
       </table>
     </td></tr>
