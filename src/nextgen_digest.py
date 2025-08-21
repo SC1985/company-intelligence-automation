@@ -1,7 +1,8 @@
+
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
-import json
-import time
+import json, os, time, re
+
 try:
     from zoneinfo import ZoneInfo
 except Exception:
@@ -11,7 +12,28 @@ from render_email import render_email
 
 CENTRAL_TZ = ZoneInfo("America/Chicago") if ZoneInfo else None
 
-# ---------- History helpers (unchanged) ----------
+# ---------- File loader ----------
+
+def _load_entities() -> List[Dict[str, Any]]:
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.normpath(os.path.join(here, "..", "data", "companies.json"))
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if isinstance(data, dict):
+        items = []
+        for key in ("equities","companies","digital_assets","assets","items"):
+            arr = data.get(key)
+            if isinstance(arr, list):
+                items.extend(arr)
+        if not items:
+            raise ValueError("companies.json object did not contain a recognized list key")
+        return items
+    elif isinstance(data, list):
+        return data
+    else:
+        raise ValueError("Unsupported companies.json structure")
+
+# ---------- History helpers (equities) ----------
 
 def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float], List[float], List[float]]:
     import csv
@@ -43,7 +65,7 @@ def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float], List[float],
             continue
     return [], [], [], []
 
-def _fetch_alpha_vantage(symbol: str, api_key: Optional[str]) -> Tuple[List[datetime], List[float], List[float], List[float]]:
+def _fetch_alpha_vantage_equity(symbol: str, api_key: Optional[str]) -> Tuple[List[datetime], List[float], List[float], List[float]]:
     if not api_key:
         return [], [], [], []
     from urllib.request import urlopen
@@ -85,14 +107,55 @@ def _fetch_alpha_vantage(symbol: str, api_key: Optional[str]) -> Tuple[List[date
     except Exception:
         return [], [], [], []
 
-def _get_history(symbol: str, api_key: Optional[str]) -> Tuple[str, List[datetime], List[float], List[float], List[float]]:
+def _get_equity_history(symbol: str, api_key: Optional[str]) -> Tuple[str, List[datetime], List[float], List[float], List[float]]:
     dt, cl, hi, lo = _fetch_stooq(symbol)
     if len(cl) >= 30:
         return "stooq", dt, cl, hi, lo
-    dt, cl, hi, lo = _fetch_alpha_vantage(symbol, api_key)
+    dt, cl, hi, lo = _fetch_alpha_vantage_equity(symbol, api_key)
     if len(cl) >= 30:
         return "alphavantage", dt, cl, hi, lo
     return "none", [], [], [], []
+
+# ---------- History helpers (crypto via Alpha Vantage) ----------
+
+def _fetch_alpha_vantage_crypto(symbol: str, market: str, api_key: Optional[str]) -> Tuple[List[datetime], List[float]]:
+    if not api_key:
+        return [], []
+    from urllib.request import urlopen
+    from urllib.parse import urlencode
+    try:
+        qs = urlencode({
+            "function": "DIGITAL_CURRENCY_DAILY",
+            "symbol": symbol.replace("-USD",""),  # e.g., "BTC-USD" -> "BTC"
+            "market": market,
+            "datatype": "json",
+            "apikey": api_key
+        })
+        url = f"https://www.alphavantage.co/query?{qs}"
+        with urlopen(url, timeout=25) as resp:
+            raw = resp.read()
+        data = json.loads(raw.decode("utf-8"))
+        ts = data.get("Time Series (Digital Currency Daily)") or {}
+        if not isinstance(ts, dict) or not ts:
+            return [], []
+        keys = sorted(ts.keys())
+        dt, cl = [], []
+        for k in keys[-500:]:
+            row = ts.get(k) or {}
+            close = row.get("4a. close (USD)") or row.get("4b. close (USD)") or row.get("4a. close (usd)")
+            if close is None:
+                continue
+            try:
+                dt.append(datetime.fromisoformat(k))
+                cval = float(str(close).replace(",", ""))
+                cl.append(cval)
+            except Exception:
+                continue
+        if cl:
+            time.sleep(12)
+        return dt, cl
+    except Exception:
+        return [], []
 
 # ---------- Analytics helpers ----------
 
@@ -112,17 +175,6 @@ def _nearest(closes: List[float], k_back: int) -> Optional[float]:
         return closes[idx]
     return None
 
-def _ytd_ref(dates: List[datetime], closes: List[float]) -> Optional[float]:
-    if not dates or not closes:
-        return None
-    target_year = dates[-1].year - 1
-    for i in range(len(dates) - 1, -1, -1):
-        if dates[i].year == target_year:
-            return closes[i]
-        if dates[i].year < target_year:
-            break
-    return None
-
 def _pos_in_range(price, low, high) -> float:
     try:
         price, low, high = float(price), float(low), float(high)
@@ -131,6 +183,8 @@ def _pos_in_range(price, low, high) -> float:
         return max(0.0, min(100.0, (price - low) / (high - low) * 100.0))
     except Exception:
         return 50.0
+
+# ---------- News coalescing (per-ticker scoring) ----------
 
 def _first_url_from_item(a, ticker: str) -> Optional[str]:
     for k in ("url", "link", "article_url", "story_url", "source_url", "canonicalUrl"):
@@ -145,6 +199,43 @@ def _first_url_from_item(a, ticker: str) -> Optional[str]:
                 return v
     return f"https://finance.yahoo.com/quote/{ticker}/news"
 
+def _score_article_for_ticker(t: str, a: Dict[str, Any]) -> int:
+    t = t.upper()
+    score = 0
+    for key in ("tickers", "symbols", "relatedTickers", "symbolsMentioned"):
+        arr = a.get(key) or []
+        if isinstance(arr, list) and any(str(x).upper() == t for x in arr):
+            score += 100
+    title = (a.get("title") or a.get("headline") or "")[:200]
+    summary = (a.get("summary") or a.get("description") or "")[:400]
+    import re as _re
+    if _re.search(rf'\\b{_re.escape(t)}\\b', title, _re.I):
+        score += 40
+    if _re.search(rf'\\b{_re.escape(t)}\\b', summary, _re.I):
+        score += 20
+    url = _first_url_from_item(a, t)
+    if _re.search(rf'/quote/{_re.escape(t)}\\b', url, _re.I) or _re.search(rf'/\\b{_re.escape(t)}\\b', url, _re.I):
+        score += 25
+    rivals = ["NVDA","AMD","INTC","TSLA","AAPL","MSFT","META","GOOGL","AMZN"]
+    if any(_re.search(rf'\\b{r}\\b', title, _re.I) for r in rivals if r != t):
+        score -= 15
+    return score
+
+def _pick_best_for_ticker(t: str, arts: List[Dict[str, Any]]) -> Dict[str, Optional[str]]:
+    best = None; best_score = -1
+    for a in arts:
+        s = _score_article_for_ticker(t, a)
+        if s > best_score:
+            best, best_score = a, s
+    if best and best_score > 0:
+        title = best.get("title") or best.get("headline")
+        src = best.get("source")
+        if isinstance(src, dict): src = src.get("name") or src.get("id") or src.get("domain")
+        when = best.get("publishedAt") or best.get("published_at") or best.get("time")
+        url = _first_url_from_item(best, t)
+        return {"title": title, "source": src if isinstance(src, str) else None, "when": when, "url": url}
+    return {"title": None, "source": None, "when": None, "url": f"https://finance.yahoo.com/quote/{t}/news"}
+
 def _coalesce_news_map(news: Any) -> Dict[str, Dict[str, Optional[str]]]:
     out: Dict[str, Dict[str, Optional[str]]] = {}
     if isinstance(news, dict):
@@ -156,154 +247,141 @@ def _coalesce_news_map(news: Any) -> Dict[str, Dict[str, Optional[str]]]:
             elif isinstance(v, list):
                 arts = v
             if isinstance(arts, list) and arts:
-                a = arts[0]
-                title = a.get("title") or a.get("headline")
-                src = a.get("source")
-                if isinstance(src, dict):
-                    src = src.get("name") or src.get("id") or src.get("domain")
-                when = a.get("publishedAt") or a.get("published_at") or a.get("time")
-                url = _first_url_from_item(a, t)
-                out[t] = {"title": title, "source": src if isinstance(src, str) else None, "when": when, "url": url}
+                out[t] = _pick_best_for_ticker(t, arts)
         items = news.get("items") or news.get("results") or []
         if isinstance(items, list):
+            grouped: Dict[str, List[Dict[str, Any]]] = {}
             for a in items:
-                t = a.get("ticker") or a.get("symbol") or (a.get("company", {}) or {}).get("ticker")
+                t = a.get("ticker") or a.get("symbol")
+                if not t:
+                    for key in ("tickers","symbols","relatedTickers"):
+                        arr = a.get(key) or []
+                        if isinstance(arr, list) and arr:
+                            t = str(arr[0])
+                            break
                 if not t:
                     continue
-                t = str(t).upper()
-                if t in out:
-                    continue
-                title = a.get("title") or a.get("headline")
-                src = a.get("source") or a.get("domain")
-                if isinstance(src, dict):
-                    src = src.get("name") or src.get("id") or src.get("domain")
-                when = a.get("publishedAt") or a.get("published_at") or a.get("time")
-                url = _first_url_from_item(a, t)
-                out[t] = {"title": title, "source": src if isinstance(src, str) else None, "when": when, "url": url}
+                T = str(t).upper()
+                grouped.setdefault(T, []).append(a)
+            for T, arr in grouped.items():
+                if T not in out:
+                    out[T] = _pick_best_for_ticker(T, arr)
     return out
 
 # ---------- Main builder ----------
 
 async def build_nextgen_html(logger) -> str:
-    from main import StrategicIntelligenceEngine
-    engine = StrategicIntelligenceEngine()
+    # News may be provided by your engine; we use it if available and fallback to per-ticker pages.
+    try:
+        from main import StrategicIntelligenceEngine
+        engine = StrategicIntelligenceEngine()
+        logger.info("NextGen: collecting news from engine")
+        news = await engine._synthesize_strategic_news()
+        news_map = _coalesce_news_map(news)
+    except Exception:
+        news_map = {}
 
-    logger.info("NextGen: collecting market/news from engine")
-    market = await engine._harvest_constellation_data()
-    news = await engine._synthesize_strategic_news()
-    news_map = _coalesce_news_map(news)
-
-    alpha_key = __import__("os").getenv("ALPHA_VANTAGE_API_KEY") or None
+    alpha_key = os.getenv("ALPHA_VANTAGE_API_KEY") or None
+    entities = _load_entities()
 
     companies: List[Dict[str, Any]] = []
+    cryptos: List[Dict[str, Any]] = []
     up = down = 0
     movers: List[Dict[str, Any]] = []
 
-    if isinstance(market, dict):
-        for ticker, item in market.items():
-            t = str(ticker).upper()
-            meta = item.get("position_data") or item.get("meta") or {}
-            name = meta.get("name") or meta.get("companyName") or t
+    # Helper to compute pct and range
+    def pct(curr: Optional[float], prev: Optional[float]) -> Optional[float]:
+        try:
+            if curr is None or prev is None or prev == 0:
+                return None
+            return (curr/prev - 1.0) * 100.0
+        except Exception:
+            return None
 
-            price = None
-            try:
-                price = float(item.get("price")) if item.get("price") is not None else None
-            except Exception:
-                price = None
+    for item in entities:
+        symbol = str(item.get("symbol") or "").upper()
+        name = item.get("name") or symbol
+        asset_class = (item.get("asset_class") or ("crypto" if symbol.endswith("-USD") else "equity")).lower()
 
-            closes = [float(x) for x in item.get("closes", [])] if isinstance(item.get("closes"), list) else []
-            dates = item.get("dates", []) or []
-
-            hist_source = "engine" if len(closes) >= 30 else None
-            if len(closes) < 30:
-                src, dt, cl, hi, lo = _get_history(t, alpha_key)
-                if cl:
-                    closes = cl; dates = dt; hist_source = src
-                else:
-                    hist_source = "none"
-
-            latest = closes[-1] if closes else price
-
-            d1 = closes[-2] if len(closes) >= 2 else None
-            w1 = closes[-6] if len(closes) >= 6 else None
-            m1 = closes[-22] if len(closes) >= 22 else None
-            # YTD baseline: close on last trading day of previous year
+        if asset_class == "crypto":
+            dtc, clc = _fetch_alpha_vantage_crypto(symbol, "USD", alpha_key)
+            if not clc:
+                continue
+            latest = clc[-1]
+            d1 = _nearest(clc, 1)
+            w1 = _nearest(clc, 7)
+            m1 = _nearest(clc, 30)
+            # approximate YTD baseline: close nearest to last day of previous year
             ytd0 = None
-            if dates and closes:
-                last_year = dates[-1].year - 1
-                for i in range(len(dates)-1, -1, -1):
-                    if dates[i].year == last_year:
-                        ytd0 = closes[i]; break
+            if dtc and clc:
+                last_year = dtc[-1].year - 1
+                for i in range(len(dtc)-1, -1, -1):
+                    if dtc[i].year == last_year:
+                        ytd0 = clc[i]; break
 
-            def pct(curr, prev):
-                try:
-                    if curr is None or prev is None or prev == 0:
-                        return None
-                    return (curr/prev - 1.0) * 100.0
-                except Exception:
-                    return None
+            p1d = pct(latest, d1); p1w = pct(latest, w1); p1m = pct(latest, m1); pytd = pct(latest, ytd0)
+            window = clc[-365:] if len(clc) >= 365 else clc
+            low52 = float(min(window)); high52 = float(max(window))
+            range_pct = _pos_in_range(latest, low52, high52)
 
-            p1d = pct(latest, d1)
-            p1w = pct(latest, w1)
-            p1m = pct(latest, m1)
-            pytd = pct(latest, ytd0)
+            # Press links by symbol
+            press_map = {
+                "BTC-USD": "https://bitcoin.org",
+                "ETH-USD": "https://blog.ethereum.org",
+                "DOGE-USD": "https://blog.dogecoin.com",
+                "XRP-USD": "https://ripple.com/insights/",
+            }
+            cryptos.append({
+                "name": name, "ticker": symbol, "price": latest,
+                "pct_1d": p1d, "pct_1w": p1w, "pct_1m": p1m, "pct_ytd": pytd,
+                "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
+                "headline": None, "source": None, "when": None,
+                "next_event": None, "vol_x_avg": None,
+                "news_url": f"https://finance.yahoo.com/quote/{symbol}/news",
+                "pr_url": press_map.get(symbol, f"https://finance.yahoo.com/quote/{symbol}/press-releases"),
+            })
+
+        else:
+            # equities
+            src, dt, cl, hi, lo = _get_equity_history(symbol, alpha_key)
+            if not cl:
+                continue
+            latest = cl[-1]
+            d1 = _nearest(cl, 1)
+            w1 = _nearest(cl, 6)
+            m1 = _nearest(cl, 22)
+            ytd0 = None
+            if dt and cl:
+                last_year = dt[-1].year - 1
+                for i in range(len(dt)-1, -1, -1):
+                    if dt[i].year == last_year:
+                        ytd0 = cl[i]; break
+            p1d = pct(latest, d1); p1w = pct(latest, w1); p1m = pct(latest, m1); pytd = pct(latest, ytd0)
 
             if p1d is not None:
                 if p1d >= 0: up += 1
                 else: down += 1
-                movers.append({"ticker": t, "pct": p1d})
+                movers.append({"ticker": symbol, "pct": p1d})
 
-            low52 = item.get("low_52w"); high52 = item.get("high_52w")
-            try:
-                low52 = float(low52) if low52 is not None else None
-                high52 = float(high52) if high52 is not None else None
-            except Exception:
-                low52 = high52 = None
+            window = cl[-252:] if len(cl) >= 252 else cl
+            low52 = float(min(window)); high52 = float(max(window))
+            range_pct = _pos_in_range(latest, low52, high52)
 
-            if (low52 is None or high52 is None) and closes:
-                window = closes[-252:] if len(closes) >= 252 else closes
-                low52 = float(min(window))
-                high52 = float(max(window))
-
-            def pos_in_range(price, low, high):
-                try:
-                    price, low, high = float(price), float(low), float(high)
-                    if high <= low:
-                        return 50.0
-                    return max(0.0, min(100.0, (price - low) / (high - low) * 100.0))
-                except Exception:
-                    return 50.0
-
-            range_pct = pos_in_range(latest or 0.0, low52 or 0.0, high52 or 0.0)
-
-            nm = news_map.get(t, {})
-            news_url = nm.get("url") or f"https://finance.yahoo.com/quote/{t}/news"
-            pr_url = f"https://finance.yahoo.com/quote/{t}/press-releases"
-
-            price_show = price if price is not None else (latest or 0.0)
+            nm = news_map.get(symbol, {})
+            news_url = nm.get("url") or f"https://finance.yahoo.com/quote/{symbol}/news"
 
             companies.append({
-                "name": name, "ticker": t, "price": price_show or 0.0,
+                "name": name, "ticker": symbol, "price": latest,
                 "pct_1d": p1d, "pct_1w": p1w, "pct_1m": p1m, "pct_ytd": pytd,
-                "low_52w": (low52 or 0.0), "high_52w": (high52 or 0.0),
-                "range_pct": range_pct,
+                "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
                 "headline": nm.get("title"), "source": nm.get("source"), "when": nm.get("when"),
-                "next_event": meta.get("earningsDate") or meta.get("nextEvent"),
-                "vol_x_avg": item.get("volume_x_30d") or item.get("volXAvg"),
-                "news_url": news_url, "pr_url": pr_url,
+                "next_event": None, "vol_x_avg": None,
+                "news_url": news_url, "pr_url": f"https://finance.yahoo.com/quote/{symbol}/press-releases",
             })
-
-            try:
-                import logging
-                logging.getLogger("ci-entrypoint").info(
-                    f"{t}: bars={len(closes)} src={hist_source} last={price_show} lo52={low52} hi52={high52} pos%={range_pct:.2f}")
-            except Exception:
-                pass
 
     winners = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"], reverse=True)[:3]
     losers  = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"])[:3]
 
-    # Pass a datetime; renderer will format to 'M/D/Y HH:MM CST'
     now_c = datetime.now(tz=CENTRAL_TZ) if CENTRAL_TZ else datetime.now()
     summary = {
         "as_of_ct": now_c,
@@ -312,5 +390,5 @@ async def build_nextgen_html(logger) -> str:
         "catalysts": [],
     }
 
-    html = render_email(summary, companies)
+    html = render_email(summary, companies, cryptos=cryptos)
     return html
