@@ -1,5 +1,81 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from html import escape
+from email.utils import parsedate_to_datetime
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
+
+CENTRAL_TZ = ZoneInfo("America/Chicago") if ZoneInfo else None
+
+def _to_mdy_cst(value, include_time=True):
+    """
+    Best-effort parser -> 'M/D/Y HH:MM CST' (or just date if include_time=False).
+    Assumes America/Chicago for output. If parsing fails, returns the original string.
+    """
+    if value is None:
+        return None
+    # Already a datetime?
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        s = str(value).strip()
+        if not s:
+            return s
+        dt = None
+        # Epoch seconds / ms
+        if s.isdigit():
+            try:
+                iv = int(s)
+                if iv > 10_000_000_000:  # ms
+                    iv = iv // 1000
+                dt = datetime.fromtimestamp(iv, tz=timezone.utc)
+            except Exception:
+                dt = None
+        # ISO 8601 (handle trailing Z)
+        if dt is None:
+            try:
+                if s.endswith("Z"):
+                    s2 = s[:-1] + "+00:00"
+                else:
+                    s2 = s
+                dt = datetime.fromisoformat(s2)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                dt = None
+        # RFC2822
+        if dt is None:
+            try:
+                dt = parsedate_to_datetime(s)
+                if dt and dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                dt = None
+        # Fallback: YYYY-MM-DD
+        if dt is None and len(s) >= 10 and s[4:5] == "-" and s[7:8] == "-":
+            try:
+                dt = datetime.strptime(s[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except Exception:
+                pass
+        if dt is None:
+            return s  # give up
+
+    # Convert to America/Chicago if available
+    try:
+        if CENTRAL_TZ:
+            dtc = dt.astimezone(CENTRAL_TZ)
+        else:
+            dtc = dt
+    except Exception:
+        dtc = dt
+
+    if include_time:
+        # Use zero-padded month/day/hour for broad client compatibility
+        out = dtc.strftime("%m/%d/%Y %H:%M")
+    else:
+        out = dtc.strftime("%m/%d/%Y")
+    return out + " CST"
 
 # ---------- helpers (chips, heat, buttons) ----------
 
@@ -62,13 +138,6 @@ def _mover_chip(ticker: str, pct: float, href: str):
 # ---------- 52-week range (v5 mobile-robust via TD widths + nested tables) ----------
 
 def _range_bar(range_pct, low52, high52):
-    """
-    Bulletproof mobile rendering:
-    - Outer table width=100% (+ inline width) so it occupies the full card.
-    - Three TDs use percentage widths (left/marker/right) that sum to 100.
-    - Each TD contains an inner 100%-width table to force expansion in Gmail/Outlook mobile.
-    - Uses bgcolor + height attributes (these have better support than CSS alone).
-    """
     try:
         pos = float(range_pct) if range_pct is not None else 50.0
     except Exception:
@@ -76,12 +145,10 @@ def _range_bar(range_pct, low52, high52):
     if pos < 0: pos = 0.0
     if pos > 100: pos = 100.0
 
-    marker_pct = 1.6  # ~5 px on 320px, ~10 px on 600px
-    # Center the marker around pos; keep within [0,100]
+    marker_pct = 1.6
     left = max(0.0, min(100.0 - marker_pct, pos - marker_pct / 2.0))
     right = max(0.0, 100.0 - marker_pct - left)
 
-    # Guard tiny extremes so clients don't collapse to 0
     if left == 0.0:
         left = 0.2; right = max(0.0, 100.0 - marker_pct - left)
     if right == 0.0:
@@ -130,7 +197,9 @@ def _range_bar(range_pct, low52, high52):
 # ---------- main renderer ----------
 
 def render_email(summary, companies, catalysts=None):
-    asof = summary.get("as_of_ct", datetime.now().strftime("%b %d, %Y %H:%M CT"))
+    raw_asof = summary.get("as_of_ct")
+    asof = _to_mdy_cst(raw_asof, include_time=True) if raw_asof else _to_mdy_cst(datetime.now(), include_time=True)
+
     up = summary.get("up_count", 0)
     down = summary.get("down_count", 0)
     movers_up = summary.get("top_winners", [])
@@ -170,6 +239,9 @@ def render_email(summary, companies, catalysts=None):
         headline = c.get("headline")
         source = c.get("source")
         when = c.get("when")
+        # Normalize 'when' to M/D/Y HH:MM CST if available
+        when_fmt = _to_mdy_cst(when, include_time=True) if when else None
+
         next_event = c.get("next_event")
         volx = c.get("vol_x_avg")
         news_url = c.get("news_url") or f"https://finance.yahoo.com/quote/{t}/news"
@@ -179,10 +251,17 @@ def render_email(summary, companies, catalysts=None):
 
         bullets = []
         if headline:
-            stamp = f" ({source}, {when})" if source and when else (f" ({source})" if source else (f" ({when})" if when else ""))
-            bullets.append(f"{headline}{stamp}")
+            if source and when_fmt:
+                bullets.append(f"{headline} ({source}, {when_fmt})")
+            elif source:
+                bullets.append(f"{headline} ({source})")
+            elif when_fmt:
+                bullets.append(f"{headline} ({when_fmt})")
+            else:
+                bullets.append(f"{headline}")
         if next_event:
-            bullets.append(f"Next: {next_event}")
+            ne_txt = _to_mdy_cst(next_event, include_time=False) if isinstance(next_event, (str, datetime)) else str(next_event)
+            bullets.append(f"Next: {ne_txt}")
         if volx is not None:
             try:
                 bullets.append(f"Volume: {float(volx):.2f}× 30-day avg")
@@ -190,9 +269,10 @@ def render_email(summary, companies, catalysts=None):
                 pass
         bullets_html = "".join(f"<li>{escape(b)}</li>" for b in bullets)
 
-        ctas = _button("Latest News", news_url) + _button("Press Releases", pr_url)
-
         range_html = _range_bar(range_pct, float(low52 or 0.0), float(high52 or 0.0))
+
+        # CTAs moved BELOW the 52w range and bullets
+        ctas = _button("Latest News", news_url) + _button("Press Releases", pr_url)
 
         card = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
@@ -202,15 +282,13 @@ def render_email(summary, companies, catalysts=None):
       <div style="margin-top:2px;font-size:14px;color:#e5e7eb;">${price:.2f}</div>
       <div style="margin-top:8px;">{chips}</div>
 
-      <div style="margin-top:10px;">{ctas}</div>
-
-      <div style="margin-top:12px;">
-        {range_html}
-      </div>
+      <div style="margin-top:12px;">{range_html}</div>
 
       <ul style="margin:10px 0 0 16px;padding:0;color:#e5e7eb;font-size:13px;line-height:1.4;">
         {bullets_html}
       </ul>
+
+      <div style="margin-top:10px;">{ctas}</div>
     </td>
   </tr>
 </table>
@@ -232,18 +310,20 @@ def render_email(summary, companies, catalysts=None):
 """
         rows.append(row)
 
-    # Upcoming catalysts module (if provided)
+    # Upcoming catalysts module (if provided) — normalize date strings too
     catalysts_html = ""
     if catalysts:
-        items_html = "".join(
-            f'<div style="font-size:13px;color:#e5e7eb;margin:4px 0;">{escape(c.get("date_str",""))} • <strong>{escape(c.get("ticker",""))}</strong> • {escape(c.get("label",""))}</div>'
-            for c in catalysts[:8]
-        )
+        items_html = []
+        for c in catalysts[:8]:
+            ds = _to_mdy_cst(c.get("date_str"), include_time=False) if c.get("date_str") else ""
+            items_html.append(
+                f'<div style="font-size:13px;color:#e5e7eb;margin:4px 0;">{escape(ds)} • <strong>{escape(c.get("ticker",""))}</strong> • {escape(c.get("label",""))}</div>'
+            )
         catalysts_html = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
   <tr><td style="padding:12px 14px;">
     <div style="font-weight:700;color:#fff;margin-bottom:6px;">Next 7 days</div>
-    {items_html}
+    {''.join(items_html)}
   </td></tr>
 </table>
 """
@@ -294,7 +374,7 @@ def render_email(summary, companies, catalysts=None):
         {f'<tr><td style="padding-top:8px;">{catalysts_html}</td></tr>' if catalysts_html else ''}
 
         <tr><td style="padding:16px 14px;color:#9aa0a6;font-size:12px;text-align:center;">
-          Sources: price close & ranges; curated headlines. Times shown are Central Time.
+          Sources: price close & ranges; curated headlines. Times shown in Central Time (CST).
         </td></tr>
       </table>
     </td></tr>
