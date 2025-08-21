@@ -7,7 +7,11 @@
     "priority": "foundational_core",
     "investment_thesis": "Design excellence ecosystem with unmatched consumer loyalty and services expansion",
     "risk_profile": "low_moderate",
-    "catalyst_watch": ["iPhone innovation cycles", "services revenue growth", "AR/VR product launches"],
+    "catalyst_watch": [
+      "iPhone innovation cycles",
+      "services revenue growth",
+      "AR/VR product launches"
+    ],
     "alert_thresholds": {
       "price_change_percent": 3.0,
       "volume_spike_multiplier": 150.0
@@ -22,7 +26,11 @@
     "priority": "growth_anchor",
     "investment_thesis": "Electric vehicle production scaling with autonomous driving and energy storage expansion",
     "risk_profile": "high",
-    "catalyst_watch": ["delivery growth rates", "FSD progress", "energy business scaling"],
+    "catalyst_watch": [
+      "delivery growth rates",
+      "FSD progress",
+      "energy business scaling"
+    ],
     "alert_thresholds": {
       "price_change_percent": 5.0,
       "volume_spike_multiplier": 200.0
@@ -32,12 +40,16 @@
   {
     "symbol": "NVDA",
     "name": "NVIDIA Corporation",
-    "sector": "AI Infrastructure", 
+    "sector": "AI Infrastructure",
     "market_cap_category": "mega",
     "priority": "strategic_growth",
     "investment_thesis": "AI computing infrastructure backbone with data center GPU dominance",
     "risk_profile": "moderate_high",
-    "catalyst_watch": ["AI chip demand", "data center growth", "automotive AI adoption"],
+    "catalyst_watch": [
+      "AI chip demand",
+      "data center growth",
+      "automotive AI adoption"
+    ],
     "alert_thresholds": {
       "price_change_percent": 4.0,
       "volume_spike_multiplier": 175.0
@@ -48,11 +60,15 @@
     "symbol": "META",
     "name": "Meta Platforms Inc.",
     "sector": "Social Platform",
-    "market_cap_category": "mega", 
+    "market_cap_category": "mega",
     "priority": "strategic_growth",
     "investment_thesis": "Social media advertising with metaverse infrastructure investment and efficiency gains",
     "risk_profile": "moderate_high",
-    "catalyst_watch": ["metaverse adoption", "advertising recovery", "efficiency improvements"],
+    "catalyst_watch": [
+      "metaverse adoption",
+      "advertising recovery",
+      "efficiency improvements"
+    ],
     "alert_thresholds": {
       "price_change_percent": 4.0,
       "volume_spike_multiplier": 175.0
@@ -67,7 +83,11 @@
     "priority": "competitive_growth",
     "investment_thesis": "CPU/GPU innovation leader challenging Intel/NVIDIA with AI chip capabilities",
     "risk_profile": "moderate",
-    "catalyst_watch": ["datacenter GPU adoption", "AI chip partnerships", "market share vs Intel"],
+    "catalyst_watch": [
+      "datacenter GPU adoption",
+      "AI chip partnerships",
+      "market share vs Intel"
+    ],
     "alert_thresholds": {
       "price_change_percent": 5.0,
       "volume_spike_multiplier": 200.0
@@ -82,7 +102,11 @@
     "priority": "strategic_growth",
     "investment_thesis": "Government-to-enterprise data platform scaling with proprietary AI integration",
     "risk_profile": "moderate_high",
-    "catalyst_watch": ["commercial customer growth", "AI platform expansion", "government renewals"],
+    "catalyst_watch": [
+      "commercial customer growth",
+      "AI platform expansion",
+      "government renewals"
+    ],
     "alert_thresholds": {
       "price_change_percent": 6.0,
       "volume_spike_multiplier": 250.0
@@ -91,13 +115,17 @@
   },
   {
     "symbol": "KOPN",
-    "name": "Kopin Corporation", 
+    "name": "Kopin Corporation",
     "sector": "AR/VR Technology",
     "market_cap_category": "small",
     "priority": "speculative_innovation",
     "investment_thesis": "Micro-display pioneer positioned for AR/VR mainstream adoption acceleration",
     "risk_profile": "high",
-    "catalyst_watch": ["AR headset partnerships", "military contracts", "consumer VR growth"],
+    "catalyst_watch": [
+      "AR headset partnerships",
+      "military contracts",
+      "consumer VR growth"
+    ],
     "alert_thresholds": {
       "price_change_percent": 8.0,
       "volume_spike_multiplier": 300.0
@@ -109,14 +137,50 @@
     "name": "Sky Quarry Inc.",
     "sector": "Industrial Technology",
     "market_cap_category": "micro",
-    "priority": "speculative_innovation", 
+    "priority": "speculative_innovation",
     "investment_thesis": "Specialized industrial innovation with disruptive transformation potential",
     "risk_profile": "very_high",
-    "catalyst_watch": ["technology validation", "strategic partnerships", "commercial scalability"],
+    "catalyst_watch": [
+      "technology validation",
+      "strategic partnerships",
+      "commercial scalability"
+    ],
     "alert_thresholds": {
       "price_change_percent": 12.0,
       "volume_spike_multiplier": 500.0
     },
     "sector_allocation": "Industrial Innovation"
+  },
+  {
+    "symbol": "XRP-USD",
+    "name": "XRP (Crypto)",
+    "asset_class": "crypto",
+    "sector": "Digital Assets",
+    "priority": "watch",
+    "sector_allocation": "Digital Assets"
+  },
+  {
+    "symbol": "BTC-USD",
+    "name": "Bitcoin",
+    "asset_class": "crypto",
+    "sector": "Digital Assets",
+    "priority": "watch",
+    "sector_allocation": "Digital Assets"
+  },
+  {
+    "symbol": "ETH-USD",
+    "name": "Ethereum",
+    "asset_class": "crypto",
+    "sector": "Digital Assets",
+    "priority": "watch",
+    "sector_allocation": "Digital Assets"
+  },
+  {
+    "symbol": "DOGE-USD",
+    "name": "Dogecoin",
+    "asset_class": "crypto",
+    "sector": "Digital Assets",
+    "priority": "watch",
+    "sector_allocation": "Digital Assets"
   }
 ]
