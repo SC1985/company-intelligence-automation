@@ -5,25 +5,17 @@ import time
 
 from render_email import render_email
 
-# ---------------- History helpers (no external deps required) ----------------
+# ---------- History helpers ----------
 
 def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float], List[float], List[float]]:
-    """Fetch daily OHLC from Stooq CSV.
-    Returns (dates, closes, highs, lows). May return empty lists if not found.
-    """
     import csv
     from urllib.request import urlopen
-
-    candidates = [
-        symbol.lower(),
-        f"{symbol.lower()}.us",
-    ]
+    candidates = [symbol.lower(), f"{symbol.lower()}.us"]
     for s in candidates:
         try:
             url = f"https://stooq.com/q/d/l/?s={s}&i=d"
             with urlopen(url, timeout=20) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
-            # Guard: some bad responses are short or HTML
             if not raw or "<html" in raw.lower():
                 continue
             dt, cl, hi, lo = [], [], [], []
@@ -32,10 +24,10 @@ def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float], List[float],
                 if not row.get("Date") or not row.get("Close"):
                     continue
                 try:
-                    d = datetime.fromisoformat(row["Date"])  # YYYY-MM-DD
+                    d = datetime.fromisoformat(row["Date"])
                     c = float(row["Close"].replace(",", ""))
-                    h = float(row.get("High", c))
-                    l = float(row.get("Low", c))
+                    h = float((row.get("High") or c))
+                    l = float((row.get("Low") or c))
                 except Exception:
                     continue
                 dt.append(d); cl.append(c); hi.append(h); lo.append(l)
@@ -65,41 +57,38 @@ def _fetch_alpha_vantage(symbol: str, api_key: Optional[str]) -> Tuple[List[date
         ts = data.get("Time Series (Daily)") or {}
         if not isinstance(ts, dict) or not ts:
             return [], [], [], []
-        keys = sorted(ts.keys())  # ASC
+        keys = sorted(ts.keys())
         dt, cl, hi, lo = [], [], [], []
         for k in keys[-500:]:
             row = ts.get(k) or {}
             ac = row.get("5. adjusted close") or row.get("4. close")
-            h = row.get("2. high")
-            l = row.get("3. low")
+            h = row.get("2. high"); l = row.get("3. low")
             if ac is None:
                 continue
             try:
                 dt.append(datetime.fromisoformat(k))
-                cl.append(float(str(ac).replace(",", "")))
-                hi.append(float(str(h).replace(",", "")) if h is not None else cl[-1])
-                lo.append(float(str(l).replace(",", "")) if l is not None else cl[-1])
+                cval = float(str(ac).replace(",", ""))
+                cl.append(cval)
+                hi.append(float(str(h).replace(",", "")) if h is not None else cval)
+                lo.append(float(str(l).replace(",", "")) if l is not None else cval)
             except Exception:
                 continue
-        # Respect free tier
         if cl:
-            time.sleep(12)
+            time.sleep(12)  # free-tier pacing
         return dt, cl, hi, lo
     except Exception:
         return [], [], [], []
 
 def _get_history(symbol: str, api_key: Optional[str]) -> Tuple[str, List[datetime], List[float], List[float], List[float]]:
-    # Prefer Stooq (fast, no key). If insufficient, fall back to Alpha Vantage.
     dt, cl, hi, lo = _fetch_stooq(symbol)
     if len(cl) >= 30:
         return "stooq", dt, cl, hi, lo
     dt, cl, hi, lo = _fetch_alpha_vantage(symbol, api_key)
     if len(cl) >= 30:
         return "alphavantage", dt, cl, hi, lo
-    # Last resort: nothing
     return "none", [], [], [], []
 
-# ---------------- Analytics helpers ----------------
+# ---------- Analytics helpers ----------
 
 def _pct_change(curr: Optional[float], prev: Optional[float]) -> Optional[float]:
     try:
@@ -137,7 +126,7 @@ def _pos_in_range(price, low, high) -> float:
     except Exception:
         return 50.0
 
-def _first_url_from_item(a: Dict[str, Any], ticker: str) -> Optional[str]:
+def _first_url_from_item(a, ticker: str) -> Optional[str]:
     for k in ("url", "link", "article_url", "story_url", "source_url", "canonicalUrl"):
         v = a.get(k)
         if isinstance(v, str) and v.startswith(("http://", "https://")):
@@ -187,41 +176,7 @@ def _coalesce_news_map(news: Any) -> Dict[str, Dict[str, Optional[str]]]:
                 out[t] = {"title": title, "source": src if isinstance(src, str) else None, "when": when, "url": url}
     return out
 
-def _parse_catalyst(meta: Dict[str, Any]) -> Optional[Dict[str, str]]:
-    label = None
-    date_str = None
-
-    ed = meta.get("earningsDate")
-    if isinstance(ed, list) and ed:
-        x = ed[0]
-        if isinstance(x, dict) and x.get("fmt"):
-            date_str = x["fmt"]; label = "Earnings"
-        elif isinstance(x, str):
-            date_str = x; label = "Earnings"
-    elif isinstance(ed, dict) and ed.get("fmt"):
-        date_str = ed["fmt"]; label = "Earnings"
-    elif isinstance(ed, str):
-        date_str = ed; label = "Earnings"
-
-    ne = meta.get("nextEvent") or meta.get("next_event")
-    if not date_str and isinstance(ne, dict):
-        ds = ne.get("date") or ne.get("when") or ne.get("time")
-        if isinstance(ds, str):
-            date_str = ds
-        label = ne.get("label") or ne.get("name") or "Event"
-    elif not date_str and isinstance(ne, str):
-        parts = ne.split()
-        for p in parts:
-            if len(p) >= 10 and p[4:5] == "-" and p[7:8] == "-":
-                date_str = p
-                label = ne.replace(p, "").strip() or "Event"
-                break
-
-    if not (date_str and label):
-        return None
-    return {"date_str": str(date_str), "label": str(label)}
-
-# ---------------- Main builder ----------------
+# ---------- Main builder ----------
 
 async def build_nextgen_html(logger) -> str:
     from main import StrategicIntelligenceEngine
@@ -244,7 +199,7 @@ async def build_nextgen_html(logger) -> str:
             meta = item.get("position_data") or item.get("meta") or {}
             name = meta.get("name") or meta.get("companyName") or t
 
-            # Spot/series from engine if it exists
+            # Quote / series from engine
             price = None
             try:
                 price = float(item.get("price")) if item.get("price") is not None else None
@@ -254,20 +209,18 @@ async def build_nextgen_html(logger) -> str:
             closes = [float(x) for x in item.get("closes", [])] if isinstance(item.get("closes"), list) else []
             dates = item.get("dates", []) or []
 
+            # If series is shallow or missing, fetch robust history
             hist_source = "engine" if len(closes) >= 30 else None
             if len(closes) < 30:
-                # Fetch robust history for multi-window returns + 52w
                 src, dt, cl, hi, lo = _get_history(t, alpha_key)
                 if cl:
-                    closes = cl
-                    dates = dt
-                    hist_source = src
+                    closes = cl; dates = dt; hist_source = src
                 else:
                     hist_source = "none"
 
             latest = closes[-1] if closes else price
 
-            # Window baselines: prev day, ~5d, ~21d, YTD
+            # Window baselines
             d1 = _nearest(closes, 1) if closes else None
             w1 = _nearest(closes, 5) if closes else None
             m1 = _nearest(closes, 21) if closes else None
@@ -296,13 +249,13 @@ async def build_nextgen_html(logger) -> str:
                 low52 = float(min(window))
                 high52 = float(max(window))
 
+            # Compute position in range (0..100)
             range_pct = _pos_in_range(latest or 0.0, low52 or 0.0, high52 or 0.0)
 
             nm = news_map.get(t, {})
             news_url = nm.get("url") or f"https://finance.yahoo.com/quote/{t}/news"
             pr_url = f"https://finance.yahoo.com/quote/{t}/press-releases"
 
-            # Prefer showing live price if present, else last close
             price_show = price if price is not None else (latest or 0.0)
 
             companies.append({
@@ -316,47 +269,20 @@ async def build_nextgen_html(logger) -> str:
                 "news_url": news_url, "pr_url": pr_url,
             })
 
-            # Log per-symbol history source/bars for troubleshooting
+            # Detailed log for troubleshooting
             try:
                 import logging
-                logging.getLogger("ci-entrypoint").info(f"{t}: history={hist_source} bars={len(closes)} price={'%.2f' % (price_show or 0)}")
+                logging.getLogger("ci-entrypoint").info(
+                    f"{t}: bars={len(closes)} src={hist_source} last={price_show} "
+                    f"lo52={low52} hi52={high52} pos%={range_pct:.2f}")
             except Exception:
                 pass
 
-    # Top movers
     winners = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"], reverse=True)[:3]
     losers  = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"])[:3]
 
-    # Catalysts (7 days) — best-effort from meta
+    # Catalysts — optional; omitted for simplicity here
     catalysts: List[Dict[str, str]] = []
-    now = datetime.now()
-    horizon = now + timedelta(days=7)
-    for c in companies:
-        ne = c.get("next_event")
-        if not ne:
-            continue
-        # Wrap into meta-like structure for parser
-        meta = {"nextEvent": ne} if not isinstance(ne, dict) else ne
-        meta = {"nextEvent": meta} if "date" in meta or "when" in meta else meta
-        parsed = _parse_catalyst({"nextEvent": meta} if not isinstance(meta, dict) else meta)
-        if not parsed:
-            continue
-        ds = str(parsed["date_str"]).strip()
-        dt = None
-        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%b %d, %Y", "%d %b %Y"):
-            try:
-                dt = datetime.strptime(ds[:19], fmt)
-                break
-            except Exception:
-                continue
-        if dt is None and len(ds) >= 10 and ds[4:5] == "-" and ds[7:8] == "-":
-            try:
-                dt = datetime.strptime(ds[:10], "%Y-%m-%d")
-            except Exception:
-                pass
-        if dt and now <= dt <= horizon:
-            catalysts.append({"date_str": dt.strftime("%b %d"), "ticker": c["ticker"], "label": parsed["label"]})
-    catalysts = sorted(catalysts, key=lambda x: x["date_str"])[:8]
 
     summary = {
         "as_of_ct": datetime.now().strftime("%b %d, %Y %H:%M CT"),
