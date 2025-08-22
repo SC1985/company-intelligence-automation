@@ -78,7 +78,7 @@ def _fmt_ct(value, force_time=None, tz_suffix_policy="auto"):
     return str(value)
 
 
-def _safe_float(x, default=0.0):
+def _safe_float(x, default=None):
     try:
         v = float(x)
         if math.isnan(v) or math.isinf(v):
@@ -91,8 +91,6 @@ def _safe_float(x, default=0.0):
 def _chip(label: str, value):
     try:
         v = float(value) if value is not None else None
-        if v is not None and (math.isnan(v) or math.isinf(v)):
-            v = None
     except Exception:
         v = None
     if v is None:
@@ -118,7 +116,6 @@ def _button(label: str, url: str, size="md"):
             f'{safe_label} →</a>')
 
 
-
 def _range_bar(pos: float, low: float, high: float):
     """Table-based 52-week bar with a visible marker cell (6px)."""
     pct = _safe_float(pos, 50.0)
@@ -126,63 +123,53 @@ def _range_bar(pos: float, low: float, high: float):
     marker_w = 6  # px
     track_h = 6
     left_pct = pct
+    right_pct = max(0.0, 100.0 - pct)
     track = (
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">'
         f'<tr height="{track_h}" style="height:{track_h}px;line-height:0;font-size:0;">'
         f'<td width="{left_pct:.1f}%" style="width:{left_pct:.1f}%;background:#2a2a2a;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
         f'<td width="{marker_w}" style="width:{marker_w}px;background:#3b82f6;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
-        f'<td style="background:#2a2a2a;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
+        f'<td width="{right_pct:.1f}%" style="width:{right_pct:.1f}%;background:#2a2a2a;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
         f'</tr></table>'
     )
     caption = (f'<div style="font-size:12px;color:#9aa0a6;margin-top:4px;">'
-               f'Low ${_safe_float(low, 0.0):.2f} • High ${_safe_float(high, 0.0):.2f}</div>')
-    return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>' + track + caption)
-
-
-def _canon_company_tokens(name: str):
-    if not name:
-        return []
-    # remove common suffixes and punctuation; return key tokens
-    base = re.sub(r'[,\.]', ' ', name)
-    base = re.sub(r'\b(inc|incorporated|corp|corporation|co|company|ltd|plc)\b\.?', '', base, flags=re.I)
-    toks = [t.lower() for t in re.split(r'\s+', base.strip()) if t]
-    # prioritize the first token as brand root
-    if toks:
-        return [toks[0], " ".join(toks)]
-    return toks
+               f'Low ${_safe_float(low,0.0):.2f} • High ${_safe_float(high,0.0):.2f}</div>')
+    return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'
+            + track + caption)
 
 
 def _belongs_to_company(headline: str, c: dict) -> bool:
-    if not headline:
+    if not headline or not c:
         return False
-    h = headline.lower()
-    t = str(c.get("ticker") or "").lower()
+    t = str(c.get("ticker") or "").upper()
     name = str(c.get("name") or "")
-    tokens = set(_canon_company_tokens(name))
-    if t and t in h:
+    h = str(headline)
+    if t and re.search(rf'\\b{re.escape(t)}\\b', h, re.I):
         return True
-    for tok in tokens:
-        if tok and len(tok) > 2 and tok in h:
-            return True
+    if name and re.search(rf'\\b{re.escape(name)}\\b', h, re.I):
+        return True
     return False
 
 
 def _nowrap_metrics(text: str) -> str:
-    """Wrap tokens like m/m, y/y, q/q with their numeric value in a no-wrap span to prevent mid-token breaks."""
+    """Prevent splits like 'm/m 2.3%' across lines."""
+    import re as _re
     if not text:
         return text
-    pattern = re.compile(r'(?i)\b([myq]/[myq]\s*:?\s*[+\-]?\d+(?:\.\d+)?%?)')
-    return pattern.sub(lambda m: f'<span style="white-space:nowrap">{m.group(0)}</span>', text)
+    pattern = _re.compile(r'(?i)\\b([myq]/[myq]\\s*:?\\s*[+\\-]?\\d+(?:\\.\\d+)?%?)')
+    def repl(m):
+        return f'<span style="white-space:nowrap">{m.group(0)}</span>'
+    return pattern.sub(repl, text or "")
 
 
 def _build_card(c):
     try:
-        name = c.get("name") or c.get("ticker") or "—"
-        t = c.get("ticker") or ""
-        price = _safe_float(c.get("price"), 0.0)
+        name = c.get("name") or c.get("ticker")
+        t = c.get("ticker")
+        price = _safe_float(c.get("price"), 0.0) or 0.0
         p1d, p1w, p1m, pytd = c.get("pct_1d"), c.get("pct_1w"), c.get("pct_1m"), c.get("pct_ytd")
-        low52 = _safe_float(c.get("low_52w"), 0.0)
-        high52 = _safe_float(c.get("high_52w"), 0.0)
+        low52 = _safe_float(c.get("low_52w"), 0.0) or 0.0
+        high52 = _safe_float(c.get("high_52w"), 0.0) or 0.0
         rp = c.get("range_pct")
         try:
             range_pct = float(rp) if rp is not None else 50.0
@@ -217,9 +204,8 @@ def _build_card(c):
             else:
                 bullets.append(f"★ {headline}")
         else:
-            # fallback avoids mismatched articles
-            bullets.append(f"★ Latest {name} coverage — see News below")
-
+            if name:
+                bullets.append(f"★ Latest {name} coverage — see News")
         if next_event:
             ne_txt = _fmt_ct(next_event, force_time=False, tz_suffix_policy="never") if isinstance(next_event, (str, datetime)) else str(next_event)
             bullets.append(f"Next: {ne_txt}")
@@ -244,20 +230,18 @@ def _build_card(c):
             else:
                 bullets_html += '<li style="margin-left:0;padding-left:0;list-style-position:inside;">' + _nowrap_metrics(escape(b)) + "</li>"
 
-        range_html = _range_bar(range_pct, low52, high52)
+        range_html = _range_bar(range_pct, float(low52 or 0.0), float(high52 or 0.0))
         ctas = _button("News", news_url, size="md") + _button("Press", pr_url, size="md")
 
-        price_fmt = f"${price:.4f}" if str(t).endswith("-USD") else f"${price:.2f}"
+        price_fmt = f"${price:.4f}" if (t and str(t).endswith("-USD")) else f"${price:.2f}"
         return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 6px;background:#111;
-              border:1px solid #2a2a2a;mso-border-alt:1px solid #2a2a2a;
-              border-radius:8px;max-height:300px;"
-       class="ci-card" >
+              border:1px solid #2a2a2a;border-radius:8px;max-height:300px;" class="ci-card" >
   <tr>
     <td class="ci-card-body" style="padding:12px 14px;max-height:300px;vertical-align:top;overflow:hidden;" >
       <div style="font-weight:700;font-size:16px;line-height:1.3;color:#fff;">
-        {escape(str(name))} <span style="color:#9aa0a6;">({escape(str(t))})</span>
+        {escape(str(name or ''))} <span style="color:#9aa0a6;">({escape(str(t or ''))})</span>
       </div>
       <div style="margin-top:2px;font-size:14px;color:#e5e7eb;">{price_fmt}</div>
       <div style="margin-top:8px;">{chips}</div>
@@ -303,7 +287,6 @@ def _grid(cards):
 </table>
 """
         else:
-            # Single card row (last odd item)
             row = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
   <tr>
@@ -333,31 +316,26 @@ def _section_container(title: str, inner_html: str):
 
 
 def _pick_hero_item(companies):
-    """Find a general 'market update' headline among companies; prefer broader-market phrasing."""
-    keywords = [
-        "market", "stocks", "equities", "dow", "nasdaq", "s&p", "s & p", "s-and-p",
-        "futures", "indexes", "indices", "broad market", "wall street",
-        "federal reserve", "fed", "inflation", "cpi", "pce", "jobs", "unemployment",
-        "yield", "treasury", "economy", "recession"
-    ]
-    best = None
-    best_ts = None
-    for c in companies or []:
-        h = c.get("headline")
+    """Pick a hero headline from companies using market-related keywords, else newest by time."""
+    if not companies:
+        return None
+    kw = re.compile(r'\\b(market|stocks?|equities|indices|index|dow|nasdaq|s&p|s\\&p|fed|fomc|inflation|cpi|ppi|jobs?|economy|treasury|yields?|rates?)\\b', re.I)
+    best = None; best_score = -1
+    for c in companies:
+        h = c.get("headline") or ""
         if not h:
             continue
-        hl = h.lower()
-        if any(k in hl for k in keywords):
-            ts = _parse_to_dt(c.get("when")) or datetime.min.replace(tzinfo=timezone.utc)
-            # Prefer items that are NOT strongly company-specific
-            belongs = _belongs_to_company(h, c)
-            score = 2 if not belongs else 1
-            if (best is None) or (score > best[0]) or (score == best[0] and ts > best_ts):
-                best = (score, c, h, ts)
-                best_ts = ts
-    return best  # tuple or None
-
-
+        score = 0
+        if kw.search(h):
+            score += 100
+        # recency
+        dt = _parse_to_dt(c.get("when"))
+        if dt:
+            score += int(dt.timestamp() // 60) % 100  # tie-breaker
+        if score > best_score:
+            best = (score, c, h, c.get("when"))
+            best_score = score
+    return best
 
 
 def _hero_block(headline: str, source: str, when, url: str, excerpt: str = None):
@@ -366,7 +344,7 @@ def _hero_block(headline: str, source: str, when, url: str, excerpt: str = None)
     safe_src = escape(source or "") if source else ""
     href = escape(url or "#")
     ex = excerpt or ""
-    # Build excerpt block (3 lines clamp if present)
+    # Build excerpt block (show more: ~10 lines)
     excerpt_html = ""
     if ex:
         excerpt_html = ('<div style="font-size:14px;line-height:1.5;color:#e5e7eb;'
@@ -377,7 +355,7 @@ def _hero_block(headline: str, source: str, when, url: str, excerpt: str = None)
         parts = []
         if safe_src: parts.append(safe_src)
         if when_txt: parts.append(escape(when_txt))
-        meta_html = "<div style=\"margin-top:8px;font-size:12px;color:#9aa0a6;\">" + " • ".join(parts) + "</div>"
+        meta_html = "<div style=\\"margin-top:8px;font-size:12px;color:#9aa0a6;\\">" + " • ".join(parts) + "</div>"
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:14px 0;">
   <tr>
@@ -386,7 +364,7 @@ def _hero_block(headline: str, source: str, when, url: str, excerpt: str = None)
       <div style="font-size:18px;line-height:1.35;color:#ffffff;">{safe_h}</div>
       {excerpt_html}
       {meta_html}
-      <div style="margin-top:10px;">{_button("Read more", href, size="md")}</div>
+      <div style="margin-top:10px;">{_button("Read article", href, size="md")}</div>
     </td>
   </tr>
 </table>
@@ -421,14 +399,16 @@ def render_email(summary, companies, cryptos=None):
     hero_data = None
     if isinstance(summary, dict):
         hero_data = summary.get("hero") or summary.get("market_headline")
-    if hero_data and isinstance(hero_data, dict):
+    if hero_data and isinstance(hero_data, dict) and hero_data.get("headline"):
         hero_html = _hero_block(hero_data.get("headline"), hero_data.get("source"),
-                                hero_data.get("when"), hero_data.get("url"), hero_data.get("excerpt") or hero_data.get("summary") or hero_data.get("snippet"))
+                                hero_data.get("when"), hero_data.get("url"),
+                                hero_data.get("excerpt") or hero_data.get("summary"))
     else:
         picked = _pick_hero_item(companies)
         if picked:
             _, c0, h0, ts0 = picked
-            hero_html = _hero_block(h0, c0.get("source"), c0.get("when"), c0.get("news_url"), c0.get("summary") or c0.get("snippet") or "")
+            hero_html = _hero_block(h0, c0.get("source"), c0.get("when"), c0.get("news_url"),
+                                    c0.get("summary") or "")
 
     # Assemble body sections
     stocks_section = _section_container("Stocks & ETFs", _grid(company_cards)) if company_cards else ""
@@ -445,7 +425,7 @@ def render_email(summary, companies, cryptos=None):
         .stack-col {{ display:block !important; width:100% !important; max-width:100% !important; padding-left:0 !important; padding-right:0 !important; }}
         .spacer {{ display:none !important; width:0 !important; }}
       }}
-      /* Fix card height on desktop, auto on mobile */
+      /* Card height rules: desktop max 300px; mobile auto */
       .ci-card {{ max-height: 300px; }}
       @media only screen and (max-width: 620px) {{
         .ci-card {{ max-height: none !important; }}
