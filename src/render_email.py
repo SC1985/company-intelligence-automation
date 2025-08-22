@@ -128,9 +128,7 @@ def _range_bar(pos: float, low: float, high: float):
     )
     caption = (f'<div style="font-size:12px;color:#9aa0a6;margin-top:4px;">'
                f'Low ${float(low or 0):.2f} • High ${float(high or 0):.2f}</div>')
-    return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'
-            + track + caption)
-            + track + caption)
+    return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'            + track + caption)
 
 def _nowrap_metrics(text: str) -> str:
     """Wrap tokens like m/m, y/y, q/q with their numeric value in a no-wrap span to prevent mid-token breaks.
