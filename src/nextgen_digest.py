@@ -515,9 +515,16 @@ async def build_nextgen_html(logger) -> str:
             else: down += 1
             movers.append({"ticker": sym, "pct": p1d})
 
+        # Compute YTD vs last trading day of previous calendar year
+        pytd = None
+        if dt:
+            last_year = dt[-1].year - 1
+            for i2 in range(len(dt)-1, -1, -1):
+                if dt[i2].year == last_year:
+                    pytd = _pct(latest, cl[i2]); break
         companies.append({
             "name": name, "ticker": sym, "price": latest,
-            "pct_1d": p1d, "pct_1w": p1w, "pct_1m": p1m, "pct_ytd": None,
+            "pct_1d": p1d, "pct_1w": p1w, "pct_1m": p1m, "pct_ytd": pytd,
             "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
             "headline": headline, "source": h_source, "when": h_when,
             "next_event": None, "vol_x_avg": None,
