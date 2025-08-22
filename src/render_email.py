@@ -250,13 +250,14 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
                 pass
         bullets_html = ""
         for i, b in enumerate(bullets):
+            prefix = "★ " if i == 0 else "• "
             if i == 0:
                 bullets_html += (
-                  '<li class="brief-bullet" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden;text-overflow:ellipsis;max-height:calc(1.4em * 6);">'
-                  + escape(b) + "</li>"
+                  '<li class="brief-bullet" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden;text-overflow:ellipsis;line-height:1.35;max-height:calc(1.35em * 6);">'
+                  + prefix + escape(b) + "</li>"
                 )
             else:
-                bullets_html += "<li>" + escape(b) + "</li>"
+                bullets_html += "<li>" + prefix + escape(b) + "</li>"
 
 
         range_html = _range_bar(range_pct, float(low52 or 0.0), float(high52 or 0.0))
@@ -264,14 +265,14 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
 
         price_fmt = f"${price:.4f}" if str(t).endswith("-USD") else f"${price:.2f}"
         return f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;;height:420px;" class="ci-card" height="420">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;height:320px; class="ci-card" height="320"">
   <tr>
-    <td style="padding:12px 14px;height:420px;vertical-align:top;" height="420">
+    <td style="padding:12px 14px;;height:320px;vertical-align:top;" height="320">
       <div style="font-weight:700;font-size:16px;line-height:1.3;color:#fff;">{escape(str(name))} <span style="color:#9aa0a6;">({escape(str(t))})</span></div>
       <div style="margin-top:2px;font-size:14px;color:#e5e7eb;">{price_fmt}</div>
       <div style="margin-top:8px;">{chips}</div>
       <div style="margin-top:12px;">{range_html}</div>
-      <ul style="margin:10px 0 0 16px;padding:0;color:#e5e7eb;font-size:13px;line-height:1.4;">
+      <ul style="margin:10px 0 0 16px;padding:0;color:#e5e7eb;font-size:13px;line-height:1.4;list-style:none">
         {bullets_html}
       </ul>
       <div style="margin-top:10px;">{ctas}</div>
@@ -318,8 +319,8 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
                 f'<div style="font-size:13px;color:#e5e7eb;margin:4px 0;">{escape(ds)} • <strong>{escape(c.get("ticker",""))}</strong> • {escape(c.get("label",""))}</div>'
             )
         catalysts_html = f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#111;border:1px solid #2a2a2a;border-radius:8px;;height:420px;" class="ci-card" height="420">
-  <tr><td style="padding:12px 14px;height:420px;vertical-align:top;" height="420">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#111;border:1px solid #2a2a2a;border-radius:8px;height:320px; class="ci-card" height="320"">
+  <tr><td style="padding:12px 14px;;height:320px;vertical-align:top;" height="320">
     <div style="font-weight:700;color:#fff;margin-bottom:6px;">Next 7 days</div>
     {''.join(items_html)}
   </td></tr>
@@ -340,7 +341,7 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
     }}
   
     /* Equal-height company cards on desktop */
-    .ci-card {{ height: 420px; }}
+    .ci-card {{ height: 320px; }}
     @media only screen and (max-width: 620px) {{
       .ci-card {{ height: auto !important; }}
     }}
@@ -351,7 +352,8 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
       -webkit-box-orient: vertical;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-height: calc(1.4em * 6);
+      line-height: 1.35;
+      max-height: calc(1.35em * 6);
     }}
 </style>
 </head>
@@ -365,7 +367,7 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
           </span>
         </td></tr>
 
-        <tr><td style="padding:12px 14px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
+        <tr><td style="padding:12px 14px;background:#111;border:1px solid #2a2a2a;border-radius:8px;height:320px;vertical-align:top;" height="320">
           <div style="font-weight:700;font-size:18px;color:#fff;">Weekly Company Intelligence Digest</div>
           <div style="font-size:13px;color:#9aa0a6;margin-top:2px;">{len(companies)} companies • {up} ↑ / {down} ↓ • Data as of {asof}</div>
           <div style="margin-top:8px;">{heat}</div>
