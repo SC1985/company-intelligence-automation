@@ -252,7 +252,7 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
         for i, b in enumerate(bullets):
             if i == 0:
                 bullets_html += (
-                  '<li class="brief-bullet" style="list-style:none;margin-left:-1em;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden;text-overflow:ellipsis;max-height:calc(1.4em * 6);">★ ' + escape(b) + "</li>"
+                  '<li class="brief-bullet" style="list-style-type:none;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden;text-overflow:ellipsis;line-height:1.4;max-height:calc(1.4em * 5);">★ ' + escape(b) + "</li>"
                 )
             else:
                 bullets_html += "<li>" + escape(b) + "</li>"
@@ -263,29 +263,20 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
 
         price_fmt = f"${price:.4f}" if str(t).endswith("-USD") else f"${price:.2f}"
         return f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:0;margin:0 0 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;;height:350px" class="ci-card" height="350">
   <tr>
-    <td class="ci-frame" height="320" style="padding:1px;background:#2a2a2a;border-radius:8px;height:320px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#111;border-radius:7px;height:318px;" class="ci-card" height="318">
-        <tr>
-          <td style="padding:12px 14px;height:318px;vertical-align:top;" height="318">
-
+    <td style="padding:12px 14px;height:350px;vertical-align:top;" height="350">
       <div style="font-weight:700;font-size:16px;line-height:1.3;color:#fff;">{escape(str(name))} <span style="color:#9aa0a6;">({escape(str(t))})</span></div>
       <div style="margin-top:2px;font-size:14px;color:#e5e7eb;">{price_fmt}</div>
       <div style="margin-top:8px;">{chips}</div>
       <div style="margin-top:12px;">{range_html}</div>
-      <ul style="margin:10px 0 0 16px;padding:0;color:#e5e7eb;font-size:13px;line-height:1.4;">
+      <ul style="margin:10px 0 0 0;padding:0;color:#e5e7eb;font-size:13px;line-height:1.4;list-style-position:inside;">
         {bullets_html}
       </ul>
       <div style="margin-top:10px;">{ctas}</div>
-    
-          </td>
-        </tr>
-      </table>
     </td>
   </tr>
 </table>
-
 """
 
     def _grid(cards):
@@ -348,20 +339,11 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
     }}
   
     /* Equal-height company cards on desktop */
-    .ci-card {{ height: 318px; }}
+    .ci-card {{ height: 350px; }}
     @media only screen and (max-width: 620px) {{
       .ci-card {{ height: auto !important; }}
     }}
-    /* Clamp 1st bullet to 6 lines */
-    .brief-bullet {{
-      display: -webkit-box;
-      -webkit-line-clamp: 6;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-height: calc(1.4em * 6);
-    }}
-</style>
+    </style>
 </head>
 <body style="margin:0;background:#0b0b0c;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b0c;">
