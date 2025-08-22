@@ -236,8 +236,8 @@ def _grid(cards):
             row = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
   <tr>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-right:12px;">{left}</td>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-left:12px;">{right}</td>
+    <td class="stack-col" width="50%" style="vertical-align:top;padding-right:6px;">{left}</td>
+    <td class="stack-col" width="50%" style="vertical-align:top;padding-left:6px;">{right}</td>
   </tr>
 </table>
 """
