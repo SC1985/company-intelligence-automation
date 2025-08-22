@@ -243,8 +243,22 @@ def _pick_best_for_ticker(t: str, arts: List[Dict[str, Any]]) -> Dict[str, Optio
         if isinstance(src, dict): src = src.get("name") or src.get("id") or src.get("domain")
         when = best.get("publishedAt") or best.get("published_at") or best.get("time")
         url = _first_url_from_item(best, t)
-        return {"title": title, "source": src if isinstance(src, str) else None, "when": when, "url": url}
-    return {"title": None, "source": None, "when": None, "url": f"https://finance.yahoo.com/quote/{t}/news"}
+        # 🔥 ADD: Include description for hero body
+        description = best.get("description") or best.get("summary") or ""
+        return {
+            "title": title, 
+            "source": src if isinstance(src, str) else None, 
+            "when": when, 
+            "url": url,
+            "description": description  # 🔥 NEW: Article summary
+        }
+    return {
+        "title": None, 
+        "source": None, 
+        "when": None, 
+        "url": f"https://finance.yahoo.com/quote/{t}/news",
+        "description": ""  # 🔥 NEW: Empty fallback
+    }
 
 def _coalesce_news_map(news: Any) -> Dict[str, Dict[str, Optional[str]]]:
     out: Dict[str, Dict[str, Optional[str]]] = {}
@@ -293,8 +307,16 @@ def _news_headline_via_newsapi(ticker: str, name: str) -> Optional[Dict[str, str
         title = a.get("title"); link = a.get("url")
         src = (a.get("source") or {}).get("name")
         when = a.get("publishedAt")
+        # 🔥 ADD: Capture article description for hero body
+        description = a.get("description") or ""
         if title and link:
-            return {"title": title, "url": link, "source": src, "when": when}
+            return {
+                "title": title, 
+                "url": link, 
+                "source": src, 
+                "when": when,
+                "description": description  # 🔥 NEW: Article summary
+            }
     return None
 
 def _news_headline_via_yahoo_rss(ticker: str) -> Optional[Dict[str, str]]:
@@ -312,7 +334,20 @@ def _news_headline_via_yahoo_rss(ticker: str) -> Optional[Dict[str, str]]:
         title = top.findtext("title")
         link = top.findtext("link")
         pub = top.findtext("pubDate")
-        return {"title": title, "url": link, "source": "Yahoo Finance", "when": pub}
+        # 🔥 ADD: Try to get description from RSS
+        description = top.findtext("description") or ""
+        # Clean up HTML tags if present
+        if description:
+            import re
+            description = re.sub(r'<[^>]+>', '', description).strip()
+        
+        return {
+            "title": title, 
+            "url": link, 
+            "source": "Yahoo Finance", 
+            "when": pub,
+            "description": description  # 🔥 NEW: Article summary
+        }
     except Exception:
         return None
 
@@ -333,7 +368,14 @@ def _news_headline_for_crypto_coingecko(coingecko_id: str) -> Optional[Dict[str,
         p = desc.strip().split(".")[0].strip()
         if p:
             title = p
-    return {"title": title, "url": link, "source": src, "when": when}
+    
+    return {
+        "title": title, 
+        "url": link, 
+        "source": src, 
+        "when": when,
+        "description": desc  # 🔥 NEW: Already has description
+    }
 
 # -------------------- Math helpers --------------------
 
@@ -407,10 +449,13 @@ async def build_nextgen_html(logger) -> str:
 
         # ----- Headline selection per entity -----
         headline = None; h_source = None; h_when = None; h_url = _news_url_for(sym)
+        description = ""  # 🔥 ADD: Store article description
+        
         # 1) Engine
         m = news_map_from_engine.get(sym)
         if m and m.get("title"):
             headline, h_source, h_when, h_url = m.get("title"), m.get("source"), m.get("when"), m.get("url") or h_url
+            description = m.get("description") or ""  # 🔥 ADD: Get description from engine
         else:
             # 2) NewsAPI (if available)
             if newsapi_key_present:
@@ -418,18 +463,21 @@ async def build_nextgen_html(logger) -> str:
                 r = _news_headline_via_newsapi(sym, name)
                 if r and r.get("title"):
                     headline, h_source, h_when, h_url = r["title"], r.get("source"), r.get("when"), r.get("url", h_url)
+                    description = r.get("description") or ""  # 🔥 ADD: Store description
             # 3) Yahoo RSS
             if not headline:
                 _pace(0.8)
                 r = _news_headline_via_yahoo_rss(sym)
                 if r and r.get("title"):
                     headline, h_source, h_when, h_url = r["title"], r.get("source"), r.get("when"), r.get("url", h_url)
+                    description = r.get("description") or ""  # 🔥 ADD: Store description
             # 4) Crypto-only: CoinGecko status updates
             if not headline and is_crypto:
                 _pace(0.8)
                 r = _news_headline_for_crypto_coingecko(e.get("coingecko_id") or COINGECKO_IDS.get(sym))
                 if r and r.get("title"):
                     headline, h_source, h_when, h_url = r["title"], r.get("source"), r.get("when"), r.get("url", h_url)
+                    description = r.get("description") or ""  # 🔥 ADD: Store description
 
         if is_crypto:
             # ---- Crypto prices (CoinGecko -> AV -> placeholder) ----
@@ -462,6 +510,7 @@ async def build_nextgen_html(logger) -> str:
                     "pct_1m": _pct(latest, m1), "pct_ytd": pytd,
                     "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
                     "headline": headline, "source": h_source, "when": h_when,
+                    "description": description,  # 🔥 ADD: Article description
                     "next_event": None, "vol_x_avg": None,
                     "news_url": h_url,
                     "pr_url": {
@@ -482,6 +531,7 @@ async def build_nextgen_html(logger) -> str:
                     "pct_1d": None, "pct_1w": None, "pct_1m": None, "pct_ytd": None,
                     "low_52w": 0.0, "high_52w": 0.0, "range_pct": 50.0,
                     "headline": headline, "source": h_source, "when": h_when,
+                    "description": description,  # 🔥 ADD: Article description
                     "next_event": None, "vol_x_avg": None,
                     "news_url": h_url, "pr_url": h_url,
                 })
@@ -527,6 +577,7 @@ async def build_nextgen_html(logger) -> str:
             "pct_1d": p1d, "pct_1w": p1w, "pct_1m": p1m, "pct_ytd": pytd,
             "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
             "headline": headline, "source": h_source, "when": h_when,
+            "description": description,  # 🔥 ADD: Article description
             "next_event": None, "vol_x_avg": None,
             "news_url": h_url, "pr_url": f"https://finance.yahoo.com/quote/{sym}/press-releases",
         })
