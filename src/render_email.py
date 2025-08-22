@@ -160,7 +160,9 @@ def _build_card(c):
     news_url = c.get("news_url") or f"https://finance.yahoo.com/quote/{t}/news"
     pr_url = c.get("pr_url") or f"https://finance.yahoo.com/quote/{t}/press-releases"
 
-    chips = "".join([_chip("1D", p1d), _chip("1W", p1w), _chip("1M", p1m), _chip("YTD", pytd)])
+    chips_row1 = _chip("1D", p1d) + _chip("1W", p1w)
+    chips_row2 = _chip("1M", p1m) + _chip("YTD", pytd)
+    chips = f'<div style="white-space:nowrap;">{chips_row1}</div><div style="margin-top:4px;white-space:nowrap;">{chips_row2}</div>'
 
     bullets = []
     if headline:
