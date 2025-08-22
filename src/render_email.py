@@ -1,4 +1,3 @@
-# src/render_email.py
 # UI-focused renderer for the Intelligence Digest email.
 # - Desktop: 2-col grid, cards max 300px tall
 # - Mobile: 1-col stack, cards auto-height
