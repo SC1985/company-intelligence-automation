@@ -118,24 +118,25 @@ def _button(label: str, url: str, size="md"):
             f'{safe_label} →</a>')
 
 
+
 def _range_bar(pos: float, low: float, high: float):
-    # Robust table-based marker: left filler %, 6px marker, right flexible
+    """Table-based 52-week bar with a visible marker cell (6px)."""
     pct = _safe_float(pos, 50.0)
     pct = max(0.0, min(100.0, pct))
     marker_w = 6  # px
     track_h = 6
     left_pct = pct
-    # Build track
-    track = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">'
-             f'<tr height="{track_h}" style="height:{track_h}px;line-height:0;font-size:0;">'
-             f'<td width="{left_pct:.1f}%" style="width:{left_pct:.1f}%;background:#2a2a2a;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
-             f'<td width="{marker_w}" style="width:{marker_w}px;background:#3b82f6;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
-             f'<td style="background:#2a2a2a;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
-             f'</tr></table>')
+    track = (
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">'
+        f'<tr height="{track_h}" style="height:{track_h}px;line-height:0;font-size:0;">'
+        f'<td width="{left_pct:.1f}%" style="width:{left_pct:.1f}%;background:#2a2a2a;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
+        f'<td width="{marker_w}" style="width:{marker_w}px;background:#3b82f6;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
+        f'<td style="background:#2a2a2a;height:{track_h}px;line-height:0;font-size:0;">&nbsp;</td>'
+        f'</tr></table>'
+    )
     caption = (f'<div style="font-size:12px;color:#9aa0a6;margin-top:4px;">'
                f'Low ${_safe_float(low, 0.0):.2f} • High ${_safe_float(high, 0.0):.2f}</div>')
-    return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'
-            + track + caption)
+    return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>' + track + caption)
 
 
 def _canon_company_tokens(name: str):
@@ -251,10 +252,10 @@ def _build_card(c):
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 6px;background:#111;
               border:1px solid #2a2a2a;mso-border-alt:1px solid #2a2a2a;
-              border-radius:8px;height:350px;"
-       class="ci-card" height="350">
+              border-radius:8px;height:320px;"
+       class="ci-card" >
   <tr>
-    <td style="padding:12px 14px;height:350px;vertical-align:top;" height="350">
+    <td class="ci-card-body" style="padding:12px 14px;height:320px;vertical-align:top;" >
       <div style="font-weight:700;font-size:16px;line-height:1.3;color:#fff;">
         {escape(str(name))} <span style="color:#9aa0a6;">({escape(str(t))})</span>
       </div>
@@ -275,9 +276,9 @@ def _build_card(c):
         return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 6px;background:#111;
-              border:1px solid #2a2a2a;border-radius:8px;height:350px;" class="ci-card" height="350">
+              border:1px solid #2a2a2a;border-radius:8px;height:320px;" class="ci-card" >
   <tr>
-    <td style="padding:12px 14px;height:350px;vertical-align:top;" height="350">
+    <td class="ci-card-body" style="padding:12px 14px;height:320px;vertical-align:top;" >
       <div style="font-weight:700;font-size:16px;line-height:1.3;color:#fff;">{fallback_name}</div>
       <div style="margin-top:8px;color:#9aa0a6;font-size:13px;">Data temporarily unavailable.</div>
     </td>
@@ -357,19 +358,34 @@ def _pick_hero_item(companies):
     return best  # tuple or None
 
 
-def _hero_block(headline: str, source: str, when, url: str):
+
+
+def _hero_block(headline: str, source: str, when, url: str, excerpt: str = None):
     when_txt = _fmt_ct(when, force_time=False, tz_suffix_policy="never") if when else ""
     safe_h = escape(headline or "")
-    safe_src = f" <span style='color:#9aa0a6;'>({escape(source)}, {escape(when_txt)})</span>" if source and when_txt else \
-               (f" <span style='color:#9aa0a6;'>({escape(source)})</span>" if source else \
-                (f" <span style='color:#9aa0a6;'>({escape(when_txt)})</span>" if when_txt else ""))
+    safe_src = escape(source or "") if source else ""
     href = escape(url or "#")
+    ex = excerpt or ""
+    # Build excerpt block (3 lines clamp if present)
+    excerpt_html = ""
+    if ex:
+        excerpt_html = ('<div style="font-size:14px;line-height:1.5;color:#e5e7eb;'
+                        'display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;'
+                        'overflow:hidden;text-overflow:ellipsis;margin-top:6px;">' + escape(ex) + '</div>')
+    meta_html = ""
+    if safe_src or when_txt:
+        parts = []
+        if safe_src: parts.append(safe_src)
+        if when_txt: parts.append(escape(when_txt))
+        meta_html = "<div style=\"margin-top:8px;font-size:12px;color:#9aa0a6;\">" + " • ".join(parts) + "</div>"
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:14px 0;">
   <tr>
     <td style="padding:14px;background:#0f172a;border:1px solid #2a2a2a;border-radius:10px;">
       <div style="font-weight:700;font-size:20px;line-height:1.3;color:#e5e7eb;margin:0 0 8px 0;">Market Update</div>
-      <div style="font-size:16px;line-height:1.4;color:#ffffff;">{safe_h}{safe_src}</div>
+      <div style="font-size:18px;line-height:1.35;color:#ffffff;">{safe_h}</div>
+      {excerpt_html}
+      {meta_html}
       <div style="margin-top:10px;">{_button("Read more", href, size="md")}</div>
     </td>
   </tr>
@@ -407,12 +423,12 @@ def render_email(summary, companies, cryptos=None):
         hero_data = summary.get("hero") or summary.get("market_headline")
     if hero_data and isinstance(hero_data, dict):
         hero_html = _hero_block(hero_data.get("headline"), hero_data.get("source"),
-                                hero_data.get("when"), hero_data.get("url"))
+                                hero_data.get("when"), hero_data.get("url"), hero_data.get("excerpt") or hero_data.get("summary") or hero_data.get("snippet"))
     else:
         picked = _pick_hero_item(companies)
         if picked:
             _, c0, h0, ts0 = picked
-            hero_html = _hero_block(h0, c0.get("source"), c0.get("when"), c0.get("news_url"))
+            hero_html = _hero_block(h0, c0.get("source"), c0.get("when"), c0.get("news_url"), c0.get("summary") or c0.get("snippet") or "")
 
     # Assemble body sections
     stocks_section = _section_container("Stocks & ETFs", _grid(company_cards)) if company_cards else ""
@@ -430,9 +446,10 @@ def render_email(summary, companies, cryptos=None):
         .spacer {{ display:none !important; width:0 !important; }}
       }}
       /* Fix card height on desktop, auto on mobile */
-      .ci-card {{ height: 350px; }}
+      .ci-card {{ height: 320px; }}
       @media only screen and (max-width: 620px) {{
         .ci-card {{ height: auto !important; }}
+        .ci-card-body {{ height: auto !important; }}
       }}
       /* Clamp first bullet (news) */
       .brief-bullet {{
