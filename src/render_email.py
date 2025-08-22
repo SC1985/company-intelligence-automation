@@ -252,10 +252,10 @@ def _build_card(c):
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 6px;background:#111;
               border:1px solid #2a2a2a;mso-border-alt:1px solid #2a2a2a;
-              border-radius:8px;height:320px;"
+              border-radius:8px;max-height:300px;"
        class="ci-card" >
   <tr>
-    <td class="ci-card-body" style="padding:12px 14px;height:320px;vertical-align:top;" >
+    <td class="ci-card-body" style="padding:12px 14px;max-height:300px;vertical-align:top;overflow:hidden;" >
       <div style="font-weight:700;font-size:16px;line-height:1.3;color:#fff;">
         {escape(str(name))} <span style="color:#9aa0a6;">({escape(str(t))})</span>
       </div>
@@ -276,9 +276,9 @@ def _build_card(c):
         return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 6px;background:#111;
-              border:1px solid #2a2a2a;border-radius:8px;height:320px;" class="ci-card" >
+              border:1px solid #2a2a2a;border-radius:8px;max-height:300px;" class="ci-card" >
   <tr>
-    <td class="ci-card-body" style="padding:12px 14px;height:320px;vertical-align:top;" >
+    <td class="ci-card-body" style="padding:12px 14px;max-height:300px;vertical-align:top;overflow:hidden;" >
       <div style="font-weight:700;font-size:16px;line-height:1.3;color:#fff;">{fallback_name}</div>
       <div style="margin-top:8px;color:#9aa0a6;font-size:13px;">Data temporarily unavailable.</div>
     </td>
@@ -370,8 +370,8 @@ def _hero_block(headline: str, source: str, when, url: str, excerpt: str = None)
     excerpt_html = ""
     if ex:
         excerpt_html = ('<div style="font-size:14px;line-height:1.5;color:#e5e7eb;'
-                        'display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;'
-                        'overflow:hidden;text-overflow:ellipsis;margin-top:6px;">' + escape(ex) + '</div>')
+                        'display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:10;'
+                        'overflow:hidden;text-overflow:ellipsis;max-height:calc(1.5em * 10);margin-top:6px;">' + escape(ex) + '</div>')
     meta_html = ""
     if safe_src or when_txt:
         parts = []
@@ -446,10 +446,10 @@ def render_email(summary, companies, cryptos=None):
         .spacer {{ display:none !important; width:0 !important; }}
       }}
       /* Fix card height on desktop, auto on mobile */
-      .ci-card {{ height: 320px; }}
+      .ci-card {{ max-height: 300px; }}
       @media only screen and (max-width: 620px) {{
-        .ci-card {{ height: auto !important; }}
-        .ci-card-body {{ height: auto !important; }}
+        .ci-card {{ max-height: none !important; }}
+        .ci-card-body {{ max-height: none !important; overflow: visible !important; }}
       }}
       /* Clamp first bullet (news) */
       .brief-bullet {{
