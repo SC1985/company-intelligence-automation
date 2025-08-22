@@ -113,6 +113,29 @@ def _range_bar(pos: float, low: float, high: float):
     return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'
             + track + caption)
 
+def _nowrap_metrics(text: str) -> str:
+    """Wrap tokens like m/m, y/y, q/q with their numeric value in a no-wrap span to prevent mid-token breaks.
+
+    Works on escaped text (we inject HTML tags after escaping).
+    """
+
+    import re
+
+    if not text:
+
+        return text
+
+    # Match patterns like 'm/m 2.3%', 'y/y: -10%', 'q/q +1.2%'
+
+    pattern = re.compile(r'(?i)\b([myq]/[myq]\s*:?\s*[+\-]?\d+(?:\.\d+)?%?)')
+
+    def repl(m):
+
+        return f'<span style="white-space:nowrap">{m.group(0)}</span>'
+
+    return pattern.sub(repl, text)
+
+
 
 def _build_card(c):
     name = c.get("name") or c.get("ticker")
@@ -168,10 +191,10 @@ def _build_card(c):
               'display:-webkit-box;-webkit-box-orient:vertical;'
               '-webkit-line-clamp:5;overflow:hidden;text-overflow:ellipsis;'
               'line-height:1.4;max-height:calc(1.4em * 5);">'
-              + escape(b) + "</li>"
+              + _nowrap_metrics(escape(b)) + "</li>"
             )
         else:
-            bullets_html += '<li style="margin-left:0;padding-left:0;list-style-position:inside;">' + escape(b) + "</li>"
+            bullets_html += '<li style="margin-left:0;padding-left:0;list-style-position:inside;">' + _nowrap_metrics(escape(b)) + "</li>"
 
     range_html = _range_bar(range_pct, float(low52 or 0.0), float(high52 or 0.0))
     ctas = _button("News", news_url, size="md") + _button("Press", pr_url, size="md")
@@ -189,7 +212,7 @@ def _build_card(c):
         {escape(str(name))} <span style="color:#9aa0a6;">({escape(str(t))})</span>
       </div>
       <div style="margin-top:2px;font-size:14px;color:#e5e7eb;">{price_fmt}</div>
-      <div style="margin-top:8px;">{chips}</div>
+      <div class="chips" style="margin-top:8px;white-space:nowrap;">{chips}</div>
       <div style="margin-top:12px;">{range_html}</div>
       <ul style="margin:10px 0 0 0;padding:0;color:#e5e7eb;font-size:13px;line-height:1.4;">
         {bullets_html}
@@ -202,7 +225,7 @@ def _build_card(c):
 
 
 def _grid(cards):
-    """Two-column grid with a percent-based spacer for desktop; stacks on mobile."""
+    """Two-column grid with 12px gutter via column padding (desktop); stacks on mobile."""
     rows = []
     for i in range(0, len(cards), 2):
         left = cards[i]
@@ -211,14 +234,12 @@ def _grid(cards):
             row = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
   <tr>
-    <td class="stack-col" width="48%" style="vertical-align:top;">{left}</td>
-    <td class="spacer" width="4%" style="width:4%;font-size:0;line-height:0;">&nbsp;</td>
-    <td class="stack-col" width="48%" style="vertical-align:top;">{right}</td>
+    <td class="stack-col" width="50%" style="vertical-align:top;padding-right:12px;">{left}</td>
+    <td class="stack-col" width="50%" style="vertical-align:top;padding-left:12px;">{right}</td>
   </tr>
 </table>
 """
         else:
-            # Single card row (last odd item)
             row = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
   <tr>
@@ -239,7 +260,7 @@ def _section_container(title: str, inner_html: str):
               mso-border-alt:1px solid #2a2a2a;border-radius:10px;margin:14px 0 0 0;">
   <tr>
     <td style="padding:16px;">
-      <div style="font-weight:700;font-size:16px;color:#e5e7eb;margin:0 0 10px 0;">{safe_title}</div>
+      <div style="font-weight:700;font-size:32px;color:#e5e7eb;margin:0 0 10px 0;">{safe_title}</div>
       {inner_html}
     </td>
   </tr>
