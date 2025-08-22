@@ -1,5 +1,6 @@
+# src/render_email.py
 # UI-focused renderer for the Intelligence Digest email.
-# - Desktop: 2-col grid, cards max 300px tall
+# - Desktop: 2-col grid (6px gutter), cards max 300px tall
 # - Mobile: 1-col stack, cards auto-height
 # - Hero: title + first paragraph + source/date line (body color matches headline)
 # - Chips: 1D+1W on line 1; 1M+YTD on line 2
@@ -151,7 +152,6 @@ def _belongs_to_company(c: dict, headline: str) -> bool:
     if ticker:
         base_tokens.add(ticker)
     h = headline.lower()
-    # Require at least one meaningful token match
     return any(tok and tok in h for tok in base_tokens)
 
 
@@ -161,51 +161,80 @@ def _strip_tags(html: str) -> str:
     return re.sub(r"<[^>]+>", "", html or "").strip()
 
 
-def _first_paragraph(hero: dict) -> str:
+def _first_paragraph(hero: dict, title: str = "") -> str:
+    """
+    Return the first meaningful paragraph from hero content.
+    Prefers HTML <p> blocks; falls back to text fields.
+    Skips paragraphs that duplicate the title.
+    """
     if not hero:
         return ""
-    # Prefer HTML fields
-    for key in ("body_html", "content_html", "html", "article_html"):
+    title_norm = (title or "").strip().lower()
+
+    # 1) HTML fields first
+    html_keys = ("body_html", "content_html", "html", "article_html", "summary_html", "description_html")
+    for key in html_keys:
         html = hero.get(key)
         if html:
+            # First non-trivial <p>
             paras = re.findall(r"<p[^>]*>(.*?)</p>", html, flags=re.I | re.S)
             for p in paras:
                 txt = _strip_tags(p)
-                if txt and len(txt) > 20:
+                if txt and len(txt) > 20 and txt.strip().lower() != title_norm:
                     return txt
-            # fallback: plain text blocks
+            # Fallback: plain text from HTML
             txt = _strip_tags(html)
-            for part in re.split(r"\r?\n\r?\n+", txt):
+            for part in re.split(r"\r?\n\r?\n+|\n{2,}", txt):
                 part = part.strip()
-                if part:
+                if part and part.lower() != title_norm:
                     return part
-    # Plain text fields
-    for key in ("body", "content", "excerpt", "summary"):
+
+    # 2) Structured arrays
+    paras_list = hero.get("paragraphs") or hero.get("content_paragraphs")
+    if isinstance(paras_list, (list, tuple)):
+        for p in paras_list:
+            txt = _strip_tags(str(p))
+            if txt and len(txt) > 20 and txt.strip().lower() != title_norm:
+                return txt
+
+    # 3) Text fallbacks (ordered by typical usefulness)
+    text_keys = (
+        "first_paragraph", "firstParagraph", "lede", "lead", "dek",
+        "abstract", "description", "summary", "excerpt", "content", "body",
+        "snippet", "preview", "preview_text"
+    )
+    for key in text_keys:
         val = hero.get(key)
         if val:
-            text = str(val).strip()
-            for part in re.split(r"\r?\n\r?\n+", text):
+            text = _strip_tags(str(val))
+            blocks = re.split(r"\r?\n\r?\n+|\n{2,}", text)
+            for part in blocks:
                 part = part.strip()
-                if part:
+                if part and part.lower() != title_norm:
                     return part
+            m = re.search(r"(.+?[\.!?])(\s|$)", text)
+            if m:
+                cand = m.group(1).strip()
+                if cand and cand.lower() != title_norm:
+                    return cand
+
     return ""
 
 
 def _select_hero(summary: dict, companies: list, cryptos: list):
     hero = None
     if isinstance(summary, dict):
-        # preferred key
         cand = summary.get("hero") or summary.get("market_hero") or summary.get("market")
         if isinstance(cand, dict) and (cand.get("title") or cand.get("body") or cand.get("content")
-                                       or cand.get("body_html") or cand.get("content_html")):
+                                       or cand.get("body_html") or cand.get("content_html")
+                                       or cand.get("first_paragraph") or cand.get("description")
+                                       or cand.get("summary")):
             hero = cand
     if hero:
         return hero
-    # Infer a market-wide headline (very light heuristic)
+    # Fallback: scan broad-market signals from entities
     keywords = ("market", "stocks", "equities", "indices", "index", "s&p", "nasdaq", "dow",
-                "fed", "federal reserve", "inflation", "cpi", "jobs")
-    for lst in (companies or []):
-        pass  # ensure variable exists
+                "fed", "federal reserve", "inflation", "cpi", "jobs", "rates", "treasury", "yields")
     all_entities = (companies or []) + (cryptos or [])
     for c in all_entities:
         hl = str(c.get("headline") or "")
@@ -229,18 +258,22 @@ def _render_hero(hero: dict) -> str:
     url = hero.get("url") or "#"
     source = hero.get("source") or ""
     when = _fmt_ct(hero.get("when"), force_time=False, tz_suffix_policy="never") if hero.get("when") else ""
-    para = _first_paragraph(hero)
 
-    # Avoid duplicating title as "first paragraph"
-    if para and title and para.strip().lower() == title.strip().lower():
+    # First paragraph (not the headline)
+    para = _first_paragraph(hero, title=title)
+    if para and para.strip().lower() == title.strip().lower():
         para = ""
 
-    # Body HTML (inherit headline color so they match)
-    body_html = (f'<div style="margin-top:8px;font-size:14px;line-height:1.5;'
-                 f'display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:24;'
-                 f'overflow:hidden;text-overflow:ellipsis;max-height:calc(1.5em * 24);'
-                 f'color:inherit;">{escape(para)}</div>') if para else ""
+    # Body HTML: same color as the headline
+    body_html = (
+        f'<div style="margin-top:8px;font-size:14px;line-height:1.5;'
+        f'display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:24;'
+        f'overflow:hidden;text-overflow:ellipsis;max-height:calc(1.5em * 24);'
+        f'color:inherit;">{escape(para)}</div>'
+        if para else ""
+    )
 
+    # Explicit fg/bg to avoid dark-mode inversion surprises
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;background:#111827;border:1px solid #2a2a2a;
@@ -282,7 +315,7 @@ def _build_card(c):
         _chip("YTD", c.get("pct_ytd")),
     ])
 
-    # bullets: top news (scoped), optional next event / volume
+    # bullets: first is news; keep scoped to the company
     bullets = []
     headline = c.get("headline")
     source = c.get("source")
@@ -298,7 +331,6 @@ def _build_card(c):
         else:
             bullets.append(f"★ {headline}")
     else:
-        # safe fallback if the headline doesn't clearly belong
         co_name = (c.get("name") or sym or "Company").strip()
         bullets.append(f"★ Latest {co_name} coverage — see News")
 
