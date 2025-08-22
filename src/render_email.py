@@ -244,7 +244,9 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
                 "url": c.get("news_url") or "",
                 "source": c.get("source") or "",
                 "when": c.get("when"),
-                "body": c.get("story") or c.get("summary") or ""
+                # 🔥 FIX: Use description field instead of story/summary
+                "body": c.get("description") or c.get("story") or c.get("summary") or "",
+                "description": c.get("description") or ""  # Also add as description
             }
     return None
 
@@ -498,7 +500,7 @@ def render_email(summary, companies, cryptos=None):
             </tr>
             <tr>
               <td style="padding:16px 14px;color:#9aa0a6;font-size:12px;text-align:center;">
-                You’re receiving this because you subscribed to Intelligence Digest.
+                You're receiving this because you subscribed to Intelligence Digest.
               </td>
             </tr>
           </table>
