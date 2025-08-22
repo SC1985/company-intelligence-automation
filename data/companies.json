@@ -157,7 +157,8 @@
     "asset_class": "crypto",
     "sector": "Digital Assets",
     "priority": "watch",
-    "sector_allocation": "Digital Assets"
+    "sector_allocation": "Digital Assets",
+    "coingecko_id": "bitcoin"
   },
   {
     "symbol": "ETH-USD",
@@ -165,7 +166,8 @@
     "asset_class": "crypto",
     "sector": "Digital Assets",
     "priority": "watch",
-    "sector_allocation": "Digital Assets"
+    "sector_allocation": "Digital Assets",
+    "coingecko_id": "ethereum"
   },
   {
     "symbol": "DOGE-USD",
@@ -173,7 +175,8 @@
     "asset_class": "crypto",
     "sector": "Digital Assets",
     "priority": "watch",
-    "sector_allocation": "Digital Assets"
+    "sector_allocation": "Digital Assets",
+    "coingecko_id": "dogecoin"
   },
   {
     "symbol": "XRP-USD",
@@ -181,6 +184,7 @@
     "asset_class": "crypto",
     "sector": "Digital Assets",
     "priority": "watch",
-    "sector_allocation": "Digital Assets"
+    "sector_allocation": "Digital Assets",
+    "coingecko_id": "ripple"
   }
 ]
