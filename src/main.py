@@ -148,7 +148,12 @@ class StrategicIntelligenceEngine:
                             if response.status == 200:
                                 data = await response.json()
                                 if data.get('status') == 'ok':
-                                    articles.extend(data.get('articles', []))
+                                    raw_articles = data.get('articles', [])
+                                    # 🔥 ADD: Ensure articles include descriptions
+                                    for article in raw_articles:
+                                        if not article.get('description'):
+                                            article['description'] = article.get('content', '')[:200] + "..." if article.get('content') else ""
+                                    articles.extend(raw_articles)
                 
                 # Sentiment Analysis Engine
                 sentiment = self._analyze_strategic_sentiment(articles)
