@@ -177,27 +177,84 @@ def _build_card(c):
 </table>
 """
 
+import re
 
-def _render_hero(hero):
-    if not hero: return ""
-    title = escape(hero.get("title") or "")
+def _strip_tags(html: str) -> str:
+    return re.sub(r"<[^>]+>", "", html or "").strip()
+
+def _first_paragraph(hero: dict) -> str:
+    """
+    Return the first meaningful paragraph from hero content.
+    Prefers HTML body fields; falls back to plain text fields.
+    """
+    if not hero:
+        return ""
+
+    # Prefer HTML-ish fields
+    for key in ("body_html", "content_html", "html", "article_html"):
+        html = hero.get(key)
+        if html:
+            # First <p> with actual text
+            paras = re.findall(r"<p[^>]*>(.*?)</p>", html, flags=re.I | re.S)
+            for p in paras:
+                txt = _strip_tags(p)
+                if txt and len(txt) > 20:
+                    return txt
+            # Fallback: strip tags and take first non-empty block
+            txt = _strip_tags(html)
+            for part in re.split(r"\r?\n\r?\n+", txt):
+                part = part.strip()
+                if part:
+                    return part
+
+    # Plain text fields
+    for key in ("body", "content", "excerpt", "summary"):
+        val = hero.get(key)
+        if val:
+            text = str(val).strip()
+            for part in re.split(r"\r?\n\r?\n+", text):
+                part = part.strip()
+                if part:
+                    return part
+
+    return ""
+
+def _render_hero(hero: dict) -> str:
+    if not hero:
+        return ""
+    title = (hero.get("title") or "").strip()
     url = hero.get("url") or "#"
-    body = hero.get("body") or hero.get("excerpt") or ""
     source = hero.get("source") or ""
     when = _fmt_ct(hero.get("when"), force_time=False, tz_suffix_policy="never") if hero.get("when") else ""
+
+    # First paragraph (not the headline)
+    para = _first_paragraph(hero)
+
+    # Avoid duplication if a feed sent the title as the first "paragraph"
+    if para and title and para.strip().lower() == title.strip().lower():
+        para = ""
+
+    # Body HTML: same color as the headline (inherit)
+    body_html = (
+        f'<div style="margin-top:8px;font-size:14px;line-height:1.5;'
+        f'display:-webkit-box;-webkit-box-orient:vertical;'
+        f'-webkit-line-clamp:24;overflow:hidden;text-overflow:ellipsis;'
+        f'max-height:calc(1.5em * 24);color:inherit;">{escape(para)}</div>'
+        if para else ""
+    )
+
+    # Container forces explicit fg/bg to avoid “reversed” dark-mode rendering.
+    # Link inherits the headline color so body and headline match visually.
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;background:#0f172a;border:1px solid #2a2a2a;
-              border-radius:10px;margin:14px 0;color:#e5e7eb;">
+       style="border-collapse:collapse;background:#111827;border:1px solid #2a2a2a;
+              border-radius:10px;margin:14px 0;color:#ffffff;">
   <tr>
     <td style="padding:16px;">
-      <div style="font-weight:700;font-size:22px;color:#fff;">
-        <a href="{escape(url)}" style="color:#3b82f6;text-decoration:none;">{title}</a>
+      <div style="font-weight:700;font-size:22px;color:#ffffff;">
+        <a href="{escape(url)}" style="color:inherit;text-decoration:none;">{escape(title)}</a>
       </div>
-      <div style="margin-top:8px;font-size:14px;line-height:1.5;
-                  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:24;
-                  overflow:hidden;text-overflow:ellipsis;max-height:calc(1.5em * 24);
-                  color:#e5e7eb;">{escape(body)}</div>
+      {body_html}
       <div style="margin-top:6px;font-size:12px;color:#9aa0a6;">
         {escape(source)} {escape(when)}
       </div>
