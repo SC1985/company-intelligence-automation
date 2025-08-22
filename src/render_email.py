@@ -104,31 +104,33 @@ def _button(label: str, url: str, size="md"):
 
 
 
+
 def _range_bar(pos: float, low: float, high: float):
-    """Outlook-safe 52-week range bar using a 3-cell table (no absolute positioning)."""
+    # Robust, Outlook-safe 52w track with a visible marker using 1% segments.
     try:
         pct = float(pos or 0.0)
     except Exception:
         pct = 50.0
     pct = max(0.0, min(100.0, pct))
-    left_pct = pct
-    right_pct = 100.0 - pct
-    # Track row
+    marker_idx = int(round(pct))
+    # Build 100 cells, color only the marker cell. Outer table carries grey background for the track.
+    cells = []
+    for i in range(101):  # 0..100 inclusive (101 cells so marker at 100 still shows)
+        if i == marker_idx:
+            bg = '#3b82f6'
+        else:
+            bg = 'transparent'
+        cells.append(f'<td width="1%" style="width:1%;height:6px;line-height:6px;font-size:0;padding:0;background:{bg};">&nbsp;</td>')
     track = (
-        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        f'style="border-collapse:collapse;width:100%;">'
-        f'<tr height="6">'
-        # left filler
-        f'<td width="{left_pct:.1f}%" style="width:{left_pct:.1f}%;background:#2a2a2a;height:6px;line-height:6px;font-size:0;">&nbsp;</td>'
-        # marker
-        f'<td width="2" style="width:2px;background:#3b82f6;height:6px;line-height:6px;font-size:0;">&nbsp;</td>'
-        # right filler
-        f'<td width="{right_pct:.1f}%" style="width:{right_pct:.1f}%;background:#2a2a2a;height:6px;line-height:6px;font-size:0;">&nbsp;</td>'
-        f'</tr></table>'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="border-collapse:collapse;background:#2a2a2a;border-radius:4px;">'
+        '<tr>' + ''.join(cells) + '</tr></table>'
     )
     caption = (f'<div style="font-size:12px;color:#9aa0a6;margin-top:4px;">'
-               f'Low ${float(low or 0):.2f} • High ${float(high or 0):.2f}</div>')
-    return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'            + track + caption)
+               f'Low ${float(low or 0.0):.2f} • High ${float(high or 0.0):.2f}</div>')
+    return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'
+            + track + caption)
+
 
 def _nowrap_metrics(text: str) -> str:
     """Wrap tokens like m/m, y/y, q/q with their numeric value in a no-wrap span to prevent mid-token breaks.
@@ -286,6 +288,30 @@ def _section_container(title: str, inner_html: str):
 </table>
 """
 
+def _hero_block(hero: dict) -> str:
+    if not hero:
+        return ""
+    title = escape(str(hero.get("title") or ""))[:220]
+    src = escape(str(hero.get("source") or "")) if hero.get("source") else "Latest"
+    when = hero.get("when")
+    when_fmt = _fmt_ct(when, force_time=False, tz_suffix_policy="never") if when else ""
+    url = hero.get("url") or "#"
+    meta = f"{src}{f', {when_fmt}' if when_fmt else ''}"
+    block = (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="border-collapse:collapse;background:#0d1117;border:1px solid #374151;'
+        'border-radius:10px;margin:14px 0;">'
+        '<tr><td style="padding:16px;">'
+        f'<div style="font-weight:800;font-size:20px;line-height:1.3;color:#fff;">{title}</div>'
+        f'<div style="color:#9aa0a6;margin-top:4px;font-size:12px;">{meta}</div>'
+        f'<div style="margin-top:10px;"><a href="{escape(url)}" target="_blank" rel="noopener noreferrer" '
+        'style="background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;'
+        'font-size:13px;border:1px solid #1d4ed8;line-height:1;padding:8px 12px;display:inline-block;">'
+        'Read the story →</a></div>'
+        '</td></tr></table>'
+    )
+    return block
+
 
 def render_email(summary, companies, cryptos=None):
     """Builds the full HTML email."""
@@ -352,6 +378,8 @@ def render_email(summary, companies, cryptos=None):
                 <div style="font-weight:700;font-size:54px;color:#fff;">Intelligence Digest</div>
                 {f'<div style="color:#9aa0a6;margin-top:6px;font-size:13px;">Data as of {escape(as_of_txt)}</div>' if as_of_txt else ''}
                 <div style="margin-top:12px;border-top:1px solid #2a2a2a;height:1px;line-height:1px;font-size:0;">&nbsp;</div>
+
+                {_hero_block(summary.get('hero')) if isinstance(summary, dict) else ''}
 
                 {stocks_section}
                 {crypto_section}
