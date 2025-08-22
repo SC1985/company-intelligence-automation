@@ -319,7 +319,7 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
             )
         catalysts_html = f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#111;border:1px solid #2a2a2a;border-radius:8px;;height:420px;" class="ci-card" height="420">
-  <tr><td style="padding:12px 14px;">
+  <tr><td style="padding:12px 14px;height:420px;vertical-align:top;" height="420">
     <div style="font-weight:700;color:#fff;margin-bottom:6px;">Next 7 days</div>
     {''.join(items_html)}
   </td></tr>
@@ -340,19 +340,19 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
     }}
   
     /* Equal-height company cards on desktop */
-    .ci-card { height: 420px; }
-    @media only screen and (max-width: 620px) {
-      .ci-card { height: auto !important; }
-    }
+    .ci-card {{ height: 420px; }}
+    @media only screen and (max-width: 620px) {{
+      .ci-card {{ height: auto !important; }}
+    }}
     /* Clamp 1st bullet to 6 lines */
-    .brief-bullet {
+    .brief-bullet {{
       display: -webkit-box;
       -webkit-line-clamp: 6;
       -webkit-box-orient: vertical;
       overflow: hidden;
       text-overflow: ellipsis;
       max-height: calc(1.4em * 6);
-    }
+    }}
 </style>
 </head>
 <body style="margin:0;background:#0b0b0c;">
