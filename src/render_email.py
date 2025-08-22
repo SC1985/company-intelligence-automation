@@ -221,7 +221,7 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
         headline = c.get("headline")
         source = c.get("source")
         when = c.get("when")
-        when_fmt = _fmt_ct(when, force_time=None, tz_suffix_policy="auto") if when else None
+        when_fmt = _fmt_ct(when, force_time=False, tz_suffix_policy="never") if when else None
 
         next_event = c.get("next_event")
         volx = c.get("vol_x_avg")
@@ -248,16 +248,25 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
                 bullets.append(f"Volume: {float(volx):.2f}× 30-day avg")
             except Exception:
                 pass
-        bullets_html = "".join(f"<li>{escape(b)}</li>" for b in bullets)
+        bullets_html = ""
+        for i, b in enumerate(bullets):
+            if i == 0:
+                bullets_html += (
+                  '<li class="brief-bullet" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden;text-overflow:ellipsis;max-height:calc(1.4em * 6);">'
+                  + escape(b) + "</li>"
+                )
+            else:
+                bullets_html += "<li>" + escape(b) + "</li>"
+
 
         range_html = _range_bar(range_pct, float(low52 or 0.0), float(high52 or 0.0))
         ctas = _button("News", news_url, size="md") + _button("Press", pr_url, size="md")
 
         price_fmt = f"${price:.4f}" if str(t).endswith("-USD") else f"${price:.2f}"
         return f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 12px;background:#111;border:1px solid #2a2a2a;border-radius:8px;;height:420px;" class="ci-card" height="420">
   <tr>
-    <td style="padding:12px 14px;">
+    <td style="padding:12px 14px;height:420px;vertical-align:top;" height="420">
       <div style="font-weight:700;font-size:16px;line-height:1.3;color:#fff;">{escape(str(name))} <span style="color:#9aa0a6;">({escape(str(t))})</span></div>
       <div style="margin-top:2px;font-size:14px;color:#e5e7eb;">{price_fmt}</div>
       <div style="margin-top:8px;">{chips}</div>
@@ -309,7 +318,7 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
                 f'<div style="font-size:13px;color:#e5e7eb;margin:4px 0;">{escape(ds)} • <strong>{escape(c.get("ticker",""))}</strong> • {escape(c.get("label",""))}</div>'
             )
         catalysts_html = f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#111;border:1px solid #2a2a2a;border-radius:8px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#111;border:1px solid #2a2a2a;border-radius:8px;;height:420px;" class="ci-card" height="420">
   <tr><td style="padding:12px 14px;">
     <div style="font-weight:700;color:#fff;margin-bottom:6px;">Next 7 days</div>
     {''.join(items_html)}
@@ -329,7 +338,22 @@ def render_email(summary, companies, catalysts=None, cryptos=None):
       .stack-col {{ display:block !important; width:100% !important; max-width:100% !important; }}
       .spacer {{ display:none !important; width:0 !important; }}
     }}
-  </style>
+  
+    /* Equal-height company cards on desktop */
+    .ci-card { height: 420px; }
+    @media only screen and (max-width: 620px) {
+      .ci-card { height: auto !important; }
+    }
+    /* Clamp 1st bullet to 6 lines */
+    .brief-bullet {
+      display: -webkit-box;
+      -webkit-line-clamp: 6;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-height: calc(1.4em * 6);
+    }
+</style>
 </head>
 <body style="margin:0;background:#0b0b0c;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b0c;">
