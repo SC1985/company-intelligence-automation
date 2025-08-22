@@ -103,14 +103,33 @@ def _button(label: str, url: str, size="md"):
             f'{safe_label} →</a>')
 
 
+
 def _range_bar(pos: float, low: float, high: float):
-    pct = max(0.0, min(100.0, float(pos or 0)))
-    track = (f'<div style="background:#2a2a2a;border-radius:4px;height:6px;position:relative;">'
-             f'<div style="background:#3b82f6;height:6px;width:2px;position:absolute;left:{pct}%;"></div>'
-             '</div>')
+    """Outlook-safe 52-week range bar using a 3-cell table (no absolute positioning)."""
+    try:
+        pct = float(pos or 0.0)
+    except Exception:
+        pct = 50.0
+    pct = max(0.0, min(100.0, pct))
+    left_pct = pct
+    right_pct = 100.0 - pct
+    # Track row
+    track = (
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        f'style="border-collapse:collapse;width:100%;">'
+        f'<tr height="6">'
+        # left filler
+        f'<td width="{left_pct:.1f}%" style="width:{left_pct:.1f}%;background:#2a2a2a;height:6px;line-height:6px;font-size:0;">&nbsp;</td>'
+        # marker
+        f'<td width="2" style="width:2px;background:#3b82f6;height:6px;line-height:6px;font-size:0;">&nbsp;</td>'
+        # right filler
+        f'<td width="{right_pct:.1f}%" style="width:{right_pct:.1f}%;background:#2a2a2a;height:6px;line-height:6px;font-size:0;">&nbsp;</td>'
+        f'</tr></table>'
+    )
     caption = (f'<div style="font-size:12px;color:#9aa0a6;margin-top:4px;">'
                f'Low ${float(low or 0):.2f} • High ${float(high or 0):.2f}</div>')
     return (f'<div style="font-size:12px;color:#9aa0a6;margin-bottom:4px;">52-week range</div>'
+            + track + caption)
             + track + caption)
 
 def _nowrap_metrics(text: str) -> str:
@@ -227,7 +246,7 @@ def _build_card(c):
 
 
 def _grid(cards):
-    """Two-column grid with 12px gutter via column padding (desktop); stacks on mobile."""
+    """Two-column grid with 6px gutter via column padding (desktop); stacks on mobile."""
     rows = []
     for i in range(0, len(cards), 2):
         left = cards[i]
