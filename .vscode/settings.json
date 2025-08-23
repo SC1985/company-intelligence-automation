@@ -1,0 +1,47 @@
+{
+  "// === PREVENT CODE FOLDING ===": "",
+  "editor.folding": false,
+  "editor.showFoldingControls": "never",
+  "editor.foldingImportsByDefault": false,
+  "python.analysis.autoFoldImports": false,
+  
+  "// === LARGE FILE HANDLING ===": "",
+  "editor.largeFileOptimizations": false,
+  "files.maxMemoryForLargeFilesMB": 4096,
+  "editor.maxTokenizationLineLength": 20000,
+  
+  "// === PYTHON CONFIGURATION ===": "",
+  "python.defaultInterpreterPath": "./venv/bin/python",
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": true,
+  "python.formatting.provider": "black",
+  "python.formatting.blackArgs": ["--line-length", "120"],
+  
+  "// === EDITOR BEHAVIOR ===": "",
+  "editor.wordWrap": "on",
+  "editor.wordWrapColumn": 120,
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": false,
+  "files.autoSave": "onFocusChange",
+  "editor.formatOnSave": true,
+  
+  "// === FILE ASSOCIATIONS ===": "",
+  "files.associations": {
+    "*.py": "python",
+    "*.yml": "yaml", 
+    "*.yaml": "yaml",
+    "*.json": "json"
+  },
+  
+  "// === PREVENT TRUNCATION ===": "",
+  "editor.hover.delay": 300,
+  "editor.quickSuggestionsDelay": 10,
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/venv": true,
+    "**/.git": true
+  }
+}
