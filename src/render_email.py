@@ -104,7 +104,7 @@ def _chip(label: str, value):
         sign = "▲" if v >= 0 else "▼"
         txt = f"{v:+.1f}%"
     safe_label = escape(label)
-    # 🔥 FIXED: Increased margin-right from 4px to 8px for better spacing in light mode
+    # Fixed: Increased chip margins from 4px to 8px for better spacing in light mode
     return (f'<span style="background:{bg};color:{color};padding:3px 8px;'
             f'border-radius:6px;font-size:12px;margin-right:8px;margin-bottom:3px;'
             f'display:inline-block;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'
@@ -173,6 +173,14 @@ def _first_paragraph(hero: dict, title: str = "") -> str:
         return ""
     title_norm = (title or "").strip().lower()
 
+    # 🔥 DEBUG: Log what we're working with
+    import logging
+    logger = logging.getLogger("render_email")
+    logger.info(f"Hero object keys: {list(hero.keys()) if isinstance(hero, dict) else 'Not a dict'}")
+    if isinstance(hero, dict):
+        logger.info(f"Hero description: '{hero.get('description', 'No description field')[:100]}...'")
+        logger.info(f"Hero body: '{hero.get('body', 'No body field')[:100]}...'")
+
     # 1) HTML fields first
     html_keys = ("body_html", "content_html", "html", "article_html", "summary_html", "description_html")
     for key in html_keys:
@@ -183,12 +191,14 @@ def _first_paragraph(hero: dict, title: str = "") -> str:
             for p in paras:
                 txt = _strip_tags(p)
                 if txt and len(txt) > 20 and txt.strip().lower() != title_norm:
+                    logger.info(f"Found paragraph from HTML field '{key}': '{txt[:50]}...'")
                     return txt
             # Fallback: plain text from HTML
             txt = _strip_tags(html)
             for part in re.split(r"\r?\n\r?\n+|\n{2,}", txt):
                 part = part.strip()
                 if part and part.lower() != title_norm:
+                    logger.info(f"Found content from HTML field '{key}': '{part[:50]}...'")
                     return part
 
     # 2) Structured arrays
@@ -197,9 +207,10 @@ def _first_paragraph(hero: dict, title: str = "") -> str:
         for p in paras_list:
             txt = _strip_tags(str(p))
             if txt and len(txt) > 20 and txt.strip().lower() != title_norm:
+                logger.info(f"Found content from paragraphs list: '{txt[:50]}...'")
                 return txt
 
-    # 3) Text fallbacks (ordered by typical usefulness)
+    # 3) Text fallbacks (ordered by typical usefulness) - include 'body' field
     text_keys = (
         "first_paragraph", "firstParagraph", "lede", "lead", "dek",
         "abstract", "description", "summary", "excerpt", "content", "body",
@@ -209,17 +220,23 @@ def _first_paragraph(hero: dict, title: str = "") -> str:
         val = hero.get(key)
         if val:
             text = _strip_tags(str(val))
+            if not text:  # Skip empty after stripping tags
+                continue
             blocks = re.split(r"\r?\n\r?\n+|\n{2,}", text)
             for part in blocks:
                 part = part.strip()
-                if part and part.lower() != title_norm:
+                if part and part.lower() != title_norm and len(part) > 10:
+                    logger.info(f"Found content from text field '{key}': '{part[:50]}...'")
                     return part
+            # Also try first sentence
             m = re.search(r"(.+?[\.!?])(\s|$)", text)
             if m:
                 cand = m.group(1).strip()
-                if cand and cand.lower() != title_norm:
+                if cand and cand.lower() != title_norm and len(cand) > 10:
+                    logger.info(f"Found sentence from text field '{key}': '{cand[:50]}...'")
                     return cand
 
+    logger.info("No hero body content found")
     return ""
 
 
@@ -241,14 +258,19 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
     for c in all_entities:
         hl = str(c.get("headline") or "")
         if hl and any(k in hl.lower() for k in keywords):
+            # 🔥 DEBUG: Log the selected hero
+            import logging
+            logger = logging.getLogger("render_email")
+            logger.info(f"Selected hero from entity: title='{hl}', description='{c.get('description', 'No description')[:50]}...'")
+            
             return {
                 "title": hl,
                 "url": c.get("news_url") or "",
                 "source": c.get("source") or "",
                 "when": c.get("when"),
-                # 🔥 FIX: Use description field instead of story/summary
+                # Make sure we include both body and description fields
                 "body": c.get("description") or c.get("story") or c.get("summary") or "",
-                "description": c.get("description") or ""  # Also add as description
+                "description": c.get("description") or c.get("story") or c.get("summary") or ""
             }
     return None
 
@@ -263,7 +285,7 @@ def _render_hero(hero: dict) -> str:
     source = hero.get("source") or ""
     when = _fmt_ct(hero.get("when"), force_time=False, tz_suffix_policy="never") if hero.get("when") else ""
 
-    # First paragraph (not the headline)
+    # First paragraph (not the headline) - this is where the body content comes from
     para = _first_paragraph(hero, title=title)
     if para and para.strip().lower() == title.strip().lower():
         para = ""
@@ -311,7 +333,7 @@ def _build_card(c):
     else:
         price_fmt = f"${price_v:.4f}" if is_crypto else f"${price_v:.2f}"
 
-    # 🔥 FIXED: Better chip spacing with line breaks and margins
+    # Fixed: Better chip spacing with line breaks and margins
     chips = (
         '<div style="line-height:1.8;">' +
         _chip("1D", c.get("pct_1d")) +
@@ -486,7 +508,7 @@ def render_email(summary, companies, cryptos=None):
     stocks_section = _section_container("Stocks & ETFs", _grid(company_cards)) if company_cards else ""
     crypto_section = _section_container("Digital Assets", _grid(crypto_cards)) if crypto_cards else ""
 
-    # 🔥 NEW: Generate email preview text
+    # Generate email preview text (but mailer.py will override this)
     email_preview = _generate_email_preview()
 
     # CSS kept outside f-string to avoid brace escaping
@@ -509,7 +531,7 @@ def render_email(summary, companies, cryptos=None):
     <style>{css}</style>
   </head>
   <body style="margin:0;background:#0b0c10;color:#e5e7eb;">
-    <!-- 🔥 NEW: Hidden preview text for inbox display -->
+    <!-- Hidden preview text for inbox display - will be overridden by mailer.py -->
     <div style="display:none;font-size:1px;color:#0b0c10;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">
       {escape(email_preview)}
     </div>
