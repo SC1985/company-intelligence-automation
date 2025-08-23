@@ -158,7 +158,14 @@
     "sector": "Digital Assets",
     "priority": "watch",
     "sector_allocation": "Digital Assets",
-    "coingecko_id": "bitcoin"
+    "coingecko_id": "bitcoin",
+    "investment_thesis": "Digital gold and store of value with institutional adoption momentum",
+    "risk_profile": "very_high",
+    "catalyst_watch": [
+      "institutional adoption",
+      "regulatory clarity",
+      "halving cycles"
+    ]
   },
   {
     "symbol": "ETH-USD",
@@ -167,7 +174,14 @@
     "sector": "Digital Assets",
     "priority": "watch",
     "sector_allocation": "Digital Assets",
-    "coingecko_id": "ethereum"
+    "coingecko_id": "ethereum",
+    "investment_thesis": "Smart contract platform with DeFi ecosystem and proof-of-stake transition",
+    "risk_profile": "very_high",
+    "catalyst_watch": [
+      "DeFi protocol growth",
+      "layer 2 scaling",
+      "institutional staking"
+    ]
   },
   {
     "symbol": "DOGE-USD",
@@ -176,7 +190,14 @@
     "sector": "Digital Assets",
     "priority": "watch",
     "sector_allocation": "Digital Assets",
-    "coingecko_id": "dogecoin"
+    "coingecko_id": "dogecoin",
+    "investment_thesis": "Community-driven cryptocurrency with mainstream payment adoption potential",
+    "risk_profile": "extreme",
+    "catalyst_watch": [
+      "payment integration",
+      "community developments",
+      "social media sentiment"
+    ]
   },
   {
     "symbol": "XRP-USD",
@@ -185,6 +206,13 @@
     "sector": "Digital Assets",
     "priority": "watch",
     "sector_allocation": "Digital Assets",
-    "coingecko_id": "ripple"
+    "coingecko_id": "ripple",
+    "investment_thesis": "Cross-border payment solution with banking partnership focus",
+    "risk_profile": "very_high",
+    "catalyst_watch": [
+      "regulatory resolution",
+      "banking partnerships",
+      "CBDC integration"
+    ]
   }
 ]
