@@ -16,32 +16,62 @@ CENTRAL_TZ = ZoneInfo("America/Chicago") if ZoneInfo else None
 def _load_entities() -> List[Dict[str, Any]]:
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.normpath(os.path.join(here, "..", "data", "companies.json"))
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    if isinstance(data, list):
-        return data
-    items: List[Dict[str, Any]] = []
-    for key in ("equities", "companies", "digital_assets", "assets", "items"):
-        arr = data.get(key)
-        if isinstance(arr, list):
-            items.extend(arr)
-    if not items:
-        raise ValueError("companies.json did not contain a recognized list of entities")
-    return items
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+        items: List[Dict[str, Any]] = []
+        for key in ("equities", "companies", "digital_assets", "assets", "items"):
+            arr = data.get(key)
+            if isinstance(arr, list):
+                items.extend(arr)
+        if not items:
+            raise ValueError("companies.json did not contain a recognized list of entities")
+        return items
+    except Exception as e:
+        # Fallback to minimal dataset if file loading fails
+        import logging
+        logging.getLogger("ci-entrypoint").warning(f"Failed to load companies.json: {e}, using minimal fallback")
+        return [
+            {"symbol": "AAPL", "name": "Apple Inc.", "asset_class": "equity"},
+            {"symbol": "TSLA", "name": "Tesla Inc.", "asset_class": "equity"},
+            {"symbol": "BTC-USD", "name": "Bitcoin", "asset_class": "crypto", "coingecko_id": "bitcoin"}
+        ]
 
-# -------------------- HTTP helpers --------------------
+# -------------------- HTTP helpers with retry logic --------------------
+
+def _http_get_with_retry(url: str, timeout: float = 25.0, headers: Optional[Dict[str,str]] = None, retries: int = 3) -> Optional[bytes]:
+    """HTTP GET with exponential backoff retry logic."""
+    from urllib.request import urlopen, Request
+    from urllib.error import URLError, HTTPError
+    
+    hdrs = {"User-Agent": "ci-digest/1.0 (+https://example.local)"}
+    if headers:
+        hdrs.update(headers)
+    
+    for attempt in range(retries):
+        try:
+            req = Request(url, headers=hdrs)
+            with urlopen(req, timeout=timeout) as resp:
+                return resp.read()
+        except (URLError, HTTPError, Exception) as e:
+            if attempt == retries - 1:
+                # Log final failure
+                try:
+                    import logging
+                    logging.getLogger("ci-entrypoint").warning(f"HTTP request failed after {retries} attempts: {url} - {e}")
+                except:
+                    pass
+                return None
+            else:
+                # Exponential backoff: 1s, 2s, 4s
+                sleep_time = 2 ** attempt
+                time.sleep(sleep_time)
+    return None
 
 def _http_get(url: str, timeout: float = 25.0, headers: Optional[Dict[str,str]] = None) -> Optional[bytes]:
-    try:
-        from urllib.request import urlopen, Request
-        hdrs = {"User-Agent": "ci-digest/1.0 (+https://example.local)"}
-        if headers:
-            hdrs.update(headers)
-        req = Request(url, headers=hdrs)
-        with urlopen(req, timeout=timeout) as resp:
-            return resp.read()
-    except Exception:
-        return None
+    return _http_get_with_retry(url, timeout, headers, retries=2)
 
 def _http_get_json(url: str, timeout: float = 25.0, headers: Optional[Dict[str,str]] = None) -> Optional[Dict[str, Any]]:
     raw = _http_get(url, timeout=timeout, headers=headers)
@@ -49,10 +79,45 @@ def _http_get_json(url: str, timeout: float = 25.0, headers: Optional[Dict[str,s
         return None
     try:
         return json.loads(raw.decode("utf-8", errors="replace"))
-    except Exception:
+    except Exception as e:
+        try:
+            import logging
+            logging.getLogger("ci-entrypoint").warning(f"JSON decode failed for {url}: {e}")
+        except:
+            pass
         return None
 
-# -------------------- History helpers (equities) --------------------
+# -------------------- History helpers (equities) with validation --------------------
+
+def _validate_price_series(dates: List[datetime], prices: List[float]) -> Tuple[List[datetime], List[float]]:
+    """Validate and clean price series data."""
+    if not dates or not prices or len(dates) != len(prices):
+        return [], []
+    
+    # Filter out invalid data points
+    valid_pairs = []
+    for d, p in zip(dates, prices):
+        try:
+            if isinstance(d, datetime) and isinstance(p, (int, float)) and p > 0:
+                valid_pairs.append((d, float(p)))
+        except:
+            continue
+    
+    if len(valid_pairs) < 5:  # Need minimum 5 data points
+        return [], []
+    
+    # Sort by date and remove duplicates
+    valid_pairs.sort(key=lambda x: x[0])
+    seen_dates = set()
+    cleaned = []
+    for d, p in valid_pairs:
+        date_key = d.date()
+        if date_key not in seen_dates:
+            seen_dates.add(date_key)
+            cleaned.append((d, p))
+    
+    dates_clean, prices_clean = zip(*cleaned) if cleaned else ([], [])
+    return list(dates_clean), list(prices_clean)
 
 def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float]]:
     import csv
@@ -73,9 +138,13 @@ def _fetch_stooq(symbol: str) -> Tuple[List[datetime], List[float]]:
                 try:
                     d = datetime.fromisoformat(ds)
                     c = float(cs.replace(",", ""))
+                    if c > 0:  # Validate positive price
+                        dt.append(d); cl.append(c)
                 except Exception:
                     continue
-                dt.append(d); cl.append(c)
+            
+            # Validate series
+            dt, cl = _validate_price_series(dt, cl)
             if len(cl) >= 30: 
                 return dt, cl
         except Exception:
@@ -96,10 +165,16 @@ def _fetch_alpha_vantage_equity(symbol: str, api_key: Optional[str]) -> Tuple[Li
             "apikey": api_key
         })
         url = f"https://www.alphavantage.co/query?{qs}"
-        req = Request(url, headers={"User-Agent":"ci-digest/1.0"})
-        with urlopen(req, timeout=25) as resp:
-            raw = resp.read()
+        raw = _http_get(url, timeout=25)
+        if not raw:
+            return [], []
+        
         data = json.loads(raw.decode("utf-8"))
+        
+        # Check for API limit error
+        if "Error Message" in data or "Note" in data:
+            return [], []
+        
         ts = data.get("Time Series (Daily)") or {}
         if not isinstance(ts, dict) or not ts:
             return [], []
@@ -111,14 +186,24 @@ def _fetch_alpha_vantage_equity(symbol: str, api_key: Optional[str]) -> Tuple[Li
             if ac is None: 
                 continue
             try:
-                dt.append(datetime.fromisoformat(k))
-                cl.append(float(str(ac).replace(",", "")))
+                d = datetime.fromisoformat(k)
+                c = float(str(ac).replace(",", ""))
+                if c > 0:  # Validate positive price
+                    dt.append(d); cl.append(c)
             except Exception:
                 continue
+        
+        # Validate series before sleeping (don't sleep if data is bad)
+        dt, cl = _validate_price_series(dt, cl)
         if cl: 
-            time.sleep(12)  # free-tier pacing
+            time.sleep(12)  # free-tier pacing only if we got data
         return dt, cl
-    except Exception:
+    except Exception as e:
+        try:
+            import logging
+            logging.getLogger("ci-entrypoint").warning(f"Alpha Vantage equity fetch failed for {symbol}: {e}")
+        except:
+            pass
         return [], []
 
 def _get_equity_series(symbol: str, alpha_key: Optional[str]) -> Tuple[str, List[datetime], List[float]]:
@@ -130,7 +215,7 @@ def _get_equity_series(symbol: str, alpha_key: Optional[str]) -> Tuple[str, List
         return "alphavantage", dt, cl
     return "none", [], []
 
-# -------------------- History helpers (crypto) --------------------
+# -------------------- History helpers (crypto) with validation --------------------
 
 COINGECKO_IDS = {
     "BTC-USD": "bitcoin",
@@ -150,10 +235,11 @@ def _fetch_coingecko_crypto(symbol_usd: str, id_hint: Optional[str] = None) -> T
         try:
             d = datetime.utcfromtimestamp(float(ts) / 1000.0)
             p = float(price)
+            if p > 0:  # Validate positive price
+                dt.append(d); cl.append(p)
         except Exception:
             continue
-        dt.append(d); cl.append(p)
-    return dt, cl
+    return _validate_price_series(dt, cl)
 
 def _fetch_alpha_vantage_crypto(symbol_usd: str, alpha_key: Optional[str]) -> Tuple[List[datetime], List[float]]:
     if not alpha_key:
@@ -170,10 +256,16 @@ def _fetch_alpha_vantage_crypto(symbol_usd: str, alpha_key: Optional[str]) -> Tu
             "apikey": alpha_key
         })
         url = f"https://www.alphavantage.co/query?{qs}"
-        req = Request(url, headers={"User-Agent":"ci-digest/1.0"})
-        with urlopen(req, timeout=25) as resp:
-            raw = resp.read()
+        raw = _http_get(url, timeout=25)
+        if not raw:
+            return [], []
+        
         data = json.loads(raw.decode("utf-8"))
+        
+        # Check for API errors
+        if "Error Message" in data or "Note" in data:
+            return [], []
+        
         ts = data.get("Time Series (Digital Currency Daily)") or {}
         if not isinstance(ts, dict) or not ts:
             return [], []
@@ -185,17 +277,27 @@ def _fetch_alpha_vantage_crypto(symbol_usd: str, alpha_key: Optional[str]) -> Tu
             if close is None:
                 continue
             try:
-                dt.append(datetime.fromisoformat(k))
-                cl.append(float(str(close).replace(",", "")))
+                d = datetime.fromisoformat(k)
+                c = float(str(close).replace(",", ""))
+                if c > 0:  # Validate positive price
+                    dt.append(d); cl.append(c)
             except Exception:
                 continue
+        
+        # Validate before sleeping
+        dt, cl = _validate_price_series(dt, cl)
         if cl:
             time.sleep(12)
         return dt, cl
-    except Exception:
+    except Exception as e:
+        try:
+            import logging
+            logging.getLogger("ci-entrypoint").warning(f"Alpha Vantage crypto fetch failed for {symbol_usd}: {e}")
+        except:
+            pass
         return [], []
 
-# -------------------- News helpers --------------------
+# -------------------- Enhanced news helpers --------------------
 
 def _first_url_from_item(a, ticker: str) -> Optional[str]:
     for k in ("url", "link", "article_url", "story_url", "source_url", "canonicalUrl"):
@@ -210,41 +312,85 @@ def _first_url_from_item(a, ticker: str) -> Optional[str]:
                 return v
     return f"https://finance.yahoo.com/quote/{ticker}/news"
 
-def _score_article_for_ticker(t: str, a: Dict[str, Any]) -> int:
+def _enhanced_score_article_for_ticker(t: str, a: Dict[str, Any]) -> int:
+    """Enhanced article scoring with better relevance detection."""
     t = t.upper()
     score = 0
+    
+    # Direct ticker mentions in metadata (highest confidence)
     for key in ("tickers", "symbols", "relatedTickers", "symbolsMentioned"):
         arr = a.get(key) or []
         if isinstance(arr, list) and any(str(x).upper() == t for x in arr):
-            score += 100
-    title = (a.get("title") or a.get("headline") or "")[:200]
-    summary = (a.get("summary") or a.get("description") or "")[:400]
+            score += 150
+    
+    title = (a.get("title") or a.get("headline") or "")[:300]
+    summary = (a.get("summary") or a.get("description") or "")[:500]
+    
+    # Title mentions (high confidence)
     if re.search(rf'\b{re.escape(t)}\b', title, re.I):
-        score += 40
+        score += 60
+        # Bonus for title prominence
+        if title.upper().startswith(t):
+            score += 20
+    
+    # Summary mentions (medium confidence) 
     if re.search(rf'\b{re.escape(t)}\b', summary, re.I):
-        score += 20
-    url = _first_url_from_item(a, t)
-    if re.search(rf'/quote/{re.escape(t)}\b', url, re.I) or re.search(rf'/\b{re.escape(t)}\b', url, re.I):
         score += 25
-    rivals = ["NVDA","AMD","INTC","TSLA","AAPL","MSFT","META","GOOGL","AMZN"]
-    if any(re.search(rf'\b{r}\b', title, re.I) for r in rivals if r != t):
-        score -= 15
-    return score
+        
+    # URL pattern matching
+    url = _first_url_from_item(a, t)
+    if url and re.search(rf'/quote/{re.escape(t)}\b', url, re.I):
+        score += 30
+    if url and re.search(rf'/\b{re.escape(t)}\b', url, re.I):
+        score += 15
+    
+    # Recency bonus (prefer recent articles)
+    pub_date = a.get("publishedAt") or a.get("published_at") or a.get("time")
+    if pub_date:
+        try:
+            from dateutil import parser
+            pub_dt = parser.parse(str(pub_date))
+            hours_old = (datetime.now(timezone.utc) - pub_dt.replace(tzinfo=timezone.utc)).total_seconds() / 3600
+            if hours_old < 24:
+                score += 10  # Recent news bonus
+            elif hours_old > 168:  # >1 week old
+                score -= 20
+        except:
+            pass
+    
+    # Penalize articles mentioning competing tickers prominently in title
+    competing_tickers = {"AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "AMD", "INTC"} - {t}
+    competitor_mentions = sum(1 for comp in competing_tickers if re.search(rf'\b{comp}\b', title, re.I))
+    if competitor_mentions > 0:
+        score -= 20 * competitor_mentions
+    
+    # Penalize generic market news unless ticker is specifically mentioned
+    generic_terms = ["market", "stocks", "dow", "s&p", "nasdaq", "fed", "inflation"]
+    if any(term in title.lower() for term in generic_terms) and not re.search(rf'\b{re.escape(t)}\b', title, re.I):
+        score -= 30
+    
+    return max(0, score)  # Don't return negative scores
 
 def _pick_best_for_ticker(t: str, arts: List[Dict[str, Any]]) -> Dict[str, Optional[str]]:
     best = None; best_score = -1
     for a in arts:
-        s = _score_article_for_ticker(t, a)
+        s = _enhanced_score_article_for_ticker(t, a)
         if s > best_score:
             best, best_score = a, s
-    if best and best_score > 0:
+    if best and best_score >= 10:  # Raised minimum threshold
         title = best.get("title") or best.get("headline")
         src = best.get("source")
         if isinstance(src, dict): src = src.get("name") or src.get("id") or src.get("domain")
         when = best.get("publishedAt") or best.get("published_at") or best.get("time")
         url = _first_url_from_item(best, t)
-        # Include description for hero body
         description = best.get("description") or best.get("summary") or ""
+        
+        # Clean description
+        if description:
+            description = re.sub(r'<[^>]+>', '', description).strip()
+            if len(description) > 200:
+                description = description[:197] + "..."
+        
         return {
             "title": title, 
             "source": src if isinstance(src, str) else None, 
@@ -297,33 +443,64 @@ def _news_headline_via_newsapi(ticker: str, name: str) -> Optional[Dict[str, str
     if not key:
         return None
     from urllib.parse import urlencode
-    q = f"{name} OR {ticker}"
-    qs = urlencode({"q": q, "pageSize": 5, "sortBy": "publishedAt", "language": "en", "apiKey": key})
+    
+    # Build better search query
+    query_parts = []
+    if name and len(name) > 3:
+        # Use company name in quotes for exact match
+        query_parts.append(f'"{name}"')
+    query_parts.append(ticker)
+    
+    q = " OR ".join(query_parts)
+    qs = urlencode({
+        "q": q, 
+        "pageSize": 10,  # Get more articles to choose from
+        "sortBy": "publishedAt", 
+        "language": "en", 
+        "apiKey": key
+    })
     url = f"https://newsapi.org/v2/everything?{qs}"
     data = _http_get_json(url, timeout=20)
     if not data or data.get("status") != "ok":
         return None
-    for a in (data.get("articles") or []):
-        title = a.get("title"); link = a.get("url")
-        src = (a.get("source") or {}).get("name")
-        when = a.get("publishedAt")
-        # 🔥 DEBUG: Log what we get from NewsAPI
-        description = a.get("description") or ""
-        try:
-            import logging
-            logger = logging.getLogger("ci-entrypoint")
-            logger.info(f"NewsAPI for {ticker}: title='{title[:50] if title else 'None'}...', description='{description[:100] if description else 'EMPTY'}...'")
-        except:
-            pass
+    
+    # Score and pick best article
+    articles = data.get("articles") or []
+    best_article = None
+    best_score = -1
+    
+    for a in articles:
+        score = _enhanced_score_article_for_ticker(ticker, {
+            "title": a.get("title"),
+            "description": a.get("description"),
+            "url": a.get("url"),
+            "publishedAt": a.get("publishedAt"),
+            "source": a.get("source")
+        })
+        if score > best_score:
+            best_score = score
+            best_article = a
+    
+    if best_article and best_score >= 10:
+        title = best_article.get("title")
+        link = best_article.get("url")
+        src = (best_article.get("source") or {}).get("name")
+        when = best_article.get("publishedAt")
+        description = best_article.get("description") or ""
         
-        if title and link:
-            return {
-                "title": title, 
-                "url": link, 
-                "source": src, 
-                "when": when,
-                "description": description
-            }
+        # Clean description
+        if description:
+            description = re.sub(r'<[^>]+>', '', description).strip()
+            if len(description) > 200:
+                description = description[:197] + "..."
+        
+        return {
+            "title": title, 
+            "url": link, 
+            "source": src, 
+            "when": when,
+            "description": description
+        }
     return None
 
 def _news_headline_via_yahoo_rss(ticker: str) -> Optional[Dict[str, str]]:
@@ -337,299 +514,464 @@ def _news_headline_via_yahoo_rss(ticker: str) -> Optional[Dict[str, str]]:
         items = root.findall(".//item")
         if not items:
             return None
-        top = items[0]
-        title = top.findtext("title")
-        link = top.findtext("link")
-        pub = top.findtext("pubDate")
-        # Try to get description from RSS
-        description = top.findtext("description") or ""
-        # Clean up HTML tags if present
-        if description:
-            import re
-            description = re.sub(r'<[^>]+>', '', description).strip()
         
-        # 🔥 DEBUG: Log what we get from Yahoo RSS
+        # Score multiple items and pick best
+        best_item = None
+        best_score = -1
+        
+        for item in items[:5]:  # Check top 5
+            title = item.findtext("title") or ""
+            score = _enhanced_score_article_for_ticker(ticker, {
+                "title": title,
+                "description": item.findtext("description") or ""
+            })
+            if score > best_score:
+                best_score = score
+                best_item = item
+        
+        if best_item and best_score >= 10:
+            title = best_item.findtext("title")
+            link = best_item.findtext("link")
+            pub = best_item.findtext("pubDate")
+            description = best_item.findtext("description") or ""
+            
+            # Clean up HTML tags
+            if description:
+                description = re.sub(r'<[^>]+>', '', description).strip()
+                if len(description) > 200:
+                    description = description[:197] + "..."
+            
+            return {
+                "title": title, 
+                "url": link, 
+                "source": "Yahoo Finance", 
+                "when": pub,
+                "description": description
+            }
+    except Exception as e:
         try:
             import logging
-            logger = logging.getLogger("ci-entrypoint")
-            logger.info(f"Yahoo RSS for {ticker}: title='{title[:50] if title else 'None'}...', description='{description[:100] if description else 'EMPTY'}...'")
+            logging.getLogger("ci-entrypoint").warning(f"Yahoo RSS parsing failed for {ticker}: {e}")
         except:
             pass
-        
-        return {
-            "title": title, 
-            "url": link, 
-            "source": "Yahoo Finance", 
-            "when": pub,
-            "description": description
-        }
-    except Exception:
-        return None
+    return None
 
 def _news_headline_for_crypto_coingecko(coingecko_id: str) -> Optional[Dict[str, str]]:
     if not coingecko_id:
         return None
-    url = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/status_updates?per_page=1"
+    url = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/status_updates?per_page=5"
     data = _http_get_json(url, timeout=15)
     if not data or not isinstance(data.get("status_updates"), list) or not data["status_updates"]:
         return None
-    u = data["status_updates"][0]
-    title = u.get("category") or "Update"
-    desc = u.get("description") or ""
-    src = (u.get("project") or {}).get("name") or "CoinGecko"
-    when = u.get("created_at")
-    link = u.get("article_url") or (u.get("project") or {}).get("homepage") or "https://www.coingecko.com/"
-    if title.lower() in ("general", "milestone", "release", "update") and desc:
-        p = desc.strip().split(".")[0].strip()
-        if p:
-            title = p
     
-    # 🔥 DEBUG: Log what we get from CoinGecko
-    try:
-        import logging
-        logger = logging.getLogger("ci-entrypoint")
-        logger.info(f"CoinGecko for {coingecko_id}: title='{title[:50] if title else 'None'}...', description='{desc[:100] if desc else 'EMPTY'}...'")
-    except:
-        pass
-    
-    return {
-        "title": title, 
-        "url": link, 
-        "source": src, 
-        "when": when,
-        "description": desc
-    }
+    # Pick most recent relevant update
+    updates = data["status_updates"]
+    for u in updates:
+        title = u.get("category") or "Update"
+        desc = u.get("description") or ""
+        src = (u.get("project") or {}).get("name") or "CoinGecko"
+        when = u.get("created_at")
+        link = u.get("article_url") or (u.get("project") or {}).get("homepage") or "https://www.coingecko.com/"
+        
+        # Improve title from description if generic
+        if title.lower() in ("general", "milestone", "release", "update") and desc:
+            sentences = desc.strip().split(".")
+            if sentences and len(sentences[0]) > 10:
+                title = sentences[0].strip()
+        
+        # Validate content quality
+        if len(title) > 5 and len(desc) > 20:
+            if len(desc) > 200:
+                desc = desc[:197] + "..."
+            
+            return {
+                "title": title, 
+                "url": link, 
+                "source": src, 
+                "when": when,
+                "description": desc
+            }
+    return None
 
-# -------------------- Math helpers --------------------
+# -------------------- Math helpers with validation --------------------
+
+def _safe_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+    """Safely convert value to float with validation."""
+    try:
+        if value is None:
+            return default
+        f = float(value)
+        if not (-1e10 < f < 1e10):  # Sanity check for reasonable values
+            return default
+        return f
+    except (ValueError, TypeError, OverflowError):
+        return default
 
 def _pct(curr: Optional[float], prev: Optional[float]) -> Optional[float]:
     try:
+        curr = _safe_float(curr)
+        prev = _safe_float(prev)
         if curr is None or prev is None or prev == 0:
             return None
-        return (curr/prev - 1.0) * 100.0
+        pct = (curr/prev - 1.0) * 100.0
+        # Sanity check: reject impossible percentage changes
+        if not (-99.9 <= pct <= 10000):  # -99.9% to +10000% seems reasonable
+            return None
+        return pct
     except Exception:
         return None
 
 def _pos_in_range(price, low, high) -> float:
     try:
-        price, low, high = float(price), float(low), float(high)
+        price = _safe_float(price, 0)
+        low = _safe_float(low, 0)
+        high = _safe_float(high, 0)
+        if price is None or low is None or high is None:
+            return 50.0
         if high <= low: 
             return 50.0
-        return max(0.0, min(100.0, (price - low)/(high - low)*100.0))
+        pos = max(0.0, min(100.0, (price - low)/(high - low)*100.0))
+        return pos
     except Exception:
         return 50.0
 
 def _nearest(series: List[float], k_back: int) -> Optional[float]:
-    if not series:
+    if not series or k_back < 0:
         return None
     idx = len(series) - 1 - k_back
     if 0 <= idx < len(series):
-        return series[idx]
+        return _safe_float(series[idx])
     return None
 
-# -------------------- Main builder --------------------
+# -------------------- Main builder with better error handling --------------------
 
 async def build_nextgen_html(logger) -> str:
-    # Try engine-provided news; we will still do per-ticker fallbacks below
-    news_map_from_engine: Dict[str, Dict[str, Optional[str]]] = {}
+    """Build NextGen HTML with comprehensive error handling and data validation."""
+    
+    # Enhanced logging
+    start_time = time.time()
+    logger.info("=== NextGen Digest Build Started ===")
+    
     try:
-        from main import StrategicIntelligenceEngine
-        engine = StrategicIntelligenceEngine()
-        logger.info("NextGen: news via engine")
-        news = await engine._synthesize_strategic_news()
-        news_map_from_engine = _coalesce_news_map(news)
-    except Exception:
-        news_map_from_engine = {}
+        # Try engine-provided news with fallback
+        news_map_from_engine: Dict[str, Dict[str, Optional[str]]] = {}
+        try:
+            from main import StrategicIntelligenceEngine
+            engine = StrategicIntelligenceEngine()
+            logger.info("NextGen: fetching news via engine")
+            news = await engine._synthesize_strategic_news()
+            news_map_from_engine = _coalesce_news_map(news)
+            logger.info(f"Engine provided news for {len(news_map_from_engine)} entities")
+        except Exception as e:
+            logger.warning(f"Engine news fetch failed: {e}, continuing with direct news fetch")
+            news_map_from_engine = {}
 
-    alpha_key = os.getenv("ALPHA_VANTAGE_API_KEY") or None
-    newsapi_key_present = bool(os.getenv("NEWSAPI_KEY"))
-    entities = _load_entities()
-
-    companies: List[Dict[str, Any]] = []
-    cryptos:   List[Dict[str, Any]] = []
-    up = down = 0
-    movers: List[Dict[str, Any]] = []
-
-    def _news_url_for(t: str) -> str:
-        return f"https://finance.yahoo.com/quote/{t}/news"
-
-    # Pace external calls
-    last_call_ts = 0.0
-    def _pace(min_interval=1.5):
-        nonlocal last_call_ts
-        now = time.time()
-        delta = now - last_call_ts
-        if delta < min_interval:
-            time.sleep(min_interval - delta)
-        last_call_ts = time.time()
-
-    for e in entities:
-        sym = str(e.get("symbol") or "").upper()
-        if not sym:
-            continue
-        name = e.get("name") or sym
-        is_crypto = (e.get("asset_class","").lower() == "crypto") or sym.endswith("-USD")
-
-        # ----- Headline selection per entity -----
-        headline = None; h_source = None; h_when = None; h_url = _news_url_for(sym)
-        description = ""  # Store article description
+        alpha_key = os.getenv("ALPHA_VANTAGE_API_KEY") or None
+        newsapi_key_present = bool(os.getenv("NEWSAPI_KEY"))
         
-        # 1) Engine
-        m = news_map_from_engine.get(sym)
-        if m and m.get("title"):
-            headline, h_source, h_when, h_url = m.get("title"), m.get("source"), m.get("when"), m.get("url") or h_url
-            description = m.get("description") or ""
-            logger.info(f"Engine news for {sym}: headline='{headline[:50] if headline else 'None'}...', description='{description[:50] if description else 'EMPTY'}...'")
-        else:
-            # 2) NewsAPI (if available)
-            if newsapi_key_present:
-                _pace(0.8)
-                r = _news_headline_via_newsapi(sym, name)
-                if r and r.get("title"):
-                    headline, h_source, h_when, h_url = r["title"], r.get("source"), r.get("when"), r.get("url", h_url)
-                    description = r.get("description") or ""
-                    logger.info(f"Selected NewsAPI result for {sym}: description='{description[:50] if description else 'EMPTY'}...'")
-            # 3) Yahoo RSS
-            if not headline:
-                _pace(0.8)
-                r = _news_headline_via_yahoo_rss(sym)
-                if r and r.get("title"):
-                    headline, h_source, h_when, h_url = r["title"], r.get("source"), r.get("when"), r.get("url", h_url)
-                    description = r.get("description") or ""
-                    logger.info(f"Selected Yahoo RSS result for {sym}: description='{description[:50] if description else 'EMPTY'}...'")
-            # 4) Crypto-only: CoinGecko status updates
-            if not headline and is_crypto:
-                _pace(0.8)
-                r = _news_headline_for_crypto_coingecko(e.get("coingecko_id") or COINGECKO_IDS.get(sym))
-                if r and r.get("title"):
-                    headline, h_source, h_when, h_url = r["title"], r.get("source"), r.get("when"), r.get("url", h_url)
-                    description = r.get("description") or ""
-                    logger.info(f"Selected CoinGecko result for {sym}: description='{description[:50] if description else 'EMPTY'}...'")
+        try:
+            entities = _load_entities()
+            logger.info(f"Loaded {len(entities)} entities")
+        except Exception as e:
+            logger.error(f"Failed to load entities: {e}")
+            raise
 
-        # 🔥 DEBUG: Log what goes into company/crypto objects
-        if headline and description:
-            logger.info(f"FINAL: {sym} will have description='{description[:100] if description else 'EMPTY'}...' in company object")
-        elif headline:
-            logger.warning(f"ISSUE: {sym} has headline='{headline[:50]}...' but NO DESCRIPTION")
+        companies: List[Dict[str, Any]] = []
+        cryptos: List[Dict[str, Any]] = []
+        up = down = 0
+        movers: List[Dict[str, Any]] = []
+        failed_entities = []
 
-        if is_crypto:
-            # ---- Crypto prices (CoinGecko -> AV -> placeholder) ----
-            _pace(1.5)
-            dt, cl = _fetch_coingecko_crypto(sym, id_hint=e.get("coingecko_id"))
-            provider = "coingecko" if cl else None
-            if not cl:
-                _pace(12.0)
-                dt, cl = _fetch_alpha_vantage_crypto(sym, alpha_key)
-                provider = "alphavantage" if cl else None
+        def _news_url_for(t: str) -> str:
+            return f"https://finance.yahoo.com/quote/{t}/news"
 
-            if cl:
+        # Improved pacing with logging
+        last_call_ts = 0.0
+        api_call_count = 0
+        def _pace_with_logging(min_interval=1.5, call_type="API"):
+            nonlocal last_call_ts, api_call_count
+            now = time.time()
+            delta = now - last_call_ts
+            if delta < min_interval:
+                sleep_time = min_interval - delta
+                logger.debug(f"Pacing {call_type}: sleeping {sleep_time:.1f}s")
+                time.sleep(sleep_time)
+            last_call_ts = time.time()
+            api_call_count += 1
+
+        for entity_idx, e in enumerate(entities):
+            sym = str(e.get("symbol") or "").upper()
+            if not sym:
+                logger.warning(f"Entity {entity_idx} has no symbol, skipping")
+                continue
+            
+            name = e.get("name") or sym
+            is_crypto = (e.get("asset_class","").lower() == "crypto") or sym.endswith("-USD")
+            
+            logger.info(f"Processing {entity_idx+1}/{len(entities)}: {sym} ({name})")
+
+            # ----- Enhanced headline selection -----
+            headline = None; h_source = None; h_when = None; h_url = _news_url_for(sym)
+            description = ""
+            news_attempts = 0
+            
+            try:
+                # 1) Engine news (cached)
+                m = news_map_from_engine.get(sym)
+                if m and m.get("title"):
+                    headline = m.get("title")
+                    h_source = m.get("source") 
+                    h_when = m.get("when")
+                    h_url = m.get("url") or h_url
+                    description = m.get("description") or ""
+                    logger.debug(f"Using engine news for {sym}")
+                else:
+                    # 2) NewsAPI (with retry logic)
+                    if newsapi_key_present and not headline:
+                        _pace_with_logging(0.8, "NewsAPI")
+                        news_attempts += 1
+                        r = _news_headline_via_newsapi(sym, name)
+                        if r and r.get("title"):
+                            headline = r["title"]
+                            h_source = r.get("source")
+                            h_when = r.get("when")
+                            h_url = r.get("url", h_url)
+                            description = r.get("description") or ""
+                            logger.debug(f"Using NewsAPI result for {sym}")
+                    
+                    # 3) Yahoo RSS fallback
+                    if not headline:
+                        _pace_with_logging(0.8, "Yahoo RSS")
+                        news_attempts += 1
+                        r = _news_headline_via_yahoo_rss(sym)
+                        if r and r.get("title"):
+                            headline = r["title"]
+                            h_source = r.get("source")
+                            h_when = r.get("when")
+                            h_url = r.get("url", h_url)
+                            description = r.get("description") or ""
+                            logger.debug(f"Using Yahoo RSS result for {sym}")
+                    
+                    # 4) Crypto-specific: CoinGecko
+                    if not headline and is_crypto:
+                        _pace_with_logging(0.8, "CoinGecko news")
+                        news_attempts += 1
+                        r = _news_headline_for_crypto_coingecko(e.get("coingecko_id") or COINGECKO_IDS.get(sym))
+                        if r and r.get("title"):
+                            headline = r["title"]
+                            h_source = r.get("source")
+                            h_when = r.get("when")
+                            h_url = r.get("url", h_url)
+                            description = r.get("description") or ""
+                            logger.debug(f"Using CoinGecko news for {sym}")
+                
+                if not headline:
+                    logger.warning(f"No news found for {sym} after {news_attempts} attempts")
+            
+            except Exception as e:
+                logger.warning(f"News fetch failed for {sym}: {e}")
+
+            # ----- Price data processing with validation -----
+            if is_crypto:
+                try:
+                    # Crypto price fetching with fallbacks
+                    _pace_with_logging(1.5, "CoinGecko price")
+                    dt, cl = _fetch_coingecko_crypto(sym, id_hint=e.get("coingecko_id"))
+                    provider = "coingecko" if cl else None
+                    
+                    if not cl and alpha_key:
+                        _pace_with_logging(12.0, "Alpha Vantage crypto")
+                        dt, cl = _fetch_alpha_vantage_crypto(sym, alpha_key)
+                        provider = "alphavantage" if cl else None
+
+                    if cl and len(cl) >= 5:  # Minimum data requirement
+                        latest = cl[-1]
+                        d1 = _nearest(cl, 1)
+                        w1 = _nearest(cl, 7) 
+                        m1 = _nearest(cl, 30)
+                        
+                        # 52-week range (or available range)
+                        window = cl[-365:] if len(cl) >= 365 else cl
+                        if len(window) >= 5:
+                            low52, high52 = min(window), max(window)
+                            range_pct = _pos_in_range(latest, low52, high52)
+                        else:
+                            low52 = high52 = latest
+                            range_pct = 50.0
+                        
+                        # YTD calculation with validation
+                        pytd = None
+                        if dt and len(dt) > 30:  # Need sufficient history
+                            try:
+                                last_year = dt[-1].year - 1
+                                for i in range(len(dt)-1, max(0, len(dt)-400), -1):  # Look back max 400 days
+                                    if dt[i].year == last_year:
+                                        pytd = _pct(latest, cl[i])
+                                        break
+                            except Exception as e:
+                                logger.debug(f"YTD calculation failed for {sym}: {e}")
+
+                        crypto_data = {
+                            "name": name, "ticker": sym, "price": latest,
+                            "pct_1d": _pct(latest, d1), "pct_1w": _pct(latest, w1),
+                            "pct_1m": _pct(latest, m1), "pct_ytd": pytd,
+                            "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
+                            "headline": headline, "source": h_source, "when": h_when,
+                            "description": description,
+                            "next_event": None, "vol_x_avg": None,
+                            "news_url": h_url,
+                            "pr_url": {
+                                "BTC-USD":"https://bitcoin.org/en/press",
+                                "ETH-USD":"https://blog.ethereum.org",
+                                "DOGE-USD":"https://dogecoin.com/",
+                                "XRP-USD":"https://ripple.com/insights/"
+                            }.get(sym, h_url),
+                        }
+                        
+                        cryptos.append(crypto_data)
+                        logger.info(f"{sym}: crypto success via {provider}, bars={len(cl)}, price=${latest:.6f}")
+                        
+                    else:
+                        # Crypto placeholder
+                        cryptos.append({
+                            "name": name, "ticker": sym, "price": 0.0,
+                            "pct_1d": None, "pct_1w": None, "pct_1m": None, "pct_ytd": None,
+                            "low_52w": 0.0, "high_52w": 0.0, "range_pct": 50.0,
+                            "headline": headline, "source": h_source, "when": h_when,
+                            "description": description,
+                            "next_event": None, "vol_x_avg": None,
+                            "news_url": h_url, "pr_url": h_url,
+                        })
+                        logger.warning(f"{sym}: crypto data unavailable, using placeholder")
+                        failed_entities.append(f"{sym} (crypto data)")
+                        
+                except Exception as e:
+                    logger.error(f"Crypto processing failed for {sym}: {e}")
+                    failed_entities.append(f"{sym} (crypto error)")
+                continue
+
+            # ----- Equity processing -----
+            try:
+                src, dt, cl = _get_equity_series(sym, alpha_key)
+                if not cl or len(cl) < 5:
+                    logger.warning(f"{sym}: insufficient equity data, skipping")
+                    failed_entities.append(f"{sym} (equity data)")
+                    continue
+                
+                # Validated price calculations
                 latest = cl[-1]
-                d1 = _nearest(cl, 1)
-                w1 = _nearest(cl, 7)
-                m1 = _nearest(cl, 30)
-                window = cl[-365:] if len(cl) >= 365 else cl
-                low52, high52 = float(min(window)), float(max(window))
-                range_pct = _pos_in_range(latest, low52, high52)
-                pytd = None
-                if dt:
-                    last_year = dt[-1].year - 1
-                    for i in range(len(dt)-1, -1, -1):
-                        if dt[i].year == last_year:
-                            pytd = _pct(latest, cl[i]); break
+                d1 = _nearest(cl, 1) if len(cl) >= 2 else None
+                w1 = _nearest(cl, 5) if len(cl) >= 6 else None  # ~1 week of trading days
+                m1 = _nearest(cl, 22) if len(cl) >= 23 else None  # ~1 month of trading days
+                
+                # 52-week range (or 1-year trading days)
+                window = cl[-252:] if len(cl) >= 252 else cl
+                if len(window) >= 5:
+                    low52, high52 = min(window), max(window)
+                    range_pct = _pos_in_range(latest, low52, high52)
+                else:
+                    low52 = high52 = latest
+                    range_pct = 50.0
 
-                cryptos.append({
+                # Percentage calculations with validation
+                p1d, p1w, p1m = _pct(latest, d1), _pct(latest, w1), _pct(latest, m1)
+                
+                # Track movers
+                if p1d is not None:
+                    if p1d >= 0: 
+                        up += 1
+                    else: 
+                        down += 1
+                    movers.append({"ticker": sym, "pct": p1d})
+
+                # YTD calculation for equities
+                pytd = None
+                if dt and len(dt) > 50:  # Need sufficient history
+                    try:
+                        last_year = dt[-1].year - 1
+                        for i in range(len(dt)-1, max(0, len(dt)-300), -1):
+                            if dt[i].year == last_year:
+                                pytd = _pct(latest, cl[i])
+                                break
+                    except Exception as e:
+                        logger.debug(f"Equity YTD calculation failed for {sym}: {e}")
+                
+                company_data = {
                     "name": name, "ticker": sym, "price": latest,
-                    "pct_1d": _pct(latest, d1), "pct_1w": _pct(latest, w1),
-                    "pct_1m": _pct(latest, m1), "pct_ytd": pytd,
+                    "pct_1d": p1d, "pct_1w": p1w, "pct_1m": p1m, "pct_ytd": pytd,
                     "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
                     "headline": headline, "source": h_source, "when": h_when,
-                    "description": description,  # Article description
+                    "description": description,
                     "next_event": None, "vol_x_avg": None,
-                    "news_url": h_url,
-                    "pr_url": {
-                        "BTC-USD":"https://bitcoin.org",
-                        "ETH-USD":"https://blog.ethereum.org",
-                        "DOGE-USD":"https://blog.dogecoin.com",
-                        "XRP-USD":"https://ripple.com/insights/"
-                    }.get(sym, _news_url_for(sym)),
-                })
-                try:
-                    import logging
-                    logging.getLogger("ci-entrypoint").info(f"{sym}: crypto provider={provider} bars={len(cl)} last={latest:.6f} pos%={range_pct:.2f}")
-                except Exception:
-                    pass
-            else:
-                cryptos.append({
-                    "name": name, "ticker": sym, "price": 0.0,
-                    "pct_1d": None, "pct_1w": None, "pct_1m": None, "pct_ytd": None,
-                    "low_52w": 0.0, "high_52w": 0.0, "range_pct": 50.0,
-                    "headline": headline, "source": h_source, "when": h_when,
-                    "description": description,  # Article description
-                    "next_event": None, "vol_x_avg": None,
-                    "news_url": h_url, "pr_url": h_url,
-                })
-                try:
-                    import logging
-                    logging.getLogger("ci-entrypoint").warning(f"{sym}: crypto providers unavailable – rendering placeholder")
-                except Exception:
-                    pass
-            continue
+                    "news_url": h_url, 
+                    "pr_url": f"https://finance.yahoo.com/quote/{sym}/press-releases",
+                }
+                
+                companies.append(company_data)
+                logger.info(f"{sym}: equity success via {src}, bars={len(cl)}, price=${latest:.2f}, 1D={p1d:.1f}%" if p1d else f"{sym}: equity success via {src}, bars={len(cl)}, price=${latest:.2f}")
+                
+            except Exception as e:
+                logger.error(f"Equity processing failed for {sym}: {e}")
+                failed_entities.append(f"{sym} (equity error)")
 
-        # ---- Equities ----
-        src, dt, cl = _get_equity_series(sym, os.getenv("ALPHA_VANTAGE_API_KEY") or None)
-        if not cl:
-            try:
-                import logging
-                logging.getLogger("ci-entrypoint").warning(f"{sym}: equity history unavailable – skipped")
-            except Exception:
-                pass
-            continue
-        latest = cl[-1]
-        d1 = cl[-2] if len(cl) >= 2 else None
-        w1 = cl[-6] if len(cl) >= 6 else None
-        m1 = cl[-22] if len(cl) >= 22 else None
-        window = cl[-252:] if len(cl) >= 252 else cl
-        low52, high52 = float(min(window)), float(max(window))
-        range_pct = _pos_in_range(latest, low52, high52)
+        # ----- Summary generation -----
+        total_entities = len(companies) + len(cryptos)
+        logger.info(f"Processing complete: {total_entities} entities processed ({len(companies)} equities, {len(cryptos)} crypto)")
+        logger.info(f"Market status: {up} up, {down} down")
+        logger.info(f"API calls made: {api_call_count}")
+        
+        if failed_entities:
+            logger.warning(f"Failed entities: {', '.join(failed_entities)}")
 
-        p1d, p1w, p1m = _pct(latest, d1), _pct(latest, w1), _pct(latest, m1)
-        if p1d is not None:
-            if p1d >= 0: up += 1
-            else: down += 1
-            movers.append({"ticker": sym, "pct": p1d})
+        # Top movers with validation
+        winners = sorted([m for m in movers if m["pct"] is not None and m["pct"] > 0], 
+                        key=lambda x: x["pct"], reverse=True)[:3]
+        losers = sorted([m for m in movers if m["pct"] is not None and m["pct"] < 0], 
+                       key=lambda x: x["pct"])[:3]
 
-        # Compute YTD vs last trading day of previous calendar year
-        pytd = None
-        if dt:
-            last_year = dt[-1].year - 1
-            for i2 in range(len(dt)-1, -1, -1):
-                if dt[i2].year == last_year:
-                    pytd = _pct(latest, cl[i2]); break
-        companies.append({
-            "name": name, "ticker": sym, "price": latest,
-            "pct_1d": p1d, "pct_1w": p1w, "pct_1m": p1m, "pct_ytd": pytd,
-            "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
-            "headline": headline, "source": h_source, "when": h_when,
-            "description": description,  # Article description
-            "next_event": None, "vol_x_avg": None,
-            "news_url": h_url, "pr_url": f"https://finance.yahoo.com/quote/{sym}/press-releases",
-        })
+        now_c = datetime.now(tz=CENTRAL_TZ) if CENTRAL_TZ else datetime.now()
+        summary = {
+            "as_of_ct": now_c,
+            "up_count": up, 
+            "down_count": down,
+            "top_winners": winners, 
+            "top_losers": losers,
+            "catalysts": [],
+            "build_stats": {
+                "entities_processed": total_entities,
+                "api_calls": api_call_count,
+                "failed_entities": len(failed_entities),
+                "processing_time_seconds": round(time.time() - start_time, 1)
+            }
+        }
 
-    # 🔥 DEBUG: Log companies that might be used for hero
-    for c in companies:
-        if c.get("headline"):
-            logger.info(f"Company {c.get('ticker')}: headline='{c.get('headline')[:50]}...', description='{c.get('description')[:50] if c.get('description') else 'NO DESCRIPTION'}...'")
+        # Generate HTML with error handling
+        try:
+            html = render_email(summary, companies, cryptos=cryptos)
+            if not html or len(html) < 1000:  # Basic validation
+                raise ValueError("Generated HTML appears invalid or too short")
+            
+            logger.info(f"=== Build completed successfully in {summary['build_stats']['processing_time_seconds']}s ===")
+            logger.info(f"HTML length: {len(html)} characters")
+            return html
+            
+        except Exception as e:
+            logger.error(f"Email rendering failed: {e}")
+            raise
 
-    winners = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"], reverse=True)[:3]
-    losers  = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"])[:3]
-
-    now_c = datetime.now(tz=CENTRAL_TZ) if CENTRAL_TZ else datetime.now()
-    summary = {
-        "as_of_ct": now_c,
-        "up_count": up, "down_count": down,
-        "top_winners": winners, "top_losers": losers,
-        "catalysts": [],
-    }
-
-    html = render_email(summary, companies, cryptos=cryptos)
-    return html
+    except Exception as e:
+        logger.error(f"NextGen build failed: {e}")
+        # Try to generate a minimal fallback HTML
+        try:
+            fallback_html = f"""
+            <!DOCTYPE html><html><body style="margin:0;background:#0b0c10;color:#e5e7eb;padding:20px;">
+            <h1>Intelligence Digest</h1>
+            <p>Build failed: {str(e)}</p>
+            <p>Please check logs and try again.</p>
+            </body></html>
+            """
+            logger.warning("Generated fallback HTML due to build failure")
+            return fallback_html
+        except:
+            # Last resort
+            raise RuntimeError(f"NextGen digest build failed completely: {e}")
