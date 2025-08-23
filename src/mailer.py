@@ -72,31 +72,56 @@ def _generate_dynamic_subject() -> str:
     return subject_templates[template_index]
 
 def _extract_preview_from_html(html: str) -> str:
-    """Extract compelling preview text from email HTML."""
+    """Extract hero article headline for inbox preview text."""
     if not html:
         return "Strategic market intelligence and portfolio insights"
     
-    # Look for hero article content first
-    hero_match = re.search(r'<div[^>]*font-weight:700[^>]*font-size:22px[^>]*>(.*?)</div>', html, re.S | re.I)
-    if hero_match:
-        hero_title = re.sub(r'<[^>]+>', '', hero_match.group(1)).strip()
-        if hero_title and len(hero_title) > 20:
-            return f"{hero_title[:100]}..."
+    # 🔥 FIXED: Correct regex pattern for hero article title
+    # Looking for the specific hero container structure from _render_hero()
+    hero_container_pattern = r'<table[^>]*background:#111827[^>]*>.*?<td[^>]*padding:16px[^>]*>(.*?)</td>'
+    container_match = re.search(hero_container_pattern, html, re.S | re.I)
     
-    # Look for any significant text content
+    if container_match:
+        hero_content = container_match.group(1)
+        # Now look for the title within the hero container
+        title_pattern = r'<a[^>]*style="[^"]*text-decoration:none[^"]*"[^>]*>(.*?)</a>'
+        title_match = re.search(title_pattern, hero_content, re.S | re.I)
+        
+        if title_match:
+            hero_title = re.sub(r'<[^>]+>', '', title_match.group(1)).strip()
+            if hero_title and len(hero_title) > 10 and "intelligence digest" not in hero_title.lower():
+                # Clean up HTML entities and return clean title
+                hero_title = hero_title.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+                return hero_title[:140] + "..." if len(hero_title) > 140 else hero_title
+    
+    # 🔥 ALTERNATIVE: Look for any linked headline in hero area
+    # Pattern for any meaningful linked text that's not "Intelligence Digest"
+    headline_links = re.findall(r'<a[^>]*>(.*?)</a>', html, re.S | re.I)
+    for link_text in headline_links:
+        clean_text = re.sub(r'<[^>]+>', '', link_text).strip()
+        if (len(clean_text) > 15 and 
+            "intelligence digest" not in clean_text.lower() and
+            "news" not in clean_text.lower() and 
+            "press" not in clean_text.lower() and
+            not clean_text.isdigit()):
+            return clean_text[:140] + "..." if len(clean_text) > 140 else clean_text
+    
+    # Fallback: Look for substantial content that's not metadata
     text_content = re.sub(r'<[^>]+>', ' ', html)
     text_content = re.sub(r'\s+', ' ', text_content).strip()
     
-    # Find meaningful sentences (not just timestamps or metadata)
+    # Split into sentences and find first substantial one
     sentences = [s.strip() for s in text_content.split('.') if len(s.strip()) > 20]
     meaningful_sentences = [s for s in sentences if not any(word in s.lower() for word in 
-                           ['data as of', 'generated', 'you\'re receiving', 'unsubscribe', 'copyright'])]
+                           ['intelligence digest', 'data as of', 'generated', 'you\'re receiving', 
+                            'unsubscribe', 'copyright', 'next intelligence', 'monitoring', 
+                            'strategic constellation', 'engineered with'])]
     
     if meaningful_sentences:
         preview = meaningful_sentences[0]
         return f"{preview[:120]}..." if len(preview) > 120 else preview
     
-    # Fallback to dynamic preview
+    # Final fallback to dynamic preview
     return _generate_dynamic_preview()
 
 def _generate_dynamic_preview() -> str:
@@ -154,13 +179,13 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
 
     dry_run = os.getenv("DRY_RUN", "").lower() == "true"
 
-    # 🔥 NEW: Enhanced subject line generation
+    # Enhanced subject line generation
     if subject is None:
         subject = _generate_dynamic_subject()
     subject = _clean_subject(subject)
 
-    # 🔥 NEW: Enhanced sender display name
-    sender_display_name = cfg["sender_name"] or "Intelligence Digest"
+    # Set sender display name to "Intelligence Digest"
+    sender_display_name = "Intelligence Digest"
     sender_disp = formataddr((sender_display_name, cfg["sender"]))
 
     # Logging: show masked addresses
@@ -182,7 +207,7 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
     if cfg["reply_to"]:
         msg["Reply-To"] = cfg["reply_to"]
 
-    # 🔥 NEW: Enhanced email headers for better inbox display
+    # Enhanced email headers for better inbox display
     run_id = os.getenv("GITHUB_RUN_ID", "")
     run_attempt = os.getenv("GITHUB_RUN_ATTEMPT", "")
     run_number = os.getenv("GITHUB_RUN_NUMBER", "")
@@ -203,8 +228,11 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
     msg["Importance"] = "Normal"
     msg["X-Auto-Response-Suppress"] = "OOF, DR, RN, NRN, AutoReply"
 
-    # Body parts with enhanced preview text
+    # Extract hero article headline for preview with debugging
     preview_text = _extract_preview_from_html(html)
+    
+    if logger:
+        logger.info(f"Extracted preview text: '{preview_text[:100]}...'")
     
     # Create enhanced plain text version with preview
     import re as _re
@@ -224,7 +252,7 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
 
     if dry_run:
         if logger:
-            logger.info(f"[DRY_RUN] Would send. Subject='{subject}' | Preview='{preview_text[:50]}...' | To(masked)={masked_to} | Admins(masked)={masked_admins}")
+            logger.info(f"[DRY_RUN] Would send. Subject='{subject}' | Preview='{preview_text[:60]}...' | To(masked)={masked_to} | Admins(masked)={masked_admins}")
         return
 
     # Build envelope recipients with dedupe
@@ -245,7 +273,7 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
             masked_env = [_mask_email(x) for x in to_addrs]
             logger.info(f"Envelope recipients(masked)={masked_env}")
             logger.info(f"SMTP refused recipients map: {refused!r}")
-            logger.info(f"Email sent with subject: '{subject}' and preview: '{preview_text[:50]}...'")
+            logger.info(f"Email sent with subject: '{subject}' and hero preview: '{preview_text[:60]}...'")
         if refused:
             raise RuntimeError(f"SMTP refused some recipients: {refused}")
         if logger:
