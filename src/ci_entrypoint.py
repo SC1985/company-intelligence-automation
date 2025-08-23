@@ -32,6 +32,7 @@ async def main():
             logger.info("Using NextGen digest renderer")
             ng = importlib.import_module("nextgen_digest")
             html = await ng.build_nextgen_html(logger)
+            logger.info("NextGen digest HTML generated successfully")
         except Exception as e:
             logger.error("NextGen digest failed: %s", e)
 
@@ -91,10 +92,43 @@ async def main():
     if not html or not isinstance(html, str):
         raise RuntimeError("Could not build HTML (NextGen + fallbacks exhausted).")
 
+    # 🔥 NEW: Enhanced subject line generation
     today = datetime.now().strftime("%B %d, %Y")
-    subject = f"Weekly Company Intelligence Report — {today}"
+    current_hour = datetime.now().hour
+    
+    # Time-aware subject lines
+    if 5 <= current_hour < 12:
+        time_emoji = "🌅"
+        time_context = "Morning"
+    elif 12 <= current_hour < 17:
+        time_emoji = "☀️" 
+        time_context = "Midday"
+    elif 17 <= current_hour < 21:
+        time_emoji = "🌆"
+        time_context = "Evening"  
+    else:
+        time_emoji = "🌙"
+        time_context = "Late"
+    
+    # Check for market signals in HTML to customize subject
+    alert_count = html.count('MAJOR') + html.count('SIGNIFICANT') if html else 0
+    if alert_count > 2:
+        urgency_emoji = "🔥"
+        urgency_text = f" • {alert_count} Key Signals"
+    elif alert_count > 0:
+        urgency_emoji = "⚡"
+        urgency_text = f" • {alert_count} Updates"
+    else:
+        urgency_emoji = time_emoji
+        urgency_text = ""
+        
+    subject = f"{urgency_emoji} Intelligence Digest • {today.split(',')[0]}{urgency_text}"
+    
+    logger.info(f"Generated subject: {subject}")
+    logger.info(f"Email HTML length: {len(html)} characters")
 
     send_html_email(html=html, subject=subject, logger=logger)
+    logger.info("Email dispatch completed successfully")
     return 0
 
 if __name__ == "__main__":
