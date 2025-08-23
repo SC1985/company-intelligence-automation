@@ -243,21 +243,21 @@ def _pick_best_for_ticker(t: str, arts: List[Dict[str, Any]]) -> Dict[str, Optio
         if isinstance(src, dict): src = src.get("name") or src.get("id") or src.get("domain")
         when = best.get("publishedAt") or best.get("published_at") or best.get("time")
         url = _first_url_from_item(best, t)
-        # 🔥 ADD: Include description for hero body
+        # Include description for hero body
         description = best.get("description") or best.get("summary") or ""
         return {
             "title": title, 
             "source": src if isinstance(src, str) else None, 
             "when": when, 
             "url": url,
-            "description": description  # 🔥 NEW: Article summary
+            "description": description
         }
     return {
         "title": None, 
         "source": None, 
         "when": None, 
         "url": f"https://finance.yahoo.com/quote/{t}/news",
-        "description": ""  # 🔥 NEW: Empty fallback
+        "description": ""
     }
 
 def _coalesce_news_map(news: Any) -> Dict[str, Dict[str, Optional[str]]]:
@@ -307,15 +307,22 @@ def _news_headline_via_newsapi(ticker: str, name: str) -> Optional[Dict[str, str
         title = a.get("title"); link = a.get("url")
         src = (a.get("source") or {}).get("name")
         when = a.get("publishedAt")
-        # 🔥 ADD: Capture article description for hero body
+        # 🔥 DEBUG: Log what we get from NewsAPI
         description = a.get("description") or ""
+        try:
+            import logging
+            logger = logging.getLogger("ci-entrypoint")
+            logger.info(f"NewsAPI for {ticker}: title='{title[:50] if title else 'None'}...', description='{description[:100] if description else 'EMPTY'}...'")
+        except:
+            pass
+        
         if title and link:
             return {
                 "title": title, 
                 "url": link, 
                 "source": src, 
                 "when": when,
-                "description": description  # 🔥 NEW: Article summary
+                "description": description
             }
     return None
 
@@ -334,19 +341,27 @@ def _news_headline_via_yahoo_rss(ticker: str) -> Optional[Dict[str, str]]:
         title = top.findtext("title")
         link = top.findtext("link")
         pub = top.findtext("pubDate")
-        # 🔥 ADD: Try to get description from RSS
+        # Try to get description from RSS
         description = top.findtext("description") or ""
         # Clean up HTML tags if present
         if description:
             import re
             description = re.sub(r'<[^>]+>', '', description).strip()
         
+        # 🔥 DEBUG: Log what we get from Yahoo RSS
+        try:
+            import logging
+            logger = logging.getLogger("ci-entrypoint")
+            logger.info(f"Yahoo RSS for {ticker}: title='{title[:50] if title else 'None'}...', description='{description[:100] if description else 'EMPTY'}...'")
+        except:
+            pass
+        
         return {
             "title": title, 
             "url": link, 
             "source": "Yahoo Finance", 
             "when": pub,
-            "description": description  # 🔥 NEW: Article summary
+            "description": description
         }
     except Exception:
         return None
@@ -369,12 +384,20 @@ def _news_headline_for_crypto_coingecko(coingecko_id: str) -> Optional[Dict[str,
         if p:
             title = p
     
+    # 🔥 DEBUG: Log what we get from CoinGecko
+    try:
+        import logging
+        logger = logging.getLogger("ci-entrypoint")
+        logger.info(f"CoinGecko for {coingecko_id}: title='{title[:50] if title else 'None'}...', description='{desc[:100] if desc else 'EMPTY'}...'")
+    except:
+        pass
+    
     return {
         "title": title, 
         "url": link, 
         "source": src, 
         "when": when,
-        "description": desc  # 🔥 NEW: Already has description
+        "description": desc
     }
 
 # -------------------- Math helpers --------------------
@@ -449,13 +472,14 @@ async def build_nextgen_html(logger) -> str:
 
         # ----- Headline selection per entity -----
         headline = None; h_source = None; h_when = None; h_url = _news_url_for(sym)
-        description = ""  # 🔥 ADD: Store article description
+        description = ""  # Store article description
         
         # 1) Engine
         m = news_map_from_engine.get(sym)
         if m and m.get("title"):
             headline, h_source, h_when, h_url = m.get("title"), m.get("source"), m.get("when"), m.get("url") or h_url
-            description = m.get("description") or ""  # 🔥 ADD: Get description from engine
+            description = m.get("description") or ""
+            logger.info(f"Engine news for {sym}: headline='{headline[:50] if headline else 'None'}...', description='{description[:50] if description else 'EMPTY'}...'")
         else:
             # 2) NewsAPI (if available)
             if newsapi_key_present:
@@ -463,21 +487,30 @@ async def build_nextgen_html(logger) -> str:
                 r = _news_headline_via_newsapi(sym, name)
                 if r and r.get("title"):
                     headline, h_source, h_when, h_url = r["title"], r.get("source"), r.get("when"), r.get("url", h_url)
-                    description = r.get("description") or ""  # 🔥 ADD: Store description
+                    description = r.get("description") or ""
+                    logger.info(f"Selected NewsAPI result for {sym}: description='{description[:50] if description else 'EMPTY'}...'")
             # 3) Yahoo RSS
             if not headline:
                 _pace(0.8)
                 r = _news_headline_via_yahoo_rss(sym)
                 if r and r.get("title"):
                     headline, h_source, h_when, h_url = r["title"], r.get("source"), r.get("when"), r.get("url", h_url)
-                    description = r.get("description") or ""  # 🔥 ADD: Store description
+                    description = r.get("description") or ""
+                    logger.info(f"Selected Yahoo RSS result for {sym}: description='{description[:50] if description else 'EMPTY'}...'")
             # 4) Crypto-only: CoinGecko status updates
             if not headline and is_crypto:
                 _pace(0.8)
                 r = _news_headline_for_crypto_coingecko(e.get("coingecko_id") or COINGECKO_IDS.get(sym))
                 if r and r.get("title"):
                     headline, h_source, h_when, h_url = r["title"], r.get("source"), r.get("when"), r.get("url", h_url)
-                    description = r.get("description") or ""  # 🔥 ADD: Store description
+                    description = r.get("description") or ""
+                    logger.info(f"Selected CoinGecko result for {sym}: description='{description[:50] if description else 'EMPTY'}...'")
+
+        # 🔥 DEBUG: Log what goes into company/crypto objects
+        if headline and description:
+            logger.info(f"FINAL: {sym} will have description='{description[:100] if description else 'EMPTY'}...' in company object")
+        elif headline:
+            logger.warning(f"ISSUE: {sym} has headline='{headline[:50]}...' but NO DESCRIPTION")
 
         if is_crypto:
             # ---- Crypto prices (CoinGecko -> AV -> placeholder) ----
@@ -510,7 +543,7 @@ async def build_nextgen_html(logger) -> str:
                     "pct_1m": _pct(latest, m1), "pct_ytd": pytd,
                     "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
                     "headline": headline, "source": h_source, "when": h_when,
-                    "description": description,  # 🔥 ADD: Article description
+                    "description": description,  # Article description
                     "next_event": None, "vol_x_avg": None,
                     "news_url": h_url,
                     "pr_url": {
@@ -531,7 +564,7 @@ async def build_nextgen_html(logger) -> str:
                     "pct_1d": None, "pct_1w": None, "pct_1m": None, "pct_ytd": None,
                     "low_52w": 0.0, "high_52w": 0.0, "range_pct": 50.0,
                     "headline": headline, "source": h_source, "when": h_when,
-                    "description": description,  # 🔥 ADD: Article description
+                    "description": description,  # Article description
                     "next_event": None, "vol_x_avg": None,
                     "news_url": h_url, "pr_url": h_url,
                 })
@@ -577,10 +610,15 @@ async def build_nextgen_html(logger) -> str:
             "pct_1d": p1d, "pct_1w": p1w, "pct_1m": p1m, "pct_ytd": pytd,
             "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
             "headline": headline, "source": h_source, "when": h_when,
-            "description": description,  # 🔥 ADD: Article description
+            "description": description,  # Article description
             "next_event": None, "vol_x_avg": None,
             "news_url": h_url, "pr_url": f"https://finance.yahoo.com/quote/{sym}/press-releases",
         })
+
+    # 🔥 DEBUG: Log companies that might be used for hero
+    for c in companies:
+        if c.get("headline"):
+            logger.info(f"Company {c.get('ticker')}: headline='{c.get('headline')[:50]}...', description='{c.get('description')[:50] if c.get('description') else 'NO DESCRIPTION'}...'")
 
     winners = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"], reverse=True)[:3]
     losers  = sorted([m for m in movers if m["pct"] is not None], key=lambda x: x["pct"])[:3]
