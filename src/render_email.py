@@ -104,8 +104,10 @@ def _chip(label: str, value):
         sign = "▲" if v >= 0 else "▼"
         txt = f"{v:+.1f}%"
     safe_label = escape(label)
-    return (f'<span style="background:{bg};color:{color};padding:2px 6px;'
-            f'border-radius:6px;font-size:12px;margin-right:4px;display:inline-block;">'
+    # 🔥 FIXED: Increased margin-right from 4px to 8px for better spacing in light mode
+    return (f'<span style="background:{bg};color:{color};padding:3px 8px;'
+            f'border-radius:6px;font-size:12px;margin-right:8px;margin-bottom:3px;'
+            f'display:inline-block;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'
             f'{safe_label} {sign} {txt}</span>')
 
 
@@ -116,7 +118,7 @@ def _button(label: str, url: str):
             f'style="background:#1f2937;color:#ffffff;text-decoration:none;'
             f'border-radius:6px;font-size:13px;border:1px solid #374151;'
             f'line-height:1;white-space:nowrap;padding:6px 10px;display:inline-block;'
-            f'margin-right:4px;">{safe_label} →</a>')
+            f'margin-right:6px;">{safe_label} →</a>')
 
 
 def _range_bar(pos: float, low: float, high: float):
@@ -309,13 +311,16 @@ def _build_card(c):
     else:
         price_fmt = f"${price_v:.4f}" if is_crypto else f"${price_v:.2f}"
 
-    chips = "".join([
-        _chip("1D", c.get("pct_1d")),
-        _chip("1W", c.get("pct_1w")),
-        "<br/>",
-        _chip("1M", c.get("pct_1m")),
-        _chip("YTD", c.get("pct_ytd")),
-    ])
+    # 🔥 FIXED: Better chip spacing with line breaks and margins
+    chips = (
+        '<div style="line-height:1.8;">' +
+        _chip("1D", c.get("pct_1d")) +
+        _chip("1W", c.get("pct_1w")) +
+        "<br/>" +
+        _chip("1M", c.get("pct_1m")) +
+        _chip("YTD", c.get("pct_ytd")) +
+        '</div>'
+    )
 
     # bullets: first is news; keep scoped to the company
     bullets = []
@@ -432,6 +437,24 @@ def _section_container(title: str, inner_html: str):
 """
 
 
+def _generate_email_preview() -> str:
+    """Generate optimized email preview text for inbox display."""
+    now = datetime.now()
+    current_time = now.strftime("%H:%M")
+    
+    preview_texts = [
+        f"Market intelligence at {current_time} • Top movers, sentiment analysis, and strategic signals across your portfolio",
+        f"Strategic positions update {current_time} • Performance insights, news highlights, and market momentum indicators",
+        f"Portfolio digest {current_time} • Key movements, sector analysis, and breaking news from your strategic holdings",
+        f"Intelligence brief {current_time} • Market data, sentiment tracking, and strategic alerts for informed decisions",
+        f"Market snapshot {current_time} • Real-time performance, news synthesis, and portfolio momentum analysis"
+    ]
+    
+    # Rotate based on day of year to add variety
+    preview_index = now.timetuple().tm_yday % len(preview_texts)
+    return preview_texts[preview_index]
+
+
 # ---------- main ----------
 
 def render_email(summary, companies, cryptos=None):
@@ -463,6 +486,9 @@ def render_email(summary, companies, cryptos=None):
     stocks_section = _section_container("Stocks & ETFs", _grid(company_cards)) if company_cards else ""
     crypto_section = _section_container("Digital Assets", _grid(crypto_cards)) if crypto_cards else ""
 
+    # 🔥 NEW: Generate email preview text
+    email_preview = _generate_email_preview()
+
     # CSS kept outside f-string to avoid brace escaping
     css = """
 @media only screen and (max-width: 620px) {
@@ -477,10 +503,17 @@ def render_email(summary, companies, cryptos=None):
     <meta charset="UTF-8">
     <meta name="color-scheme" content="light dark">
     <meta name="supported-color-schemes" content="light dark">
+    <meta name="description" content="{escape(email_preview)}">
+    <meta name="format-detection" content="telephone=no">
     <title>Intelligence Digest</title>
     <style>{css}</style>
   </head>
   <body style="margin:0;background:#0b0c10;color:#e5e7eb;">
+    <!-- 🔥 NEW: Hidden preview text for inbox display -->
+    <div style="display:none;font-size:1px;color:#0b0c10;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">
+      {escape(email_preview)}
+    </div>
+    
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
       <tr>
         <td align="center" style="padding:22px 12px;">
