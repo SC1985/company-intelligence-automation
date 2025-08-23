@@ -591,6 +591,13 @@ class StrategicIntelligenceEngine:
         except Exception as e:
             self.logger.error(f"Emergency notification failed: {e}")
 
+async def build_report_html():
+    """Function callable by ci_entrypoint.py for fallback support."""
+    engine = StrategicIntelligenceEngine()
+    market_intelligence = await engine._harvest_constellation_data()
+    news_intelligence = await engine._synthesize_strategic_news()
+    return engine._architect_executive_brief(market_intelligence, news_intelligence)
+
 async def main():
     """Strategic constellation execution orchestration."""
     engine = StrategicIntelligenceEngine()
