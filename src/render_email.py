@@ -125,12 +125,12 @@ if v is None:
     txt = "--"
 else:
     if v >= 0:
-        # Green that's visible in both modes
+        # Green that is visible in both modes
         bg = "#10B981"
         color = "#FFFFFF"
         sign = "▲"
     else:
-        # Red that's visible in both modes
+        # Red that is visible in both modes
         bg = "#EF4444"
         color = "#FFFFFF"
         sign = "▼"
@@ -564,11 +564,11 @@ if headline and _belongs_to_company(c, headline):
     display_headline = headline[:100] + "..." if len(headline) > 100 else headline
     
     if source and when_fmt:
-        bullets.append(f"★ {display_headline} <span style='color:#6B7280;'>({source}, {when_fmt})</span>")
+        bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({source}, {when_fmt})</span>')
     elif source:
-        bullets.append(f"★ {display_headline} <span style='color:#6B7280;'>({source})</span>")
+        bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({source})</span>')
     elif when_fmt:
-        bullets.append(f"★ {display_headline} <span style='color:#6B7280;'>({when_fmt})</span>")
+        bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({when_fmt})</span>')
     else:
         bullets.append(f"★ {display_headline}")
 else:
@@ -924,7 +924,7 @@ html = f"""<!DOCTYPE html>
     {css}
   </head>
   <body style="margin:0;padding:0;background:#F7F8FA;color:#111827;
-               font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+               font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
 
 ```
 <!-- Hidden preview text -->
