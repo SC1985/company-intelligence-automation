@@ -1,6 +1,5 @@
 # src/render_email.py
-# Enhanced visual design with PROPER dark mode handling - keeping original design but fixing color inversion
-# FIXED: Dark mode uses light backgrounds that invert to dark, Mobile layout identical to desktop
+# Fixed: Proper dark/light mode handling and improved mobile layout
 
 from datetime import datetime, timezone
 from html import escape
@@ -111,31 +110,28 @@ def _safe_float(x, default=None):
 
 
 def _chip(label: str, value):
-    """Enhanced performance chip with proper dark mode color handling."""
+    """Performance chip with proper dark/light mode colors."""
     v = _safe_float(value, None)
     
     if v is None:
-        # Neutral chip - works in both modes
-        bg = "#4B5563"  
-        color = "#FFFFFF"
+        # Neutral chip
         sign = ""
         txt = "--"
+        chip_class = "chip-neutral"
     else:
         if v >= 0:
-            # Green chip
-            bg = "#059669"   
-            color = "#FFFFFF" 
+            # Positive chip
             sign = "▲"
+            chip_class = "chip-positive"
         else:
-            # Red chip
-            bg = "#DC2626"   
-            color = "#FFFFFF"
+            # Negative chip
             sign = "▼"
+            chip_class = "chip-negative"
         txt = f"{abs(v):.1f}%"
     
     safe_label = escape(label)
     
-    return (f'<span class="perf-chip" style="background:{bg};color:{color};'
+    return (f'<span class="{chip_class}" style="'
             f'padding:5px 12px;border-radius:12px;font-size:12px;font-weight:700;'
             f'margin:2px 6px 4px 0;display:inline-block;'
             f'box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;'
@@ -144,74 +140,67 @@ def _chip(label: str, value):
 
 
 def _button(label: str, url: str, style="primary"):
-    """Enhanced button with proper dark mode handling."""
+    """Button with proper dark/light mode handling."""
     safe_label = escape(label)
     href = escape(url or "#")
     
-    if style == "primary":
-        bg = "#374151"
-        color = "#FFFFFF"
-    else:  # secondary
-        bg = "#6B7280"
-        color = "#FFFFFF"
+    btn_class = "btn-primary" if style == "primary" else "btn-secondary"
     
     return (f'<table role="presentation" cellpadding="0" cellspacing="0" style="display:inline-block;margin-right:8px;margin-bottom:4px;">'
-            f'<tr><td class="btn-cell" style="background:{bg};color:{color};'
+            f'<tr><td class="{btn_class}" style="'
             f'border-radius:10px;font-size:13px;font-weight:600;padding:10px 16px;'
             f'box-shadow:0 3px 8px rgba(0,0,0,0.2);'
             f'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
             f'<a href="{href}" target="_blank" rel="noopener noreferrer" '
-            f'style="color:{color};text-decoration:none;display:block;">'
+            f'style="text-decoration:none;display:block;">'
             f'{safe_label} →</a></td></tr></table>')
 
 
 def _range_bar(pos: float, low: float, high: float):
-    """Enhanced 52-week range bar with mobile optimization."""
+    """52-week range bar with proper dark/light mode colors."""
     pct = max(0.0, min(100.0, _safe_float(pos, 0.0)))
     left = f"{pct:.1f}%"
     right = f"{100 - pct:.1f}%"
     
     low_v = _safe_float(low, 0.0) or 0.0
     high_v = _safe_float(high, 0.0) or 0.0
-    current_v = _safe_float(pos, 0.0) or 0.0
+    current_v = low_v + (high_v - low_v) * (pct / 100.0) if high_v > low_v else low_v
     
-    # Color based on position
+    # Position-based marker
     if pct < 25:
-        marker_color = "#DC2626"  # Red
+        marker_class = "marker-low"
         marker_label = "Low"
     elif pct > 75:  
-        marker_color = "#059669"  # Green
+        marker_class = "marker-high"
         marker_label = "High"
     else:
-        marker_color = "#2563EB"  # Blue
+        marker_class = "marker-mid"
         marker_label = "Mid"
-    
-    track_bg = "#374151"
     
     # Mobile-friendly track
     track = (
         f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
         f'style="border-collapse:collapse;border-radius:8px;'
-        f'background:{track_bg};height:10px;overflow:hidden;'
+        f'height:10px;overflow:hidden;'
         f'min-width:200px;box-shadow:inset 0 1px 2px rgba(0,0,0,0.2);">'
         f'<tr>'
-        f'<td style="width:{left};background:{track_bg};height:10px;padding:0;">&nbsp;</td>'
-        f'<td style="width:10px;background:{marker_color};height:10px;padding:0;">&nbsp;</td>'
-        f'<td style="width:{right};background:{track_bg};height:10px;padding:0;">&nbsp;</td>'
+        f'<td class="range-track" style="width:{left};height:10px;padding:0;">&nbsp;</td>'
+        f'<td class="{marker_class}" style="width:10px;height:10px;padding:0;">&nbsp;</td>'
+        f'<td class="range-track" style="width:{right};height:10px;padding:0;">&nbsp;</td>'
         f'</tr></table>'
     )
     
     # Mobile-friendly caption
     caption = (f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:6px;">'
                f'<tr>'
-               f'<td class="range-text" style="font-size:11px;color:#9CA3AF;text-align:left;font-weight:500;">Low ${low_v:.2f}</td>'
-               f'<td class="range-text" style="font-size:12px;color:{marker_color};font-weight:700;text-align:center;">'
+               f'<td class="range-label" style="font-size:11px;text-align:left;font-weight:500;">Low ${low_v:.2f}</td>'
+               f'<td class="range-current {marker_class}-text" style="font-size:12px;font-weight:700;text-align:center;">'
                f'${current_v:.2f}</td>'
-               f'<td class="range-text" style="font-size:11px;color:#9CA3AF;text-align:right;font-weight:500;">High ${high_v:.2f}</td>'
+               f'<td class="range-label" style="font-size:11px;text-align:right;font-weight:500;">High ${high_v:.2f}</td>'
                f'</tr></table>')
     
     return (f'<div style="margin:14px 0 10px 0;">'
-            f'<div class="range-title" style="font-size:12px;color:#D1D5DB;margin-bottom:6px;font-weight:600;">'
+            f'<div class="range-title" style="font-size:12px;margin-bottom:6px;font-weight:600;">'
             f'52-Week Range</div>'
             + track + caption + '</div>')
 
@@ -429,7 +418,7 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
 
 
 def _render_hero(hero: dict) -> str:
-    """Enhanced hero rendering with better visual hierarchy."""
+    """Hero rendering with proper dark/light mode classes."""
     if not hero:
         return ""
     
@@ -461,39 +450,38 @@ def _render_hero(hero: dict) -> str:
     if para:
         body_html = f'''
         <tr><td class="hero-body" style="padding-top:14px;font-size:15px;line-height:1.6;
-                     color:#D1D5DB;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
+                     font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
             {escape(para)}
         </td></tr>'''
     
     # Enhanced metadata line
     meta_parts = []
     if source:
-        meta_parts.append(f'<span style="font-weight:600;color:#A78BFA;">{escape(source)}</span>')
+        meta_parts.append(f'<span class="hero-source" style="font-weight:600;">{escape(source)}</span>')
     if when:
-        meta_parts.append(f'<span style="color:#9CA3AF;">{escape(when)}</span>')
+        meta_parts.append(f'<span class="hero-date">{escape(when)}</span>')
     
     meta_html = ""
     if meta_parts:
         meta_html = f'''
         <tr><td class="hero-meta" style="padding-top:14px;font-size:13px;
                      border-top:1px solid rgba(255,255,255,0.1);
-                     padding-top:12px;color:#9CA3AF;">
+                     padding-top:12px;">
             {" • ".join(meta_parts)}
         </td></tr>'''
     
-    # Enhanced hero container with gradient
+    # Hero container with proper classes
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        class="hero-container" style="border-collapse:collapse;
-              background:linear-gradient(135deg, #1F2937 0%, #111827 100%);
               border-radius:16px;margin:20px 0;
-              box-shadow:0 8px 20px rgba(0,0,0,0.5);color:#FFFFFF;">
+              box-shadow:0 8px 20px rgba(0,0,0,0.5);">
   <tr>
     <td style="padding:28px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td class="hero-title" style="font-weight:700;font-size:26px;line-height:1.3;color:#FFFFFF;
+        <tr><td class="hero-title" style="font-weight:700;font-size:26px;line-height:1.3;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-          <a href="{escape(url)}" style="color:#FFFFFF;text-decoration:none;">
+          <a href="{escape(url)}" style="text-decoration:none;" class="hero-link">
             {escape(title)}
           </a>
         </td></tr>
@@ -509,7 +497,7 @@ def _render_hero(hero: dict) -> str:
 # ---------- Enhanced card system ----------
 
 def _build_card(c):
-    """Enhanced card building with better visual design."""
+    """Card building with proper dark/light mode classes."""
     name = c.get("name") or c.get("ticker") or c.get("symbol") or "Unknown"
     ticker = str(c.get("ticker") or c.get("symbol") or "")
     is_crypto = ticker.endswith("-USD") or (str(c.get("asset_class") or "").lower() == "crypto")
@@ -517,19 +505,19 @@ def _build_card(c):
     # Enhanced price formatting
     price_v = _safe_float(c.get("price"), None)
     if price_v is None:
-        price_fmt = '<span class="price-text" style="color:#9CA3AF;">--</span>'
+        price_fmt = '<span class="price-null">--</span>'
     else:
         if is_crypto:
             if price_v >= 1000:
-                price_fmt = f'<span class="price-text" style="color:#FFFFFF;font-weight:700;">${price_v:,.0f}</span>'
+                price_fmt = f'<span class="price-text" style="font-weight:700;">${price_v:,.0f}</span>'
             elif price_v >= 1:
-                price_fmt = f'<span class="price-text" style="color:#FFFFFF;font-weight:700;">${price_v:,.2f}</span>'
+                price_fmt = f'<span class="price-text" style="font-weight:700;">${price_v:,.2f}</span>'
             else:
-                price_fmt = f'<span class="price-text" style="color:#FFFFFF;font-weight:700;">${price_v:.4f}</span>'
+                price_fmt = f'<span class="price-text" style="font-weight:700;">${price_v:.4f}</span>'
         else:
-            price_fmt = f'<span class="price-text" style="color:#FFFFFF;font-weight:700;">${price_v:,.2f}</span>'
+            price_fmt = f'<span class="price-text" style="font-weight:700;">${price_v:,.2f}</span>'
 
-    # Enhanced chip layout - SAME AS DESKTOP ON MOBILE
+    # Performance chips
     chips_line1 = _chip("1D", c.get("pct_1d")) + _chip("1W", c.get("pct_1w"))
     chips_line2 = _chip("1M", c.get("pct_1m")) + _chip("YTD", c.get("pct_ytd"))
     
@@ -539,7 +527,7 @@ def _build_card(c):
         <tr><td style="line-height:1.6;">{chips_line2}</td></tr>
     </table>'''
 
-    # Enhanced news bullet with better formatting
+    # News bullet with better formatting
     bullets = []
     headline = c.get("headline")
     source = c.get("source")
@@ -550,84 +538,83 @@ def _build_card(c):
         display_headline = headline[:100] + "..." if len(headline) > 100 else headline
         
         if source and when_fmt:
-            bullets.append(f"★ {display_headline} <span style='color:#9CA3AF;'>({source}, {when_fmt})</span>")
+            bullets.append(f"★ {display_headline} <span class='news-meta'>({source}, {when_fmt})</span>")
         elif source:
-            bullets.append(f"★ {display_headline} <span style='color:#9CA3AF;'>({source})</span>")
+            bullets.append(f"★ {display_headline} <span class='news-meta'>({source})</span>")
         elif when_fmt:
-            bullets.append(f"★ {display_headline} <span style='color:#9CA3AF;'>({when_fmt})</span>")
+            bullets.append(f"★ {display_headline} <span class='news-meta'>({when_fmt})</span>")
         else:
             bullets.append(f"★ {display_headline}")
     else:
         company_name = name.replace(" Inc.", "").replace(" Corporation", "").strip()
-        bullets.append(f'★ <span style="color:#9CA3AF;">Latest {company_name} coverage — see News</span>')
+        bullets.append(f'★ <span class="news-placeholder">Latest {company_name} coverage — see News</span>')
 
     # Additional context bullets
     next_event = c.get("next_event")
     if next_event:
         event_date = _fmt_ct(next_event, force_time=False, tz_suffix_policy="never")
         if event_date:
-            bullets.append(f'<span style="color:#A78BFA;">📅 Next: {event_date}</span>')
+            bullets.append(f'<span class="event-info">📅 Next: {event_date}</span>')
 
     vol_multiplier = _safe_float(c.get("vol_x_avg"), None)
     if vol_multiplier is not None and vol_multiplier > 1.5:  # Only show significant volume
-        bullets.append(f'<span style="color:#F59E0B;">📊 Volume: {vol_multiplier:.1f}× avg</span>')
+        bullets.append(f'<span class="volume-info">📊 Volume: {vol_multiplier:.1f}× avg</span>')
 
-    # Enhanced bullets HTML in table format
+    # Bullets HTML in table format
     bullets_html = ""
     for i, bullet in enumerate(bullets):
         if i == 0:  # Main news item
             bullets_html += f'''
-            <tr><td class="bullet-text" style="padding-bottom:10px;
+            <tr><td class="bullet-main" style="padding-bottom:10px;
                           display:-webkit-box;-webkit-box-orient:vertical;
                           -webkit-line-clamp:3;overflow:hidden;text-overflow:ellipsis;
-                          line-height:1.5;color:#E5E7EB;font-size:14px;font-weight:500;">
+                          line-height:1.5;font-size:14px;font-weight:500;">
                 {bullet}
             </td></tr>'''
         else:  # Secondary items
             bullets_html += f'''
-            <tr><td class="bullet-text" style="padding-bottom:6px;font-size:12px;line-height:1.4;color:#9CA3AF;">
+            <tr><td class="bullet-secondary" style="padding-bottom:6px;font-size:12px;line-height:1.4;">
                 {bullet}
             </td></tr>'''
 
-    # Enhanced range bar
+    # Range bar
     range_html = _range_bar(
         _safe_float(c.get("range_pct"), 50.0),
         _safe_float(c.get("low_52w"), 0.0),
         _safe_float(c.get("high_52w"), 0.0)
     )
 
-    # Enhanced action buttons
+    # Action buttons
     news_url = c.get("news_url") or f"https://finance.yahoo.com/quote/{escape(ticker)}/news"
     pr_url = c.get("pr_url") or f"https://finance.yahoo.com/quote/{escape(ticker)}/press-releases"
     
     ctas = f'''
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="border-top:1px solid rgba(255,255,255,0.1);padding-top:14px;">
+        <tr><td class="card-actions" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:14px;">
             {_button("News", news_url, "primary")}
             {_button("Press", pr_url, "secondary")}
         </td></tr>
     </table>'''
 
-    # Enhanced card - SAME DESIGN, PROPER DARK MODE HANDLING
+    # Card with proper classes
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        class="card-container" style="border-collapse:collapse;margin:0 0 12px;
-              background:linear-gradient(135deg, #1F2937 0%, #111827 100%);
               border-radius:14px;
               box-shadow:0 6px 16px rgba(0,0,0,0.4);overflow:hidden;">
   <tr>
-    <td class="ci-card-inner" style="padding:20px 22px;max-height:360px;overflow:hidden;vertical-align:top;">
+    <td class="card-inner" style="padding:20px 22px;max-height:360px;overflow:hidden;vertical-align:top;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         <!-- Header -->
         <tr><td>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#FFFFFF;
+            <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;
                          font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
                          padding-bottom:4px;">{escape(str(name))}</td></tr>
             <tr><td>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td class="ticker-text" style="font-size:13px;color:#D1D5DB;font-weight:600;">({escape(ticker)})</td>
+                  <td class="ticker-text" style="font-size:13px;font-weight:600;">({escape(ticker)})</td>
                   <td style="text-align:right;font-size:16px;">{price_fmt}</td>
                 </tr>
               </table>
@@ -658,7 +645,7 @@ def _build_card(c):
 
 
 def _grid(cards):
-    """ORIGINAL two-column grid that works perfectly - SAME ON MOBILE."""
+    """Two-column grid that becomes single column on mobile, maintaining card appearance."""
     if not cards:
         return ""
     
@@ -671,15 +658,15 @@ def _grid(cards):
             row = f'''
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:8px;">
   <tr>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-right:8px;">{left}</td>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-left:8px;">{right}</td>
+    <td class="grid-col" width="50%" style="vertical-align:top;padding-right:8px;">{left}</td>
+    <td class="grid-col" width="50%" style="vertical-align:top;padding-left:8px;">{right}</td>
   </tr>
 </table>'''
         else:
             row = f'''
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:8px;">
   <tr>
-    <td class="stack-col" width="100%" style="vertical-align:top;max-width:50%;">{left}</td>
+    <td class="grid-col-single" style="vertical-align:top;max-width:320px;margin:0 auto;">{left}</td>
   </tr>
 </table>'''
         
@@ -689,16 +676,16 @@ def _grid(cards):
 
 
 def _section_container(title: str, inner_html: str):
-    """Enhanced section container with NO DIVIDER LINE."""
+    """Section container with proper dark/light mode classes."""
     safe_title = escape(title)
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       class="section-container" style="border-collapse:collapse;background:#0F172A;
+       class="section-container" style="border-collapse:collapse;
               border-radius:16px;margin:24px 0;box-shadow:0 6px 16px rgba(0,0,0,0.4);">
   <tr>
     <td style="padding:28px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td class="section-title" style="font-weight:700;font-size:32px;color:#FFFFFF;
+        <tr><td class="section-title" style="font-weight:700;font-size:32px;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
                      margin:0 0 20px 0;padding-bottom:16px;">
           {safe_title}
@@ -740,10 +727,10 @@ def _generate_enhanced_preview() -> str:
     return preview_options[index]
 
 
-# ---------- Enhanced main renderer ----------
+# ---------- Main renderer with PROPER dark/light mode ----------
 
 def render_email(summary, companies, cryptos=None):
-    """Enhanced email rendering with PROPER dark mode CSS handling."""
+    """Email rendering with proper dark mode default and light mode support."""
     
     # Enhanced entity processing
     company_cards = []
@@ -797,15 +784,15 @@ def render_email(summary, companies, cryptos=None):
         
         market_summary = f'''
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-               class="market-summary" style="border-collapse:collapse;background:#1F2937;
+               class="market-summary" style="border-collapse:collapse;
                       border-radius:12px;margin:14px 0;
                       box-shadow:0 4px 10px rgba(0,0,0,0.2);">
           <tr><td style="padding:16px 20px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:18px;">{market_emoji}</td>
-                <td class="market-text" style="color:#F3F4F6;font-weight:700;padding-left:10px;font-size:16px;">{market_sentiment} Session</td>
-                <td class="market-text" style="color:#D1D5DB;font-size:14px;text-align:right;font-weight:500;">
+                <td class="market-text-primary" style="font-weight:700;padding-left:10px;font-size:16px;">{market_sentiment} Session</td>
+                <td class="market-text-secondary" style="font-size:14px;text-align:right;font-weight:500;">
                   {up_count} up • {down_count} down
                 </td>
               </tr>
@@ -833,9 +820,9 @@ def render_email(summary, companies, cryptos=None):
         quality_note = f'''
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
                class="quality-note" style="border-collapse:collapse;margin-top:14px;padding:12px 16px;
-                      background:rgba(185,28,28,0.1);border-radius:10px;
+                      border-radius:10px;
                       box-shadow:0 2px 6px rgba(185,28,28,0.1);">
-          <tr><td style="color:#FCA5A5;font-size:13px;font-weight:600;">
+          <tr><td class="quality-text" style="font-size:13px;font-weight:600;">
             ⚠️ {failed_count} of {total_entities} assets had data issues
           </td></tr>
         </table>'''
@@ -843,50 +830,171 @@ def render_email(summary, companies, cryptos=None):
     # Enhanced email preview
     email_preview = _generate_enhanced_preview()
 
-    # PROPER dark mode CSS - uses light backgrounds for dark mode so they invert correctly
+    # FIXED: Proper dark/light mode CSS
     css = """
 <style>
-/* Default (light mode and email clients) */
+/* === DEFAULT DARK THEME === */
 body { background: #0b0c10; color: #e5e7eb; }
 .email-body { background: #0b0c10; color: #e5e7eb; }
 
-/* DARK MODE OVERRIDES - Use LIGHT backgrounds so they invert to dark */
-@media (prefers-color-scheme: dark) {
-  /* Main backgrounds become light (will invert to dark) */
-  .hero-container { background: #E5E7EB !important; }
-  .card-container { background: #F3F4F6 !important; }
-  .section-container { background: #F9FAFB !important; }
-  .market-summary { background: #E5E7EB !important; }
+/* Dark theme colors (default) */
+.hero-container { background: linear-gradient(135deg, #1F2937 0%, #111827 100%) !important; }
+.hero-title { color: #FFFFFF !important; }
+.hero-link { color: #FFFFFF !important; }
+.hero-body { color: #D1D5DB !important; }
+.hero-meta { color: #9CA3AF !important; }
+.hero-source { color: #A78BFA !important; }
+.hero-date { color: #9CA3AF !important; }
+
+.card-container { background: linear-gradient(135deg, #1F2937 0%, #111827 100%) !important; }
+.card-title { color: #FFFFFF !important; }
+.ticker-text { color: #D1D5DB !important; }
+.price-text { color: #FFFFFF !important; }
+.price-null { color: #9CA3AF !important; }
+
+.section-container { background: #0F172A !important; }
+.section-title { color: #FFFFFF !important; }
+
+.market-summary { background: #1F2937 !important; }
+.market-text-primary { color: #F3F4F6 !important; }
+.market-text-secondary { color: #D1D5DB !important; }
+
+.quality-note { background: rgba(185,28,28,0.1) !important; }
+.quality-text { color: #FCA5A5 !important; }
+
+/* Performance chips - dark theme */
+.chip-neutral { background: #4B5563 !important; color: #FFFFFF !important; }
+.chip-positive { background: #059669 !important; color: #FFFFFF !important; }
+.chip-negative { background: #DC2626 !important; color: #FFFFFF !important; }
+
+/* Buttons - dark theme */
+.btn-primary { background: #374151 !important; }
+.btn-primary a { color: #FFFFFF !important; }
+.btn-secondary { background: #6B7280 !important; }
+.btn-secondary a { color: #FFFFFF !important; }
+
+/* Range bar - dark theme */
+.range-track { background: #374151 !important; }
+.range-title { color: #D1D5DB !important; }
+.range-label { color: #9CA3AF !important; }
+.range-current { color: #FFFFFF !important; }
+.marker-low { background: #DC2626 !important; }
+.marker-low-text { color: #DC2626 !important; }
+.marker-high { background: #059669 !important; }
+.marker-high-text { color: #059669 !important; }
+.marker-mid { background: #2563EB !important; }
+.marker-mid-text { color: #2563EB !important; }
+
+/* News bullets - dark theme */
+.bullet-main { color: #E5E7EB !important; }
+.bullet-secondary { color: #9CA3AF !important; }
+.news-meta { color: #9CA3AF !important; }
+.news-placeholder { color: #9CA3AF !important; }
+.event-info { color: #A78BFA !important; }
+.volume-info { color: #F59E0B !important; }
+
+/* === LIGHT MODE OVERRIDES === */
+@media (prefers-color-scheme: light) {
+  body { background: #FFFFFF !important; color: #111827 !important; }
+  .email-body { background: #FFFFFF !important; color: #111827 !important; }
   
-  /* Text becomes dark (will invert to light) */
-  .hero-title, .card-title, .section-title { color: #1F2937 !important; }
-  .hero-body, .hero-meta { color: #4B5563 !important; }
-  .price-text, .ticker-text, .bullet-text { color: #1F2937 !important; }
-  .range-title, .range-text { color: #4B5563 !important; }
-  .market-text { color: #1F2937 !important; }
+  /* Light theme colors */
+  .hero-container { background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%) !important; }
+  .hero-title { color: #111827 !important; }
+  .hero-link { color: #111827 !important; }
+  .hero-body { color: #374151 !important; }
+  .hero-meta { color: #6B7280 !important; }
+  .hero-source { color: #7C3AED !important; }
+  .hero-date { color: #6B7280 !important; }
   
-  /* Performance chips - light backgrounds (will invert) */
-  .perf-chip { background: #D1D5DB !important; color: #1F2937 !important; }
+  .card-container { background: linear-gradient(135deg, #FFFFFF 0%, #F9FAFB 100%) !important; 
+                     box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important; }
+  .card-title { color: #111827 !important; }
+  .ticker-text { color: #4B5563 !important; }
+  .price-text { color: #111827 !important; }
+  .price-null { color: #9CA3AF !important; }
   
-  /* Buttons - light backgrounds (will invert) */
-  .btn-cell { background: #9CA3AF !important; color: #1F2937 !important; }
+  .section-container { background: #F9FAFB !important; 
+                       box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important; }
+  .section-title { color: #111827 !important; }
+  
+  .market-summary { background: #F3F4F6 !important; 
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important; }
+  .market-text-primary { color: #111827 !important; }
+  .market-text-secondary { color: #4B5563 !important; }
+  
+  .quality-note { background: rgba(239,68,68,0.1) !important; }
+  .quality-text { color: #DC2626 !important; }
+  
+  /* Performance chips - light theme */
+  .chip-neutral { background: #9CA3AF !important; color: #FFFFFF !important; }
+  .chip-positive { background: #10B981 !important; color: #FFFFFF !important; }
+  .chip-negative { background: #EF4444 !important; color: #FFFFFF !important; }
+  
+  /* Buttons - light theme */
+  .btn-primary { background: #4B5563 !important; }
+  .btn-primary a { color: #FFFFFF !important; }
+  .btn-secondary { background: #9CA3AF !important; }
+  .btn-secondary a { color: #FFFFFF !important; }
+  
+  /* Range bar - light theme */
+  .range-track { background: #E5E7EB !important; }
+  .range-title { color: #374151 !important; }
+  .range-label { color: #6B7280 !important; }
+  .range-current { color: #111827 !important; }
+  .marker-low { background: #EF4444 !important; }
+  .marker-low-text { color: #EF4444 !important; }
+  .marker-high { background: #10B981 !important; }
+  .marker-high-text { color: #10B981 !important; }
+  .marker-mid { background: #3B82F6 !important; }
+  .marker-mid-text { color: #3B82F6 !important; }
+  
+  /* News bullets - light theme */
+  .bullet-main { color: #111827 !important; }
+  .bullet-secondary { color: #6B7280 !important; }
+  .news-meta { color: #6B7280 !important; }
+  .news-placeholder { color: #6B7280 !important; }
+  .event-info { color: #7C3AED !important; }
+  .volume-info { color: #F59E0B !important; }
+  
+  /* Card actions border */
+  .card-actions { border-top-color: rgba(0,0,0,0.1) !important; }
 }
 
-/* Mobile responsiveness - IDENTICAL TO DESKTOP LAYOUT */
+/* === MOBILE RESPONSIVENESS === */
 @media only screen and (max-width: 640px) {
-  .stack-col { 
+  /* Single column layout but maintain card appearance */
+  .grid-col { 
     display: block !important; 
     width: 100% !important; 
     max-width: 100% !important; 
     padding-left: 0 !important; 
-    padding-right: 0 !important; 
+    padding-right: 0 !important;
+    padding-bottom: 12px !important;
   }
-  .ci-card-inner { 
-    max-height: none !important; 
+  
+  /* Cards maintain desktop proportions on mobile */
+  .card-container {
+    max-width: 400px !important;
+    margin: 0 auto 12px auto !important;
+  }
+  
+  .card-inner {
+    max-height: none !important;
     overflow: visible !important;
   }
+  
+  /* Responsive typography */
   .responsive-title {
     font-size: 36px !important;
+  }
+  
+  .section-title {
+    font-size: 28px !important;
+  }
+  
+  .hero-title {
+    font-size: 22px !important;
   }
 }
 
@@ -895,9 +1003,29 @@ body { background: #0b0c10; color: #e5e7eb; }
   .responsive-title {
     font-size: 32px !important;
   }
-  .ci-card-inner {
-    padding: 18px 20px !important;
+  
+  .section-title {
+    font-size: 24px !important;
   }
+  
+  .hero-title {
+    font-size: 20px !important;
+  }
+  
+  .card-container {
+    max-width: 100% !important;
+  }
+  
+  .card-inner {
+    padding: 16px 18px !important;
+  }
+}
+
+/* Forced colors mode support */
+@media (forced-colors: active) {
+  .chip-positive { forced-color-adjust: none; }
+  .chip-negative { forced-color-adjust: none; }
+  .chip-neutral { forced-color-adjust: none; }
 }
 </style>
 """
@@ -908,8 +1036,8 @@ body { background: #0b0c10; color: #e5e7eb; }
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="color-scheme" content="light dark">
-    <meta name="supported-color-schemes" content="light dark">
+    <meta name="color-scheme" content="dark light">
+    <meta name="supported-color-schemes" content="dark light">
     <meta name="description" content="{escape(email_preview)}">
     <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
     <title>Intelligence Digest</title>
