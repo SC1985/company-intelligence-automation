@@ -987,3 +987,5 @@ html = f"""<!DOCTYPE html>
 
   </body>
 </html>"""
+
+return html
