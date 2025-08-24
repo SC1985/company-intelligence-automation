@@ -1,43 +1,5 @@
 [
   {
-    "symbol": "AAPL",
-    "name": "Apple Inc.",
-    "sector": "Consumer Technology",
-    "market_cap_category": "mega",
-    "priority": "foundational_core",
-    "investment_thesis": "Design excellence ecosystem with unmatched consumer loyalty and services expansion",
-    "risk_profile": "low_moderate",
-    "catalyst_watch": [
-      "iPhone innovation cycles",
-      "services revenue growth",
-      "AR/VR product launches"
-    ],
-    "alert_thresholds": {
-      "price_change_percent": 3.0,
-      "volume_spike_multiplier": 150.0
-    },
-    "sector_allocation": "Consumer Ecosystem"
-  },
-  {
-    "symbol": "TSLA",
-    "name": "Tesla Inc.",
-    "sector": "Sustainable Transport",
-    "market_cap_category": "large",
-    "priority": "growth_anchor",
-    "investment_thesis": "Electric vehicle production scaling with autonomous driving and energy storage expansion",
-    "risk_profile": "high",
-    "catalyst_watch": [
-      "delivery growth rates",
-      "FSD progress",
-      "energy business scaling"
-    ],
-    "alert_thresholds": {
-      "price_change_percent": 5.0,
-      "volume_spike_multiplier": 200.0
-    },
-    "sector_allocation": "Sustainable Innovation"
-  },
-  {
     "symbol": "NVDA",
     "name": "NVIDIA Corporation",
     "sector": "AI Infrastructure",
@@ -165,38 +127,6 @@
       "institutional adoption",
       "regulatory clarity",
       "halving cycles"
-    ]
-  },
-  {
-    "symbol": "ETH-USD",
-    "name": "Ethereum",
-    "asset_class": "crypto",
-    "sector": "Digital Assets",
-    "priority": "watch",
-    "sector_allocation": "Digital Assets",
-    "coingecko_id": "ethereum",
-    "investment_thesis": "Smart contract platform with DeFi ecosystem and proof-of-stake transition",
-    "risk_profile": "very_high",
-    "catalyst_watch": [
-      "DeFi protocol growth",
-      "layer 2 scaling",
-      "institutional staking"
-    ]
-  },
-  {
-    "symbol": "DOGE-USD",
-    "name": "Dogecoin",
-    "asset_class": "crypto",
-    "sector": "Digital Assets",
-    "priority": "watch",
-    "sector_allocation": "Digital Assets",
-    "coingecko_id": "dogecoin",
-    "investment_thesis": "Community-driven cryptocurrency with mainstream payment adoption potential",
-    "risk_profile": "extreme",
-    "catalyst_watch": [
-      "payment integration",
-      "community developments",
-      "social media sentiment"
     ]
   },
   {
