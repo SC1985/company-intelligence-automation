@@ -135,7 +135,7 @@ def _chip(label: str, value):
     
     safe_label = escape(label)
     
-    return (f'<span style="background:{bg};color:{color};'
+    return (f'<span class="chip" style="background:{bg};color:{color};'
             f'padding:5px 12px;border-radius:12px;font-size:12px;font-weight:700;'
             f'margin:2px 6px 4px 0;display:inline-block;'
             f'box-shadow:0 2px 6px rgba(0,0,0,0.15);white-space:nowrap;'
@@ -156,7 +156,7 @@ def _button(label: str, url: str, style="primary"):
         color = "#FFFFFF"
     
     return (f'<table role="presentation" cellpadding="0" cellspacing="0" style="display:inline-block;margin-right:8px;margin-bottom:4px;">'
-            f'<tr><td style="background:{bg};color:{color};'
+            f'<tr><td class="btn" style="background:{bg};color:{color};'
             f'border-radius:10px;font-size:13px;font-weight:600;padding:10px 16px;'
             f'box-shadow:0 2px 6px rgba(0,0,0,0.15);'
             f'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
@@ -485,15 +485,15 @@ def _render_hero(hero: dict) -> str:
     # Hero container with light background
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;
+       class="hero-container" style="border-collapse:collapse;
               background:#FFFFFF;
               border:1px solid #E5E7EB;
               border-radius:16px;margin:20px 0;
               box-shadow:0 4px 12px rgba(0,0,0,0.08);">
   <tr>
-    <td style="padding:28px;">
+    <td style="padding:20px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="font-weight:700;font-size:24px;line-height:1.3;color:#111827;
+        <tr><td class="hero-title" style="font-weight:700;font-size:24px;line-height:1.3;color:#111827;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
           <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
             {escape(title)}
@@ -523,13 +523,13 @@ def _build_card(c):
     else:
         if is_crypto:
             if price_v >= 1000:
-                price_fmt = f'<span style="color:#111827;font-weight:700;">${price_v:,.0f}</span>'
+                price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.0f}</span>'
             elif price_v >= 1:
-                price_fmt = f'<span style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
+                price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
             else:
-                price_fmt = f'<span style="color:#111827;font-weight:700;">${price_v:.4f}</span>'
+                price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:.4f}</span>'
         else:
-            price_fmt = f'<span style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
+            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
 
     # Performance chips
     chips_line1 = _chip("1D", c.get("pct_1d")) + _chip("1W", c.get("pct_1w"))
@@ -579,7 +579,7 @@ def _build_card(c):
     for i, bullet in enumerate(bullets):
         if i == 0:  # Main news item
             bullets_html += f'''
-            <tr><td style="padding-bottom:10px;
+            <tr><td class="bullet-main" style="padding-bottom:10px;
                           display:-webkit-box;-webkit-box-orient:vertical;
                           -webkit-line-clamp:3;overflow:hidden;text-overflow:ellipsis;
                           line-height:1.5;color:#374151;font-size:14px;font-weight:500;">
@@ -587,7 +587,7 @@ def _build_card(c):
             </td></tr>'''
         else:  # Secondary items
             bullets_html += f'''
-            <tr><td style="padding-bottom:6px;font-size:12px;line-height:1.4;color:#6B7280;">
+            <tr><td class="bullet-secondary" style="padding-bottom:6px;font-size:12px;line-height:1.4;color:#6B7280;">
                 {bullet}
             </td></tr>'''
 
@@ -619,18 +619,18 @@ def _build_card(c):
               border-radius:14px;
               box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
   <tr>
-    <td style="padding:20px 22px;max-height:360px;overflow:hidden;vertical-align:top;">
+    <td class="card-inner" style="padding:20px 22px;max-height:360px;overflow:hidden;vertical-align:top;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         <!-- Header -->
         <tr><td>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            <tr><td style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;
+            <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;
                          font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
                          padding-bottom:4px;">{escape(str(name))}</td></tr>
             <tr><td>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
+                  <td class="ticker-text" style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
                   <td style="text-align:right;font-size:16px;">{price_fmt}</td>
                 </tr>
               </table>
@@ -850,7 +850,7 @@ def render_email(summary, companies, cryptos=None):
     # Minimal CSS for mobile responsiveness only
     css = """
 <style>
-/* Mobile responsiveness */
+/* Mobile responsiveness with larger text */
 @media only screen and (max-width: 640px) {
   .stack-col { 
     display: block !important; 
@@ -861,22 +861,100 @@ def render_email(summary, companies, cryptos=None):
     padding-bottom: 12px !important;
   }
   
+  /* Reduce padding on mobile for more content width */
+  .outer-padding {
+    padding: 8px 4px !important;
+  }
+  
+  .main-container {
+    padding: 16px !important;
+  }
+  
+  .hero-container td {
+    padding: 16px !important;
+  }
+  
+  .section-container td {
+    padding: 16px !important;
+  }
+  
+  .card-inner {
+    padding: 16px !important;
+  }
+  
+  .responsive-title {
+    font-size: 40px !important;
+  }
+  
+  .section-title {
+    font-size: 30px !important;
+  }
+  
+  /* Increase all text sizes on mobile */
+  td {
+    font-size: 16px !important;
+  }
+  
+  .hero-title {
+    font-size: 26px !important;
+  }
+  
+  .card-title {
+    font-size: 19px !important;
+  }
+  
+  .price-text {
+    font-size: 18px !important;
+  }
+  
+  .ticker-text {
+    font-size: 15px !important;
+  }
+  
+  .chip {
+    font-size: 14px !important;
+    padding: 6px 14px !important;
+  }
+  
+  .bullet-main {
+    font-size: 16px !important;
+  }
+  
+  .bullet-secondary {
+    font-size: 14px !important;
+  }
+  
+  .btn {
+    font-size: 15px !important;
+    padding: 12px 18px !important;
+  }
+}
+
+@media only screen and (max-width: 480px) {
+  /* Even less padding on very small screens */
+  .outer-padding {
+    padding: 6px 4px !important;
+  }
+  
+  .main-container {
+    padding: 12px !important;
+  }
+  
   .responsive-title {
     font-size: 36px !important;
   }
   
   .section-title {
-    font-size: 24px !important;
-  }
-}
-
-@media only screen and (max-width: 480px) {
-  .responsive-title {
-    font-size: 32px !important;
+    font-size: 26px !important;
   }
   
-  .section-title {
-    font-size: 20px !important;
+  /* Even larger text for very small screens */
+  .hero-title {
+    font-size: 24px !important;
+  }
+  
+  .card-title {
+    font-size: 18px !important;
   }
 }
 </style>
@@ -907,13 +985,13 @@ def render_email(summary, companies, cryptos=None):
     <!-- Main container -->
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
       <tr>
-        <td align="center" style="padding:20px 12px;background:#F7F8FA;">
+        <td align="center" class="outer-padding" style="padding:12px 8px;background:#F7F8FA;">
           <table role="presentation" width="640" cellpadding="0" cellspacing="0" 
                  style="border-collapse:collapse;width:640px;max-width:100%;">
             <tr>
-              <td style="background:#FFFFFF;
+              <td class="main-container" style="background:#FFFFFF;
                          border-radius:16px;
-                         padding:32px;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+                         padding:20px;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
                 
                 <!-- Header -->
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
