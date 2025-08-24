@@ -518,20 +518,20 @@ def _build_card(c):
     ticker = str(c.get("ticker") or c.get("symbol") or "")
     is_crypto = ticker.endswith("-USD") or (str(c.get("asset_class") or "").lower() == "crypto")
 
-    # Enhanced price formatting with explicit color overrides
+    # Enhanced price formatting for light theme
     price_v = _safe_float(c.get("price"), None)
     if price_v is None:
-        price_fmt = '<span style="color:#9CA3AF !important;">--</span>'
+        price_fmt = '<span style="color:#6B7280;">--</span>'
     else:
         if is_crypto:
             if price_v >= 1000:
-                price_fmt = f'<span style="color:#FFFFFF !important;font-weight:700;">${price_v:,.0f}</span>'
+                price_fmt = f'<span style="color:#1F2937;font-weight:700;">${price_v:,.0f}</span>'
             elif price_v >= 1:
-                price_fmt = f'<span style="color:#FFFFFF !important;font-weight:700;">${price_v:,.2f}</span>'
+                price_fmt = f'<span style="color:#1F2937;font-weight:700;">${price_v:,.2f}</span>'
             else:
-                price_fmt = f'<span style="color:#FFFFFF !important;font-weight:700;">${price_v:.4f}</span>'
+                price_fmt = f'<span style="color:#1F2937;font-weight:700;">${price_v:.4f}</span>'
         else:
-            price_fmt = f'<span style="color:#FFFFFF !important;font-weight:700;">${price_v:,.2f}</span>'
+            price_fmt = f'<span style="color:#1F2937;font-weight:700;">${price_v:,.2f}</span>'
 
     # Enhanced chip layout with better mobile spacing - KEEP INLINE ON MOBILE
     chips_line1 = _chip("1D", c.get("pct_1d")) + _chip("1W", c.get("pct_1w"))
@@ -539,8 +539,8 @@ def _build_card(c):
     
     chips = f'''
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;">
-        <tr><td style="line-height:1.6;padding-bottom:6px;white-space:nowrap;">{chips_line1}</td></tr>
-        <tr><td style="line-height:1.6;white-space:nowrap;">{chips_line2}</td></tr>
+        <tr><td class="chip-container" style="line-height:1.6;padding-bottom:6px;white-space:nowrap;">{chips_line1}</td></tr>
+        <tr><td class="chip-container" style="line-height:1.6;white-space:nowrap;">{chips_line2}</td></tr>
     </table>'''
 
     # Enhanced news bullet with better formatting
@@ -565,18 +565,18 @@ def _build_card(c):
         company_name = name.replace(" Inc.", "").replace(" Corporation", "").strip()
         bullets.append(f'★ <span style="color:#9CA3AF;">Latest {company_name} coverage — see News</span>')
 
-    # Additional context bullets with MAXIMUM contrast
+    # Additional context bullets for light theme
     next_event = c.get("next_event")
     if next_event:
         event_date = _fmt_ct(next_event, force_time=False, tz_suffix_policy="never")
         if event_date:
-            bullets.append(f'<span style="color:#FFFFFF !important;">📅 Next: {event_date}</span>')
+            bullets.append(f'<span style="color:#7C3AED;">📅 Next: {event_date}</span>')
 
     vol_multiplier = _safe_float(c.get("vol_x_avg"), None)
     if vol_multiplier is not None and vol_multiplier > 1.5:  # Only show significant volume
-        bullets.append(f'<span style="color:#FFFFFF !important;">📊 Volume: {vol_multiplier:.1f}× avg</span>')
+        bullets.append(f'<span style="color:#D97706;">📊 Volume: {vol_multiplier:.1f}× avg</span>')
 
-    # Enhanced bullets HTML in table format with MAXIMUM contrast
+    # Enhanced bullets HTML in table format for light theme
     bullets_html = ""
     for i, bullet in enumerate(bullets):
         if i == 0:  # Main news item
@@ -584,12 +584,12 @@ def _build_card(c):
             <tr><td style="padding-bottom:10px;
                           display:-webkit-box;-webkit-box-orient:vertical;
                           -webkit-line-clamp:3;overflow:hidden;text-overflow:ellipsis;
-                          line-height:1.5;color:#FFFFFF !important;font-size:14px;font-weight:500;">
+                          line-height:1.5;color:#1F2937;font-size:14px;font-weight:500;">
                 {bullet}
             </td></tr>'''
         else:  # Secondary items
             bullets_html += f'''
-            <tr><td style="padding-bottom:6px;font-size:12px;line-height:1.4;color:#FFFFFF !important;">
+            <tr><td style="padding-bottom:6px;font-size:12px;line-height:1.4;color:#4B5563;">
                 {bullet}
             </td></tr>'''
 
@@ -606,7 +606,7 @@ def _build_card(c):
     
     ctas = f'''
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="border-top:1px solid rgba(255,255,255,0.1);padding-top:14px;">
+        <tr><td style="border-top:1px solid rgba(209,213,219,0.5);padding-top:14px;">
             {_button("News", news_url, "primary")}
             {_button("Press", pr_url, "secondary")}
         </td></tr>
@@ -801,15 +801,15 @@ def render_email(summary, companies, cryptos=None):
         
         market_summary = f'''
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-               style="border-collapse:collapse;background:#1F2937;
+               style="border-collapse:collapse;background:#E5E7EB;
                       border-radius:12px;margin:14px 0;
-                      box-shadow:0 4px 10px rgba(0,0,0,0.3);">
+                      box-shadow:0 4px 10px rgba(0,0,0,0.1);">
           <tr><td style="padding:16px 20px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:18px;">{market_emoji}</td>
-                <td style="color:#FFFFFF !important;font-weight:700;padding-left:10px;font-size:16px;">{market_sentiment} Session</td>
-                <td style="color:#FFFFFF !important;font-size:14px;text-align:right;font-weight:500;">
+                <td style="color:#1F2937;font-weight:700;padding-left:10px;font-size:16px;">{market_sentiment} Session</td>
+                <td style="color:#4B5563;font-size:14px;text-align:right;font-weight:500;">
                   {up_count} up • {down_count} down
                 </td>
               </tr>
@@ -837,9 +837,9 @@ def render_email(summary, companies, cryptos=None):
         quality_note = f'''
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
                style="border-collapse:collapse;margin-top:14px;padding:12px 16px;
-                      background:rgba(185,28,28,0.15);border-radius:10px;
-                      box-shadow:0 2px 6px rgba(185,28,28,0.2);">
-          <tr><td style="color:#FEF2F2 !important;font-size:13px;font-weight:600;">
+                      background:#FEF2F2;border-radius:10px;
+                      box-shadow:0 2px 6px rgba(220,38,38,0.1);">
+          <tr><td style="color:#DC2626;font-size:13px;font-weight:600;">
             ⚠️ {failed_count} of {total_entities} assets had data issues
           </td></tr>
         </table>'''
@@ -847,20 +847,12 @@ def render_email(summary, companies, cryptos=None):
     # Enhanced email preview
     email_preview = _generate_enhanced_preview()
 
-    # RELIABLE responsive CSS for email clients with ENHANCED dark mode compatibility
+    # CLEAN responsive CSS for light theme - no more dark mode fighting
     css = """
 <style>
-/* FORCE dark mode colors - aggressive approach */
-* { color: #FFFFFF !important; }
-body { background: #0b0c10 !important; color: #FFFFFF !important; }
-.email-body { background: #0b0c10 !important; color: #FFFFFF !important; }
-
-/* Dark mode enforcement for all email clients */
-@media (prefers-color-scheme: dark) {
-  * { color: #FFFFFF !important; }
-  body { background: #0b0c10 !important; color: #FFFFFF !important; }
-  .email-body { background: #0b0c10 !important; color: #FFFFFF !important; }
-}
+/* Clean light theme that works with email clients */
+body { background: #F3F4F6; color: #1F2937; }
+.email-body { background: #F3F4F6; color: #1F2937; }
 
 /* Mobile responsiveness - RELIABLE table-based approach with better spacing */
 @media only screen and (max-width: 640px) {
@@ -882,9 +874,14 @@ body { background: #0b0c10 !important; color: #FFFFFF !important; }
   .responsive-section-title {
     font-size: 26px !important;
   }
-  /* Ensure chips don't wrap awkwardly on mobile */
+  /* Ensure chips don't wrap awkwardly on mobile and range bars work */
   .chip-container {
     white-space: nowrap !important;
+  }
+  /* Fix range bar width on mobile */
+  .range-container {
+    overflow-x: auto !important;
+    min-width: 250px !important;
   }
 }
 
@@ -900,14 +897,6 @@ body { background: #0b0c10 !important; color: #FFFFFF !important; }
     padding: 16px 14px !important;
   }
 }
-
-/* Override email client dark mode inversions */
-[data-ogsc] * { color: #FFFFFF !important; }
-[data-ogsc] .email-body { background: #0b0c10 !important; }
-
-/* Gmail-specific overrides */
-.gmail_dark * { color: #FFFFFF !important; }
-.gmail_dark body { background: #0b0c10 !important; }
 </style>
 """
 
