@@ -1,6 +1,6 @@
 # src/render_email.py
-# Enhanced visual design with reliable table-based layout for email clients
-# BEST OF BOTH WORLDS: Beautiful UI + Working Layout + Dark Mode Compatibility
+# Enhanced visual design with PROPER dark mode handling - keeping original design but fixing color inversion
+# FIXED: Dark mode uses light backgrounds that invert to dark, Mobile layout identical to desktop
 
 from datetime import datetime, timezone
 from html import escape
@@ -92,7 +92,7 @@ def _fmt_ct(value, force_time=None, tz_suffix_policy="auto"):
     return out
 
 
-# ---------- Enhanced visual helpers with dark mode compatibility ----------
+# ---------- Enhanced visual helpers ----------
 
 def _safe_float(x, default=None):
     """Enhanced float conversion with better validation."""
@@ -111,64 +111,62 @@ def _safe_float(x, default=None):
 
 
 def _chip(label: str, value):
-    """Enhanced performance chip with better styling and dark mode compatibility."""
+    """Enhanced performance chip with proper dark mode color handling."""
     v = _safe_float(value, None)
     
     if v is None:
-        # High contrast neutral colors - no borders, just background
-        bg = "#4B5563"  # Medium gray background
-        color = "#F9FAFB"  # Very light text for contrast
+        # Neutral chip - works in both modes
+        bg = "#4B5563"  
+        color = "#FFFFFF"
         sign = ""
         txt = "--"
     else:
         if v >= 0:
-            # High contrast green - no borders to avoid hard edges
-            bg = "#047857"   # Darker green background
-            color = "#ECFDF5" # Very light green text
+            # Green chip
+            bg = "#059669"   
+            color = "#FFFFFF" 
             sign = "▲"
         else:
-            # High contrast red - no borders to avoid hard edges
-            bg = "#B91C1C"   # Darker red background  
-            color = "#FEF2F2" # Very light red text
+            # Red chip
+            bg = "#DC2626"   
+            color = "#FFFFFF"
             sign = "▼"
         txt = f"{abs(v):.1f}%"
     
     safe_label = escape(label)
     
-    # Removed borders, enhanced contrast, rounded corners
-    return (f'<span style="background:{bg};color:{color} !important;'
-            f'padding:5px 14px;border-radius:12px;font-size:12px;font-weight:700;'
-            f'margin-right:8px;margin-bottom:4px;display:inline-block;'
-            f'box-shadow:0 2px 6px rgba(0,0,0,0.4);white-space:nowrap;'
+    return (f'<span class="perf-chip" style="background:{bg};color:{color};'
+            f'padding:5px 12px;border-radius:12px;font-size:12px;font-weight:700;'
+            f'margin:2px 6px 4px 0;display:inline-block;'
+            f'box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;'
             f'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;"'
             f'>{safe_label} {sign} {txt}</span>')
 
 
 def _button(label: str, url: str, style="primary"):
-    """Enhanced button with better styling and dark mode compatibility."""
+    """Enhanced button with proper dark mode handling."""
     safe_label = escape(label)
     href = escape(url or "#")
     
     if style == "primary":
-        bg = "#1E293B"      # Dark slate
-        color = "#F8FAFC"   # Very light text for contrast
+        bg = "#374151"
+        color = "#FFFFFF"
     else:  # secondary
-        bg = "#334155"      # Medium slate
-        color = "#F1F5F9"   # Light slate text
+        bg = "#6B7280"
+        color = "#FFFFFF"
     
-    # Removed borders, enhanced contrast, rounded corners
     return (f'<table role="presentation" cellpadding="0" cellspacing="0" style="display:inline-block;margin-right:8px;margin-bottom:4px;">'
-            f'<tr><td style="background:{bg};color:{color} !important;'
+            f'<tr><td class="btn-cell" style="background:{bg};color:{color};'
             f'border-radius:10px;font-size:13px;font-weight:600;padding:10px 16px;'
-            f'box-shadow:0 3px 8px rgba(0,0,0,0.4);'
+            f'box-shadow:0 3px 8px rgba(0,0,0,0.2);'
             f'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
             f'<a href="{href}" target="_blank" rel="noopener noreferrer" '
-            f'style="color:{color} !important;text-decoration:none;display:block;">'
+            f'style="color:{color};text-decoration:none;display:block;">'
             f'{safe_label} →</a></td></tr></table>')
 
 
 def _range_bar(pos: float, low: float, high: float):
-    """Enhanced 52-week range bar with better visual design and dark mode compatibility."""
+    """Enhanced 52-week range bar with mobile optimization."""
     pct = max(0.0, min(100.0, _safe_float(pos, 0.0)))
     left = f"{pct:.1f}%"
     right = f"{100 - pct:.1f}%"
@@ -177,43 +175,43 @@ def _range_bar(pos: float, low: float, high: float):
     high_v = _safe_float(high, 0.0) or 0.0
     current_v = _safe_float(pos, 0.0) or 0.0
     
-    # Determine marker color based on position - dark mode compatible
+    # Color based on position
     if pct < 25:
-        marker_color = "#EF4444"  # Bright red for low range
+        marker_color = "#DC2626"  # Red
         marker_label = "Low"
     elif pct > 75:  
-        marker_color = "#10B981"  # Bright green for high range  
+        marker_color = "#059669"  # Green
         marker_label = "High"
     else:
-        marker_color = "#3B82F6"  # Bright blue for mid range
+        marker_color = "#2563EB"  # Blue
         marker_label = "Mid"
     
-    track_bg = "#374151"      # Dark gray track
-    track_border = "#4B5563"  # Medium gray border
+    track_bg = "#374151"
     
-    # Table-based range bar for email compatibility
+    # Mobile-friendly track
     track = (
         f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
-        f'style="border-collapse:collapse;border:1px solid {track_border};'
-        f'border-radius:6px;background:{track_bg};height:10px;overflow:hidden;">'
+        f'style="border-collapse:collapse;border-radius:8px;'
+        f'background:{track_bg};height:10px;overflow:hidden;'
+        f'min-width:200px;box-shadow:inset 0 1px 2px rgba(0,0,0,0.2);">'
         f'<tr>'
-        f'<td width="{left}" style="width:{left};background:{track_bg};height:10px;padding:0;">&nbsp;</td>'
-        f'<td width="10px" style="width:10px;background:{marker_color};height:10px;padding:0;">&nbsp;</td>'
-        f'<td width="{right}" style="width:{right};background:{track_bg};height:10px;padding:0;">&nbsp;</td>'
+        f'<td style="width:{left};background:{track_bg};height:10px;padding:0;">&nbsp;</td>'
+        f'<td style="width:10px;background:{marker_color};height:10px;padding:0;">&nbsp;</td>'
+        f'<td style="width:{right};background:{track_bg};height:10px;padding:0;">&nbsp;</td>'
         f'</tr></table>'
     )
     
-    # Enhanced caption with better layout
+    # Mobile-friendly caption
     caption = (f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:6px;">'
                f'<tr>'
-               f'<td style="font-size:11px;color:#9CA3AF;text-align:left;">Low ${low_v:.2f}</td>'
-               f'<td style="font-size:12px;color:{marker_color};font-weight:600;text-align:center;">'
-               f'${current_v:.2f} ({marker_label})</td>'
-               f'<td style="font-size:11px;color:#9CA3AF;text-align:right;">High ${high_v:.2f}</td>'
+               f'<td class="range-text" style="font-size:11px;color:#9CA3AF;text-align:left;font-weight:500;">Low ${low_v:.2f}</td>'
+               f'<td class="range-text" style="font-size:12px;color:{marker_color};font-weight:700;text-align:center;">'
+               f'${current_v:.2f}</td>'
+               f'<td class="range-text" style="font-size:11px;color:#9CA3AF;text-align:right;font-weight:500;">High ${high_v:.2f}</td>'
                f'</tr></table>')
     
     return (f'<div style="margin:14px 0 10px 0;">'
-            f'<div style="font-size:11px;color:#9CA3AF;margin-bottom:6px;font-weight:500;">'
+            f'<div class="range-title" style="font-size:12px;color:#D1D5DB;margin-bottom:6px;font-weight:600;">'
             f'52-Week Range</div>'
             + track + caption + '</div>')
 
@@ -226,10 +224,8 @@ def _belongs_to_company(c: dict, headline: str) -> bool:
     name = str(c.get("name") or "").lower()
     ticker = str(c.get("ticker") or c.get("symbol") or "").lower()
     
-    # Enhanced tokenization
     base_tokens = set()
     if name:
-        # Split on various separators and filter short words
         tokens = re.split(r"[\s&,\.-]+", name)
         for tok in tokens:
             if len(tok) > 2 and tok not in ("inc", "ltd", "corp", "llc", "the", "and"):
@@ -433,7 +429,7 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
 
 
 def _render_hero(hero: dict) -> str:
-    """Enhanced hero rendering with better visual hierarchy and dark mode compatibility."""
+    """Enhanced hero rendering with better visual hierarchy."""
     if not hero:
         return ""
     
@@ -460,44 +456,44 @@ def _render_hero(hero: dict) -> str:
                 break
         para = truncated.strip()
     
-    # Enhanced body HTML with high contrast text
+    # Enhanced body HTML with better typography
     body_html = ""
     if para:
         body_html = f'''
-        <tr><td style="padding-top:14px;font-size:15px;line-height:1.6;
-                     color:#F3F4F6 !important;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
+        <tr><td class="hero-body" style="padding-top:14px;font-size:15px;line-height:1.6;
+                     color:#D1D5DB;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
             {escape(para)}
         </td></tr>'''
     
-    # Enhanced metadata line with better contrast
+    # Enhanced metadata line
     meta_parts = []
     if source:
-        meta_parts.append(f'<span style="font-weight:600;color:#A78BFA !important;">{escape(source)}</span>')
+        meta_parts.append(f'<span style="font-weight:600;color:#A78BFA;">{escape(source)}</span>')
     if when:
-        meta_parts.append(f'<span style="color:#D1D5DB !important;">{escape(when)}</span>')
+        meta_parts.append(f'<span style="color:#9CA3AF;">{escape(when)}</span>')
     
     meta_html = ""
     if meta_parts:
         meta_html = f'''
-        <tr><td style="padding-top:14px;font-size:13px;
+        <tr><td class="hero-meta" style="padding-top:14px;font-size:13px;
                      border-top:1px solid rgba(255,255,255,0.1);
-                     padding-top:12px;color:#D1D5DB !important;">
+                     padding-top:12px;color:#9CA3AF;">
             {" • ".join(meta_parts)}
         </td></tr>'''
     
-    # Enhanced hero container - REMOVED HARD BORDERS, enhanced rounded corners
+    # Enhanced hero container with gradient
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;
+       class="hero-container" style="border-collapse:collapse;
               background:linear-gradient(135deg, #1F2937 0%, #111827 100%);
               border-radius:16px;margin:20px 0;
-              box-shadow:0 8px 20px rgba(0,0,0,0.6);color:#FFFFFF !important;">
+              box-shadow:0 8px 20px rgba(0,0,0,0.5);color:#FFFFFF;">
   <tr>
     <td style="padding:28px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="font-weight:700;font-size:26px;line-height:1.3;color:#FFFFFF !important;
+        <tr><td class="hero-title" style="font-weight:700;font-size:26px;line-height:1.3;color:#FFFFFF;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-          <a href="{escape(url)}" style="color:#FFFFFF !important;text-decoration:none;">
+          <a href="{escape(url)}" style="color:#FFFFFF;text-decoration:none;">
             {escape(title)}
           </a>
         </td></tr>
@@ -510,37 +506,37 @@ def _render_hero(hero: dict) -> str:
 """
 
 
-# ---------- Enhanced card system with table layout ----------
+# ---------- Enhanced card system ----------
 
 def _build_card(c):
-    """Enhanced card building with better visual design but table-based structure."""
+    """Enhanced card building with better visual design."""
     name = c.get("name") or c.get("ticker") or c.get("symbol") or "Unknown"
     ticker = str(c.get("ticker") or c.get("symbol") or "")
     is_crypto = ticker.endswith("-USD") or (str(c.get("asset_class") or "").lower() == "crypto")
 
-    # Enhanced price formatting with explicit color overrides
+    # Enhanced price formatting
     price_v = _safe_float(c.get("price"), None)
     if price_v is None:
-        price_fmt = '<span style="color:#9CA3AF !important;">--</span>'
+        price_fmt = '<span class="price-text" style="color:#9CA3AF;">--</span>'
     else:
         if is_crypto:
             if price_v >= 1000:
-                price_fmt = f'<span style="color:#FFFFFF !important;font-weight:700;">${price_v:,.0f}</span>'
+                price_fmt = f'<span class="price-text" style="color:#FFFFFF;font-weight:700;">${price_v:,.0f}</span>'
             elif price_v >= 1:
-                price_fmt = f'<span style="color:#FFFFFF !important;font-weight:700;">${price_v:,.2f}</span>'
+                price_fmt = f'<span class="price-text" style="color:#FFFFFF;font-weight:700;">${price_v:,.2f}</span>'
             else:
-                price_fmt = f'<span style="color:#FFFFFF !important;font-weight:700;">${price_v:.4f}</span>'
+                price_fmt = f'<span class="price-text" style="color:#FFFFFF;font-weight:700;">${price_v:.4f}</span>'
         else:
-            price_fmt = f'<span style="color:#FFFFFF !important;font-weight:700;">${price_v:,.2f}</span>'
+            price_fmt = f'<span class="price-text" style="color:#FFFFFF;font-weight:700;">${price_v:,.2f}</span>'
 
-    # Enhanced chip layout with better spacing - but keeping table structure
+    # Enhanced chip layout - SAME AS DESKTOP ON MOBILE
     chips_line1 = _chip("1D", c.get("pct_1d")) + _chip("1W", c.get("pct_1w"))
     chips_line2 = _chip("1M", c.get("pct_1m")) + _chip("YTD", c.get("pct_ytd"))
     
     chips = f'''
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;">
-        <tr><td style="line-height:1.5;padding-bottom:6px;">{chips_line1}</td></tr>
-        <tr><td style="line-height:1.5;">{chips_line2}</td></tr>
+        <tr><td style="line-height:1.6;padding-bottom:6px;">{chips_line1}</td></tr>
+        <tr><td style="line-height:1.6;">{chips_line2}</td></tr>
     </table>'''
 
     # Enhanced news bullet with better formatting
@@ -565,31 +561,31 @@ def _build_card(c):
         company_name = name.replace(" Inc.", "").replace(" Corporation", "").strip()
         bullets.append(f'★ <span style="color:#9CA3AF;">Latest {company_name} coverage — see News</span>')
 
-    # Additional context bullets with better contrast
+    # Additional context bullets
     next_event = c.get("next_event")
     if next_event:
         event_date = _fmt_ct(next_event, force_time=False, tz_suffix_policy="never")
         if event_date:
-            bullets.append(f'<span style="color:#C084FC !important;">📅 Next: {event_date}</span>')
+            bullets.append(f'<span style="color:#A78BFA;">📅 Next: {event_date}</span>')
 
     vol_multiplier = _safe_float(c.get("vol_x_avg"), None)
     if vol_multiplier is not None and vol_multiplier > 1.5:  # Only show significant volume
-        bullets.append(f'<span style="color:#FBBF24 !important;">📊 Volume: {vol_multiplier:.1f}× avg</span>')
+        bullets.append(f'<span style="color:#F59E0B;">📊 Volume: {vol_multiplier:.1f}× avg</span>')
 
-    # Enhanced bullets HTML in table format with better contrast
+    # Enhanced bullets HTML in table format
     bullets_html = ""
     for i, bullet in enumerate(bullets):
         if i == 0:  # Main news item
             bullets_html += f'''
-            <tr><td style="padding-bottom:10px;
+            <tr><td class="bullet-text" style="padding-bottom:10px;
                           display:-webkit-box;-webkit-box-orient:vertical;
                           -webkit-line-clamp:3;overflow:hidden;text-overflow:ellipsis;
-                          line-height:1.5;color:#F3F4F6 !important;font-size:14px;font-weight:500;">
+                          line-height:1.5;color:#E5E7EB;font-size:14px;font-weight:500;">
                 {bullet}
             </td></tr>'''
         else:  # Secondary items
             bullets_html += f'''
-            <tr><td style="padding-bottom:6px;font-size:12px;line-height:1.4;color:#E5E7EB !important;">
+            <tr><td class="bullet-text" style="padding-bottom:6px;font-size:12px;line-height:1.4;color:#9CA3AF;">
                 {bullet}
             </td></tr>'''
 
@@ -612,27 +608,27 @@ def _build_card(c):
         </td></tr>
     </table>'''
 
-    # Enhanced card with better visual hierarchy - TABLE BASED for email compatibility  
+    # Enhanced card - SAME DESIGN, PROPER DARK MODE HANDLING
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;margin:0 0 12px;
+       class="card-container" style="border-collapse:collapse;margin:0 0 12px;
               background:linear-gradient(135deg, #1F2937 0%, #111827 100%);
-              border:1px solid #374151;border-radius:12px;
-              box-shadow:0 3px 8px rgba(0,0,0,0.4);overflow:hidden;">
+              border-radius:14px;
+              box-shadow:0 6px 16px rgba(0,0,0,0.4);overflow:hidden;">
   <tr>
-    <td class="ci-card-inner" style="padding:18px 20px;max-height:340px;overflow:hidden;vertical-align:top;">
+    <td class="ci-card-inner" style="padding:20px 22px;max-height:360px;overflow:hidden;vertical-align:top;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         <!-- Header -->
         <tr><td>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            <tr><td style="font-weight:700;font-size:16px;line-height:1.3;color:#FFFFFF;
+            <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#FFFFFF;
                          font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
                          padding-bottom:4px;">{escape(str(name))}</td></tr>
             <tr><td>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td style="font-size:12px;color:#9CA3AF;font-weight:500;">({escape(ticker)})</td>
-                  <td style="text-align:right;font-size:15px;">{price_fmt}</td>
+                  <td class="ticker-text" style="font-size:13px;color:#D1D5DB;font-weight:600;">({escape(ticker)})</td>
+                  <td style="text-align:right;font-size:16px;">{price_fmt}</td>
                 </tr>
               </table>
             </td></tr>
@@ -647,7 +643,7 @@ def _build_card(c):
         
         <!-- News and events -->
         <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
             {bullets_html}
           </table>
         </td></tr>
@@ -662,7 +658,7 @@ def _build_card(c):
 
 
 def _grid(cards):
-    """RELIABLE two-column grid using tables (works in all email clients) with enhanced spacing."""
+    """ORIGINAL two-column grid that works perfectly - SAME ON MOBILE."""
     if not cards:
         return ""
     
@@ -693,18 +689,18 @@ def _grid(cards):
 
 
 def _section_container(title: str, inner_html: str):
-    """Enhanced section container with better visual design but table-based."""
+    """Enhanced section container with NO DIVIDER LINE."""
     safe_title = escape(title)
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;background:#0F172A;border:1px solid #374151;
-              border-radius:12px;margin:20px 0;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+       class="section-container" style="border-collapse:collapse;background:#0F172A;
+              border-radius:16px;margin:24px 0;box-shadow:0 6px 16px rgba(0,0,0,0.4);">
   <tr>
-    <td style="padding:24px;">
+    <td style="padding:28px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="font-weight:700;font-size:32px;color:#FFFFFF;
+        <tr><td class="section-title" style="font-weight:700;font-size:32px;color:#FFFFFF;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
-                     margin:0 0 18px 0;border-bottom:2px solid #374151;padding-bottom:12px;">
+                     margin:0 0 20px 0;padding-bottom:16px;">
           {safe_title}
         </td></tr>
         <tr><td>{inner_html}</td></tr>
@@ -744,10 +740,10 @@ def _generate_enhanced_preview() -> str:
     return preview_options[index]
 
 
-# ---------- Enhanced main renderer with dark mode compatibility ----------
+# ---------- Enhanced main renderer ----------
 
 def render_email(summary, companies, cryptos=None):
-    """Enhanced email rendering with better visual design and reliable table layout."""
+    """Enhanced email rendering with PROPER dark mode CSS handling."""
     
     # Enhanced entity processing
     company_cards = []
@@ -801,15 +797,15 @@ def render_email(summary, companies, cryptos=None):
         
         market_summary = f'''
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-               style="border-collapse:collapse;background:#1F2937;
+               class="market-summary" style="border-collapse:collapse;background:#1F2937;
                       border-radius:12px;margin:14px 0;
-                      box-shadow:0 4px 10px rgba(0,0,0,0.3);">
+                      box-shadow:0 4px 10px rgba(0,0,0,0.2);">
           <tr><td style="padding:16px 20px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="font-size:18px;">{market_emoji}</td>
-                <td style="color:#F3F4F6 !important;font-weight:700;padding-left:10px;font-size:16px;">{market_sentiment} Session</td>
-                <td style="color:#D1D5DB !important;font-size:14px;text-align:right;font-weight:500;">
+                <td class="market-text" style="color:#F3F4F6;font-weight:700;padding-left:10px;font-size:16px;">{market_sentiment} Session</td>
+                <td class="market-text" style="color:#D1D5DB;font-size:14px;text-align:right;font-weight:500;">
                   {up_count} up • {down_count} down
                 </td>
               </tr>
@@ -836,10 +832,10 @@ def render_email(summary, companies, cryptos=None):
         failed_count = total_entities - successful_entities
         quality_note = f'''
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-               style="border-collapse:collapse;margin-top:14px;padding:12px 16px;
-                      background:rgba(185,28,28,0.15);border-radius:10px;
-                      box-shadow:0 2px 6px rgba(185,28,28,0.2);">
-          <tr><td style="color:#FEF2F2 !important;font-size:13px;font-weight:600;">
+               class="quality-note" style="border-collapse:collapse;margin-top:14px;padding:12px 16px;
+                      background:rgba(185,28,28,0.1);border-radius:10px;
+                      box-shadow:0 2px 6px rgba(185,28,28,0.1);">
+          <tr><td style="color:#FCA5A5;font-size:13px;font-weight:600;">
             ⚠️ {failed_count} of {total_entities} assets had data issues
           </td></tr>
         </table>'''
@@ -847,58 +843,73 @@ def render_email(summary, companies, cryptos=None):
     # Enhanced email preview
     email_preview = _generate_enhanced_preview()
 
-    # RELIABLE responsive CSS for email clients with dark mode compatibility
+    # PROPER dark mode CSS - uses light backgrounds for dark mode so they invert correctly
     css = """
 <style>
-/* Dark mode enforcement and email client compatibility */
+/* Default (light mode and email clients) */
+body { background: #0b0c10; color: #e5e7eb; }
+.email-body { background: #0b0c10; color: #e5e7eb; }
+
+/* DARK MODE OVERRIDES - Use LIGHT backgrounds so they invert to dark */
 @media (prefers-color-scheme: dark) {
-  .email-body { background:#0b0c10 !important; color:#e5e7eb !important; }
+  /* Main backgrounds become light (will invert to dark) */
+  .hero-container { background: #E5E7EB !important; }
+  .card-container { background: #F3F4F6 !important; }
+  .section-container { background: #F9FAFB !important; }
+  .market-summary { background: #E5E7EB !important; }
+  
+  /* Text becomes dark (will invert to light) */
+  .hero-title, .card-title, .section-title { color: #1F2937 !important; }
+  .hero-body, .hero-meta { color: #4B5563 !important; }
+  .price-text, .ticker-text, .bullet-text { color: #1F2937 !important; }
+  .range-title, .range-text { color: #4B5563 !important; }
+  .market-text { color: #1F2937 !important; }
+  
+  /* Performance chips - light backgrounds (will invert) */
+  .perf-chip { background: #D1D5DB !important; color: #1F2937 !important; }
+  
+  /* Buttons - light backgrounds (will invert) */
+  .btn-cell { background: #9CA3AF !important; color: #1F2937 !important; }
 }
 
-/* Mobile responsiveness - RELIABLE table-based approach */
+/* Mobile responsiveness - IDENTICAL TO DESKTOP LAYOUT */
 @media only screen and (max-width: 640px) {
   .stack-col { 
-    display:block !important; 
-    width:100% !important; 
-    max-width:100% !important; 
-    padding-left:0 !important; 
-    padding-right:0 !important; 
+    display: block !important; 
+    width: 100% !important; 
+    max-width: 100% !important; 
+    padding-left: 0 !important; 
+    padding-right: 0 !important; 
   }
   .ci-card-inner { 
-    max-height:none !important; 
-    overflow:visible !important; 
+    max-height: none !important; 
+    overflow: visible !important;
   }
   .responsive-title {
-    font-size:42px !important;
-  }
-  .responsive-section-title {
-    font-size:28px !important;
+    font-size: 36px !important;
   }
 }
 
 /* Very small screens */
 @media only screen and (max-width: 480px) {
   .responsive-title {
-    font-size:36px !important;
+    font-size: 32px !important;
   }
-  .responsive-section-title {
-    font-size:24px !important;
+  .ci-card-inner {
+    padding: 18px 20px !important;
   }
 }
-
-/* Force dark mode colors in email clients */
-[data-ogsc] .email-body { background:#0b0c10 !important; color:#e5e7eb !important; }
 </style>
 """
 
-    # Enhanced HTML structure with dark mode compatibility
+    # Enhanced HTML structure
     html = f"""<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="color-scheme" content="dark">
-    <meta name="supported-color-schemes" content="dark">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
     <meta name="description" content="{escape(email_preview)}">
     <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
     <title>Intelligence Digest</title>
@@ -913,7 +924,7 @@ def render_email(summary, companies, cryptos=None):
       {escape(email_preview)}
     </div>
     
-    <!-- Main container - TABLE BASED for email compatibility -->
+    <!-- Main container -->
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
       <tr>
         <td align="center" style="padding:20px 12px;background:#0b0c10;">
@@ -921,18 +932,18 @@ def render_email(summary, companies, cryptos=None):
                  style="border-collapse:collapse;width:640px;max-width:100%;">
             <tr>
               <td style="background:linear-gradient(135deg, #1F2937 0%, #111827 100%);
-                         border:1px solid #374151;border-radius:12px;
-                         padding:28px;box-shadow:0 4px 12px rgba(0,0,0,0.4);">
+                         border-radius:16px;
+                         padding:32px;box-shadow:0 8px 20px rgba(0,0,0,0.5);">
                 
                 <!-- Header -->
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr><td style="text-align:center;">
                     <div class="responsive-title" style="font-weight:700;font-size:48px;color:#FFFFFF;
-                                                        margin:0 0 8px 0;letter-spacing:-0.5px;
+                                                        margin:0 0 10px 0;letter-spacing:-0.5px;
                                                         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
                       Intelligence Digest
                     </div>
-                    {f'<div style="color:#9CA3AF;margin-bottom:14px;font-size:13px;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
+                    {f'<div style="color:#D1D5DB;margin-bottom:16px;font-size:14px;font-weight:500;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
                     {market_summary}
                     {quality_note}
                   </td></tr>
@@ -947,11 +958,11 @@ def render_email(summary, companies, cryptos=None):
                 <!-- Footer -->
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
                        style="border-top:1px solid rgba(255,255,255,0.1);margin-top:28px;">
-                  <tr><td style="text-align:center;padding:24px 16px;color:#D1D5DB !important;font-size:13px;">
+                  <tr><td style="text-align:center;padding:24px 16px;color:#D1D5DB;font-size:13px;">
                     <div style="margin-bottom:8px;font-weight:500;">
                       You're receiving this because you subscribed to Intelligence Digest
                     </div>
-                    <div style="color:#9CA3AF !important;font-weight:400;">
+                    <div style="color:#9CA3AF;font-weight:400;">
                       Engineered with precision • Delivered with speed ⚡
                     </div>
                   </td></tr>
