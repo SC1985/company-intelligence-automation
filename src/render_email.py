@@ -2,7 +2,7 @@
 
 # Fixed: Using hybrid color scheme that works in both dark and light modes
 
-# No reliance on prefers-color-scheme which doesn’t work in Gmail
+# No reliance on prefers-color-scheme which does not work in Gmail
 
 from datetime import datetime, timezone
 from html import escape
