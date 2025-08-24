@@ -983,7 +983,6 @@ html = f"""<!DOCTYPE html>
     </td>
   </tr>
 </table>
-```
 
   </body>
 </html>"""
