@@ -205,14 +205,14 @@ def _range_bar(pos: float, low: float, high: float):
     # Caption
     caption = (f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:6px;">'
                f'<tr>'
-               f'<td style="font-size:11px;color:#6B7280;text-align:left;font-weight:500;">Low ${low_v:.2f}</td>'
-               f'<td style="font-size:12px;color:{marker_color};font-weight:700;text-align:center;">'
+               f'<td class="range-label" style="font-size:11px;color:#6B7280;text-align:left;font-weight:500;">Low ${low_v:.2f}</td>'
+               f'<td class="range-current" style="font-size:12px;color:{marker_color};font-weight:700;text-align:center;">'
                f'${current_v:.2f}</td>'
-               f'<td style="font-size:11px;color:#6B7280;text-align:right;font-weight:500;">High ${high_v:.2f}</td>'
+               f'<td class="range-label" style="font-size:11px;color:#6B7280;text-align:right;font-weight:500;">High ${high_v:.2f}</td>'
                f'</tr></table>')
     
     return (f'<div style="margin:14px 0 10px 0;">'
-            f'<div style="font-size:12px;color:#374151;margin-bottom:6px;font-weight:600;">'
+            f'<div class="range-title" style="font-size:12px;color:#374151;margin-bottom:6px;font-weight:600;">'
             f'52-Week Range</div>'
             + track + caption + '</div>')
 
@@ -461,7 +461,7 @@ def _render_hero(hero: dict) -> str:
     body_html = ""
     if para:
         body_html = f'''
-        <tr><td style="padding-top:14px;font-size:15px;line-height:1.6;
+        <tr><td class="hero-body" style="padding-top:14px;font-size:15px;line-height:1.6;
                      color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
             {escape(para)}
         </td></tr>'''
@@ -631,7 +631,7 @@ def _build_card(c):
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td class="ticker-text" style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
-                  <td style="text-align:right;font-size:16px;">{price_fmt}</td>
+                  <td class="price-cell" style="text-align:right;font-size:16px;">{price_fmt}</td>
                 </tr>
               </table>
             </td></tr>
@@ -801,15 +801,15 @@ def render_email(summary, companies, cryptos=None):
         
         market_summary = f'''
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-               style="border-collapse:collapse;background:#F3F4F6;
+               class="market-summary" style="border-collapse:collapse;background:#F3F4F6;
                       border-radius:12px;margin:14px 0;
                       box-shadow:0 2px 6px rgba(0,0,0,0.05);">
           <tr><td style="padding:16px 20px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
-                <td style="font-size:18px;">{market_emoji}</td>
-                <td style="color:#111827;font-weight:700;padding-left:10px;font-size:16px;">{market_sentiment} Session</td>
-                <td style="color:#6B7280;font-size:14px;text-align:right;font-weight:500;">
+                <td class="market-emoji" style="font-size:18px;">{market_emoji}</td>
+                <td class="market-primary" style="color:#111827;font-weight:700;padding-left:10px;font-size:16px;">{market_sentiment} Session</td>
+                <td class="market-secondary" style="color:#6B7280;font-size:14px;text-align:right;font-weight:500;">
                   {up_count} up • {down_count} down
                 </td>
               </tr>
@@ -850,7 +850,7 @@ def render_email(summary, companies, cryptos=None):
     # Minimal CSS for mobile responsiveness only
     css = """
 <style>
-/* Mobile responsiveness with larger text */
+/* Mobile responsiveness with MUCH larger text to match desktop feel */
 @media only screen and (max-width: 640px) {
   .stack-col { 
     display: block !important; 
@@ -858,7 +858,7 @@ def render_email(summary, companies, cryptos=None):
     max-width: 100% !important; 
     padding-left: 0 !important; 
     padding-right: 0 !important;
-    padding-bottom: 12px !important;
+    padding-bottom: 16px !important;
   }
   
   /* Reduce padding on mobile for more content width */
@@ -871,17 +871,160 @@ def render_email(summary, companies, cryptos=None):
   }
   
   .hero-container td {
-    padding: 16px !important;
+    padding: 20px !important;
   }
   
   .section-container td {
-    padding: 16px !important;
+    padding: 20px !important;
   }
   
   .card-inner {
-    padding: 16px !important;
+    padding: 18px !important;
   }
   
+  /* MUCH larger text sizes for desktop-like feel */
+  .responsive-title {
+    font-size: 48px !important;
+    line-height: 1.1 !important;
+  }
+  
+  .header-subtitle {
+    font-size: 17px !important;
+  }
+  
+  .section-title {
+    font-size: 36px !important;
+    line-height: 1.2 !important;
+  }
+  
+  /* Scale up all text significantly */
+  td {
+    font-size: 18px !important;
+  }
+  
+  .hero-title {
+    font-size: 32px !important;
+    line-height: 1.2 !important;
+  }
+  
+  .hero-body {
+    font-size: 18px !important;
+    line-height: 1.5 !important;
+  }
+  
+  .card-title {
+    font-size: 22px !important;
+    line-height: 1.2 !important;
+  }
+  
+  .price-cell {
+    font-size: 20px !important;
+  }
+  
+  .price-text {
+    font-size: 20px !important;
+  }
+  
+  .ticker-text {
+    font-size: 16px !important;
+  }
+  
+  .chip {
+    font-size: 15px !important;
+    padding: 8px 16px !important;
+    margin: 3px 8px 5px 0 !important;
+  }
+  
+  .bullet-main {
+    font-size: 18px !important;
+    line-height: 1.5 !important;
+  }
+  
+  .bullet-secondary {
+    font-size: 16px !important;
+    line-height: 1.4 !important;
+  }
+  
+  .btn {
+    font-size: 17px !important;
+    padding: 14px 22px !important;
+  }
+  
+  /* Range bar text */
+  .range-title {
+    font-size: 15px !important;
+  }
+  
+  .range-label {
+    font-size: 14px !important;
+  }
+  
+  .range-current {
+    font-size: 16px !important;
+  }
+  
+  /* Market summary */
+  .market-emoji {
+    font-size: 22px !important;
+  }
+  
+  .market-primary {
+    font-size: 19px !important;
+  }
+  
+  .market-secondary {
+    font-size: 16px !important;
+  }
+  
+  /* Footer text */
+  .footer-text {
+    font-size: 15px !important;
+  }
+}
+
+@media only screen and (max-width: 480px) {
+  /* Keep large sizes even on very small screens */
+  .outer-padding {
+    padding: 6px 4px !important;
+  }
+  
+  .main-container {
+    padding: 14px !important;
+  }
+  
+  .responsive-title {
+    font-size: 44px !important;
+  }
+  
+  .header-subtitle {
+    font-size: 16px !important;
+  }
+  
+  .section-title {
+    font-size: 32px !important;
+  }
+  
+  .hero-title {
+    font-size: 28px !important;
+  }
+  
+  .card-title {
+    font-size: 20px !important;
+  }
+  
+  .chip {
+    font-size: 14px !important;
+    padding: 7px 14px !important;
+  }
+  
+  .btn {
+    font-size: 16px !important;
+    padding: 12px 20px !important;
+  }
+}
+
+@media only screen and (max-width: 375px) {
+  /* iPhone SE and smaller - still keep it large */
   .responsive-title {
     font-size: 40px !important;
   }
@@ -890,71 +1033,12 @@ def render_email(summary, companies, cryptos=None):
     font-size: 30px !important;
   }
   
-  /* Increase all text sizes on mobile */
-  td {
-    font-size: 16px !important;
-  }
-  
   .hero-title {
     font-size: 26px !important;
   }
   
   .card-title {
     font-size: 19px !important;
-  }
-  
-  .price-text {
-    font-size: 18px !important;
-  }
-  
-  .ticker-text {
-    font-size: 15px !important;
-  }
-  
-  .chip {
-    font-size: 14px !important;
-    padding: 6px 14px !important;
-  }
-  
-  .bullet-main {
-    font-size: 16px !important;
-  }
-  
-  .bullet-secondary {
-    font-size: 14px !important;
-  }
-  
-  .btn {
-    font-size: 15px !important;
-    padding: 12px 18px !important;
-  }
-}
-
-@media only screen and (max-width: 480px) {
-  /* Even less padding on very small screens */
-  .outer-padding {
-    padding: 6px 4px !important;
-  }
-  
-  .main-container {
-    padding: 12px !important;
-  }
-  
-  .responsive-title {
-    font-size: 36px !important;
-  }
-  
-  .section-title {
-    font-size: 26px !important;
-  }
-  
-  /* Even larger text for very small screens */
-  .hero-title {
-    font-size: 24px !important;
-  }
-  
-  .card-title {
-    font-size: 18px !important;
   }
 }
 </style>
@@ -1001,7 +1085,7 @@ def render_email(summary, companies, cryptos=None):
                                                         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
                       Intelligence Digest
                     </div>
-                    {f'<div style="color:#6B7280;margin-bottom:16px;font-size:14px;font-weight:500;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
+                    {f'<div class="header-subtitle" style="color:#6B7280;margin-bottom:16px;font-size:14px;font-weight:500;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
                     {market_summary}
                     {quality_note}
                   </td></tr>
@@ -1016,7 +1100,7 @@ def render_email(summary, companies, cryptos=None):
                 <!-- Footer -->
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
                        style="border-top:1px solid #E5E7EB;margin-top:28px;">
-                  <tr><td style="text-align:center;padding:24px 16px;color:#6B7280;font-size:13px;">
+                  <tr><td class="footer-text" style="text-align:center;padding:24px 16px;color:#6B7280;font-size:13px;">
                     <div style="margin-bottom:8px;font-weight:500;">
                       You're receiving this because you subscribed to Intelligence Digest
                     </div>
