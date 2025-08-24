@@ -613,7 +613,7 @@ def _build_card(c):
     # Card with light background
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       class="company-card" style="border-collapse:collapse;margin:0 0 12px;
+       style="border-collapse:collapse;margin:0 0 12px;
               background:#FFFFFF;
               border:1px solid #E5E7EB;
               border-radius:14px;
@@ -661,7 +661,7 @@ def _build_card(c):
 
 
 def _grid(cards):
-    """Two-column grid that becomes single column on mobile with FULL WIDTH."""
+    """Two-column grid that becomes single column on mobile."""
     if not cards:
         return ""
     
@@ -679,11 +679,10 @@ def _grid(cards):
   </tr>
 </table>'''
         else:
-            # FIXED: Removed max-width constraint for single cards
             row = f'''
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:8px;">
   <tr>
-    <td class="stack-col single-card" style="vertical-align:top;">{left}</td>
+    <td class="stack-col" style="vertical-align:top;margin:0 auto;">{left}</td>
   </tr>
 </table>'''
         
@@ -697,7 +696,7 @@ def _section_container(title: str, inner_html: str):
     safe_title = escape(title)
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       class="section-container" style="border-collapse:collapse;background:#F9FAFB;
+       style="border-collapse:collapse;background:#F9FAFB;
               border-radius:16px;margin:24px 0;
               box-shadow:0 2px 8px rgba(0,0,0,0.04);">
   <tr>
@@ -848,10 +847,10 @@ def render_email(summary, companies, cryptos=None):
     # Email preview
     email_preview = _generate_enhanced_preview()
 
-    # ENHANCED CSS for mobile responsiveness with WIDER company modules
+    # Minimal CSS for mobile responsiveness only
     css = """
 <style>
-/* Mobile responsiveness with MUCH larger text and WIDER cards */
+/* Mobile responsiveness with MUCH larger text to match desktop feel */
 @media only screen and (max-width: 640px) {
   .stack-col { 
     display: block !important; 
@@ -862,39 +861,25 @@ def render_email(summary, companies, cryptos=None):
     padding-bottom: 16px !important;
   }
   
-  /* FIXED: Ensure single cards take full width on mobile */
-  .single-card {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-  
-  /* FIXED: Wider company cards on mobile - reduce container padding */
+  /* Reduce padding on mobile for more content width */
   .outer-padding {
-    padding: 6px 2px !important;  /* Reduced from 8px 4px */
+    padding: 8px 4px !important;
   }
   
   .main-container {
-    padding: 12px !important;  /* Reduced from 16px */
+    padding: 16px !important;
+  }
+  
+  .hero-container td {
+    padding: 20px !important;
   }
   
   .section-container td {
-    padding: 16px !important;  /* Reduced from 20px */
-  }
-  
-  /* FIXED: Company cards get more width */
-  .company-card {
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    width: 100% !important;
+    padding: 20px !important;
   }
   
   .card-inner {
-    padding: 16px !important;  /* Reduced from 18px for more content space */
-  }
-  
-  /* Hero container adjustments */
-  .hero-container td {
-    padding: 18px !important;  /* Reduced from 20px */
+    padding: 18px !important;
   }
   
   /* MUCH larger text sizes for desktop-like feel */
@@ -998,21 +983,13 @@ def render_email(summary, companies, cryptos=None):
 }
 
 @media only screen and (max-width: 480px) {
-  /* Keep large sizes and extra width even on very small screens */
+  /* Keep large sizes even on very small screens */
   .outer-padding {
-    padding: 4px 2px !important;  /* Even less padding */
+    padding: 6px 4px !important;
   }
   
   .main-container {
-    padding: 10px !important;  /* Further reduced */
-  }
-  
-  .section-container td {
-    padding: 14px !important;  /* Further reduced */
-  }
-  
-  .card-inner {
-    padding: 14px !important;  /* More space for content */
+    padding: 14px !important;
   }
   
   .responsive-title {
@@ -1047,23 +1024,7 @@ def render_email(summary, companies, cryptos=None):
 }
 
 @media only screen and (max-width: 375px) {
-  /* iPhone SE and smaller - maximize width */
-  .outer-padding {
-    padding: 3px 1px !important;  /* Minimal padding */
-  }
-  
-  .main-container {
-    padding: 8px !important;  /* Minimal container padding */
-  }
-  
-  .section-container td {
-    padding: 12px !important;
-  }
-  
-  .card-inner {
-    padding: 12px !important;
-  }
-  
+  /* iPhone SE and smaller - still keep it large */
   .responsive-title {
     font-size: 40px !important;
   }
