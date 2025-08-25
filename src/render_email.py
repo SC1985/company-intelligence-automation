@@ -548,7 +548,7 @@ def _select_mover_story(companies: list, cryptos: list):
 
 
 def _render_hero(hero: dict) -> str:
-    """Hero rendering with hybrid colors."""
+    """Hero rendering matching secondary article style."""
     if not hero:
         return ""
     
@@ -562,42 +562,37 @@ def _render_hero(hero: dict) -> str:
     company_name = hero.get("company_name", "")
     is_breaking = hero.get("is_breaking", False)
     
-    # Add a label for breaking news vs market analysis
-    label_html = ""
+    # Add a label for breaking news vs market analysis - matching TOP MOVER style
     if is_breaking:
         label_html = '''<span style="color:#DC2626;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">● BREAKING NEWS</span><br>'''
     else:
         label_html = '''<span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">MARKET ANALYSIS</span><br>'''
     
-    # Use description field directly for the preview copy
-    para = (hero.get("description") or hero.get("body") or "").strip()
+    # Description - matching mover story length
+    description = (hero.get("description") or hero.get("body") or "").strip()
+    if not description:
+        description = _first_paragraph(hero, title=title)
     
-    # If no description, try other extraction methods
-    if not para:
-        para = _first_paragraph(hero, title=title)
-    
-    # Truncate paragraph if too long
-    if para and len(para) > 200:
-        # Find a good breaking point
-        sentences = re.split(r'[.!?]\s+', para)
+    if description and len(description) > 200:
+        sentences = re.split(r'[.!?]\s+', description)
         truncated = ""
         for sentence in sentences:
             if len(truncated + sentence) <= 180:
                 truncated += sentence + ". "
             else:
                 break
-        para = truncated.strip() if truncated else para[:197] + "..."
+        description = truncated.strip() if truncated else description[:197] + "..."
     
-    # Body HTML
+    # Body HTML - matching mover story style
     body_html = ""
-    if para:
+    if description:
         body_html = f'''
-        <tr><td class="hero-body" style="padding-top:12px;font-size:14px;line-height:1.5;
+        <tr><td style="padding-top:12px;font-size:14px;line-height:1.5;
                      color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-            {escape(para)}
+            {escape(description)}
         </td></tr>'''
     
-    # Metadata line
+    # Metadata - matching mover story style
     meta_parts = []
     if company_name:
         meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(company_name)}</span>')
@@ -613,18 +608,18 @@ def _render_hero(hero: dict) -> str:
             {" • ".join(meta_parts)}
         </td></tr>'''
     
-    # Hero container with same styling as mover story
+    # Container - exactly matching mover story structure
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       class="hero-container" style="border-collapse:collapse;
+       style="border-collapse:collapse;
               background:#FFFFFF;
               border:1px solid #E5E7EB;
               border-radius:16px;margin:20px 0;
               box-shadow:0 4px 12px rgba(0,0,0,0.08);">
   <tr>
-    <td class="hero-padding" style="padding:18px;">
+    <td style="padding:18px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td class="hero-title" style="font-weight:700;font-size:20px;line-height:1.3;color:#111827;
+        <tr><td style="font-weight:700;font-size:20px;line-height:1.3;color:#111827;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
           <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
             {label_html}
