@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Investment Edge - Enhanced Entry Point with Dynamic Subject Lines
 import asyncio
 import importlib
 import inspect
@@ -38,7 +39,7 @@ def extract_hero_headline(html):
     return None
 
 def generate_hero_based_subject(hero_headline=None):
-    """Generate subject line based on hero headline or fallback."""
+    """Generate Investment Edge subject line based on hero headline or fallback."""
     today = datetime.now().strftime("%B %d")
     current_hour = datetime.now().hour
     
@@ -61,7 +62,7 @@ def generate_hero_based_subject(hero_headline=None):
             # Try to cut at a word boundary
             hero_headline = hero_headline[:57].rsplit(' ', 1)[0] + "..."
         
-        # Hero-based subject lines (no "Intelligence Digest" to avoid duplication)
+        # Hero-based subject lines (using Investment Edge branding)
         subjects = [
             f"{time_emoji} {hero_headline}",
             f"{hero_headline} • {today}",
@@ -74,13 +75,13 @@ def generate_hero_based_subject(hero_headline=None):
         return subjects[index]
     
     else:
-        # Fallback subjects when no hero (avoid "Intelligence Digest" in subject)
+        # Fallback subjects with Investment Edge branding
         subjects = [
-            f"{time_emoji} Market Update • {today}",
-            f"📊 Portfolio Performance • {today}",
-            f"⚡ Today's Market Signals",
+            f"{time_emoji} Investment Edge • {today}",
+            f"📊 Portfolio Edge • {today}",
+            f"⚡ Today's Market Edge",
             f"🎯 Investment Updates • {today}",
-            f"💡 Market Intelligence • {today}",
+            f"💡 Strategic Edge • {today}",
         ]
         
         # Rotate based on day
@@ -94,12 +95,12 @@ async def main():
     html = None
     if os.getenv("NEXTGEN_DIGEST", "false").lower() == "true":
         try:
-            logger.info("Using NextGen digest renderer")
+            logger.info("Using NextGen Investment Edge renderer")
             ng = importlib.import_module("nextgen_digest")
             html = await ng.build_nextgen_html(logger)
-            logger.info("NextGen digest HTML generated successfully")
+            logger.info("NextGen Investment Edge HTML generated successfully")
         except Exception as e:
-            logger.error("NextGen digest failed: %s", e)
+            logger.error("NextGen Investment Edge failed: %s", e)
 
     if not html:
         logger.info("Falling back to engine dynamic builder")
@@ -163,14 +164,14 @@ async def main():
     if hero_headline:
         logger.info(f"Extracted hero headline: {hero_headline[:50]}...")
     
-    # Generate subject based on hero headline
+    # Generate subject based on hero headline with Investment Edge branding
     subject = generate_hero_based_subject(hero_headline)
     
     logger.info(f"Generated subject: {subject}")
     logger.info(f"Email HTML length: {len(html)} characters")
 
     send_html_email(html=html, subject=subject, logger=logger)
-    logger.info("Email dispatch completed successfully")
+    logger.info("Investment Edge email dispatch completed successfully")
     return 0
 
 if __name__ == "__main__":
