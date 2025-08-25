@@ -1,4 +1,7 @@
-# src/render_email.py
+def _select_hero(summary: dict, companies: list, cryptos: list):
+    """Legacy single hero selection - wrapper for compatibility."""
+    heroes = _select_heroes(summary, companies, cryptos, max_heroes=1)
+    return heroes[0] if heroes else None# src/render_email.py
 # Investment Edge - Enhanced Company and Crypto Cards
 # Fixed: Using hybrid color scheme that works in both dark and light modes
 # Fixed: Increased width of company modules on mobile only
@@ -354,9 +357,16 @@ def _first_paragraph(hero: dict, title: str = "") -> str:
 
 
 def _select_hero(summary: dict, companies: list, cryptos: list):
-    """Enhanced hero selection prioritizing breaking news with fallback."""
-    # Check for explicit hero in summary
-    hero = None
+    """Legacy single hero selection - wrapper for compatibility."""
+    heroes = _select_heroes(summary, companies, cryptos, max_heroes=1)
+    return heroes[0] if heroes else None
+
+
+def _select_heroes(summary: dict, companies: list, cryptos: list, max_heroes: int = 3):
+    """Select up to 3 breaking news articles for hero section."""
+    heroes = []
+    
+    # Check for explicit hero in summary first
     if isinstance(summary, dict):
         hero_candidates = [
             summary.get("hero"),
@@ -367,16 +377,15 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
         
         for cand in hero_candidates:
             if isinstance(cand, dict) and cand.get("title"):
-                # Validate hero has meaningful content - check description first
+                # Validate hero has meaningful content
                 if (cand.get("description") or cand.get("body") or 
                     cand.get("content") or cand.get("first_paragraph")):
-                    hero = cand
-                    break
+                    heroes.append(cand)
+                    if len(heroes) >= max_heroes:
+                        return heroes
     
-    if hero:
-        return hero
     
-    # Enhanced fallback: prioritize BREAKING NEWS, with backup options
+    # Enhanced fallback: gather multiple breaking news articles
     all_entities = (companies or []) + (cryptos or [])
     
     breaking_candidates = []  # For breaking news
@@ -443,7 +452,6 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
         for keyword in commentary_keywords:
             if keyword in headline_lower:
                 breaking_score -= 10
-                # But don't penalize as much for general articles
                 general_score -= 3
         
         # Boost for recency (applies to both)
@@ -483,48 +491,62 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
         if general_score > 5:  # Lower threshold for general articles
             general_candidates.append((general_score, entity))
     
-    # First try breaking news candidates
-    if breaking_candidates:
-        breaking_candidates.sort(reverse=True, key=lambda x: x[0])
-        _, best_breaking = breaking_candidates[0]
-        
-        return {
-            "title": best_breaking.get("headline"),
-            "url": best_breaking.get("news_url", ""),
-            "source": best_breaking.get("source", ""),
-            "when": best_breaking.get("when"),
-            "body": best_breaking.get("description", ""),
-            "description": best_breaking.get("description", ""),
-            "company_name": best_breaking.get("company_name", ""),
-            "is_breaking": True  # Flag to indicate this is breaking news
-        }
+    # Sort candidates by score
+    breaking_candidates.sort(reverse=True, key=lambda x: x[0])
+    general_candidates.sort(reverse=True, key=lambda x: x[0])
     
-    # Fallback to best general article
-    if general_candidates:
-        general_candidates.sort(reverse=True, key=lambda x: x[0])
-        _, best_general = general_candidates[0]
+    # Collect up to max_heroes articles
+    for score, article in breaking_candidates:
+        if len(heroes) >= max_heroes:
+            break
         
-        return {
-            "title": best_general.get("headline"),
-            "url": best_general.get("news_url", ""),
-            "source": best_general.get("source", ""),
-            "when": best_general.get("when"),
-            "body": best_general.get("description", ""),
-            "description": best_general.get("description", ""),
-            "company_name": best_general.get("company_name", ""),
-            "is_breaking": False  # Flag to indicate this is not breaking news
-        }
+        # Avoid duplicate companies in heroes
+        company_name = article.get("company_name", "")
+        if not any(h.get("company_name") == company_name for h in heroes if company_name):
+            heroes.append({
+                "title": article.get("headline"),
+                "url": article.get("news_url", ""),
+                "source": article.get("source", ""),
+                "when": article.get("when"),
+                "body": article.get("description", ""),
+                "description": article.get("description", ""),
+                "company_name": company_name,
+                "is_breaking": True
+            })
     
-    return None
+    # Fill remaining slots with general articles if needed
+    for score, article in general_candidates:
+        if len(heroes) >= max_heroes:
+            break
+        
+        company_name = article.get("company_name", "")
+        if not any(h.get("company_name") == company_name for h in heroes if company_name):
+            heroes.append({
+                "title": article.get("headline"),
+                "url": article.get("news_url", ""),
+                "source": article.get("source", ""),
+                "when": article.get("when"),
+                "body": article.get("description", ""),
+                "description": article.get("description", ""),
+                "company_name": company_name,
+                "is_breaking": False
+            })
+    
+    return heroes
 
 
 def _select_mover_story(companies: list, cryptos: list):
-    """Select the biggest mover for the second story."""
+    """Legacy single mover selection - wrapper for compatibility."""
+    movers = _select_mover_stories(companies, cryptos, max_movers=1)
+    return movers[0] if movers else None
+
+
+def _select_mover_stories(companies: list, cryptos: list, max_movers: int = 2):
+    """Select the top 2 biggest movers for the mover stories section."""
     all_entities = (companies or []) + (cryptos or [])
     
-    # Find the biggest absolute mover with a headline
-    best_mover = None
-    best_move = 0
+    # Find all movers with headlines
+    movers = []
     
     for entity in all_entities:
         # Get 1-day percentage change
@@ -539,96 +561,123 @@ def _select_mover_story(companies: list, cryptos: list):
         if not headline:
             continue
             
-        # Track the biggest mover
-        if abs_move > best_move:
-            best_move = abs_move
-            best_mover = entity
+        # Track all movers
+        if abs_move > 0.5:  # At least 0.5% move
+            movers.append({
+                "entity": entity,
+                "abs_move": abs_move,
+                "pct": pct_1d
+            })
     
-    if best_mover and best_move > 0.5:  # At least 0.5% move
-        # Format the mover story
-        name = best_mover.get("name", "")
-        ticker = best_mover.get("ticker", "")
-        pct = best_mover.get("pct_1d", 0)
+    # Sort by absolute movement
+    movers.sort(reverse=True, key=lambda x: x["abs_move"])
+    
+    # Return up to max_movers stories
+    mover_stories = []
+    for mover in movers[:max_movers]:
+        entity = mover["entity"]
+        name = entity.get("name", "")
+        ticker = entity.get("ticker", "")
+        pct = mover["pct"]
         direction = "up" if pct > 0 else "down"
         arrow = "📈" if pct > 0 else "📉"
         
-        return {
-            "title": f"{arrow} {name} {direction} {abs(pct):.1f}% - {best_mover.get('headline', '')}",
-            "url": best_mover.get("news_url", ""),
-            "source": best_mover.get("source", ""),
-            "when": best_mover.get("when"),
-            "description": best_mover.get("description", ""),
+        mover_stories.append({
+            "title": f"{arrow} {name} {direction} {abs(pct):.1f}% - {entity.get('headline', '')}",
+            "url": entity.get("news_url", ""),
+            "source": entity.get("source", ""),
+            "when": entity.get("when"),
+            "description": entity.get("description", ""),
             "ticker": ticker,
             "pct_change": pct,
-            "price": best_mover.get("price")
-        }
+            "price": entity.get("price")
+        })
     
-    return None
+    return mover_stories
 
 
 def _render_hero(hero: dict) -> str:
-    """Hero rendering matching secondary article style."""
-    if not hero:
+    """Legacy single hero rendering - wrapper for compatibility."""
+    if hero:
+        return _render_heroes([hero])
+    return ""
+
+
+def _render_heroes(heroes: list) -> str:
+    """Render up to 3 hero articles in a clean layout."""
+    if not heroes:
         return ""
     
-    title = (hero.get("title") or "").strip()
-    if not title:
-        return ""
+    heroes_html = ""
     
-    url = hero.get("url") or "#"
-    source = hero.get("source") or ""
-    when = _fmt_ct(hero.get("when"), force_time=False, tz_suffix_policy="never") if hero.get("when") else ""
-    company_name = hero.get("company_name", "")
-    is_breaking = hero.get("is_breaking", False)
-    
-    # Add a label for breaking news vs market analysis - matching TOP MOVER style
-    if is_breaking:
-        label_html = '''<span style="color:#DC2626;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">● BREAKING NEWS</span><br>'''
-    else:
-        label_html = '''<span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">MARKET ANALYSIS</span><br>'''
-    
-    # Description - matching mover story length
-    description = (hero.get("description") or hero.get("body") or "").strip()
-    if not description:
-        description = _first_paragraph(hero, title=title)
-    
-    if description and len(description) > 200:
-        sentences = re.split(r'[.!?]\s+', description)
-        truncated = ""
-        for sentence in sentences:
-            if len(truncated + sentence) <= 180:
-                truncated += sentence + ". "
+    for i, hero in enumerate(heroes):
+        if not hero or not hero.get("title"):
+            continue
+        
+        title = (hero.get("title") or "").strip()
+        url = hero.get("url") or "#"
+        source = hero.get("source") or ""
+        when = _fmt_ct(hero.get("when"), force_time=False, tz_suffix_policy="never") if hero.get("when") else ""
+        company_name = hero.get("company_name", "")
+        is_breaking = hero.get("is_breaking", False)
+        
+        # Label based on article type and position
+        if i == 0:
+            if is_breaking:
+                label_html = '''<span style="color:#DC2626;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">● BREAKING NEWS</span><br>'''
             else:
-                break
-        description = truncated.strip() if truncated else description[:197] + "..."
-    
-    # Body HTML - matching mover story style
-    body_html = ""
-    if description:
-        body_html = f'''
-        <tr><td style="padding-top:12px;font-size:14px;line-height:1.5;
-                     color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-            {escape(description)}
-        </td></tr>'''
-    
-    # Metadata - matching mover story style
-    meta_parts = []
-    if company_name:
-        meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(company_name)}</span>')
-    if source:
-        meta_parts.append(f'<span style="color:#6B7280;">{escape(source)}</span>')
-    if when:
-        meta_parts.append(f'<span style="color:#6B7280;">{escape(when)}</span>')
-    
-    meta_html = ""
-    if meta_parts:
-        meta_html = f'''
-        <tr><td style="padding-top:12px;font-size:12px;color:#6B7280;">
-            {" • ".join(meta_parts)}
-        </td></tr>'''
-    
-    # Container - exactly matching mover story structure
-    return f"""
+                label_html = '''<span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">TOP STORY</span><br>'''
+        else:
+            if is_breaking:
+                label_html = '''<span style="color:#DC2626;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">● ALSO BREAKING</span><br>'''
+            else:
+                label_html = '''<span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">MORE NEWS</span><br>'''
+        
+        # Description
+        description = (hero.get("description") or hero.get("body") or "").strip()
+        if not description and i == 0:  # Only try to extract for first article
+            description = _first_paragraph(hero, title=title)
+        
+        if description and len(description) > 180:
+            sentences = re.split(r'[.!?]\s+', description)
+            truncated = ""
+            for sentence in sentences:
+                if len(truncated + sentence) <= 160:
+                    truncated += sentence + ". "
+                else:
+                    break
+            description = truncated.strip() if truncated else description[:177] + "..."
+        
+        # Body HTML
+        body_html = ""
+        if description:
+            body_html = f'''
+            <tr><td style="padding-top:12px;font-size:14px;line-height:1.5;
+                         color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
+                {escape(description)}
+            </td></tr>'''
+        
+        # Metadata
+        meta_parts = []
+        if company_name:
+            meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(company_name)}</span>')
+        if source:
+            meta_parts.append(f'<span style="color:#6B7280;">{escape(source)}</span>')
+        if when:
+            meta_parts.append(f'<span style="color:#6B7280;">{escape(when)}</span>')
+        
+        meta_html = ""
+        if meta_parts:
+            meta_html = f'''
+            <tr><td style="padding-top:12px;font-size:12px;color:#6B7280;">
+                {" • ".join(meta_parts)}
+            </td></tr>'''
+        
+        # Determine font size based on position
+        title_size = "20px" if i == 0 else "18px"
+        
+        # Add to heroes HTML
+        heroes_html += f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;
               background:#FFFFFF;
@@ -638,7 +687,7 @@ def _render_hero(hero: dict) -> str:
   <tr>
     <td style="padding:18px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="font-weight:700;font-size:20px;line-height:1.3;color:#111827;
+        <tr><td style="font-weight:700;font-size:{title_size};line-height:1.3;color:#111827;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
           <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
             {label_html}
@@ -652,73 +701,94 @@ def _render_hero(hero: dict) -> str:
   </tr>
 </table>
 """
+    
+    return heroes_html
 
 
 def _render_mover_story(mover: dict) -> str:
-    """Render the biggest mover as a secondary story."""
-    if not mover:
+    """Legacy single mover rendering - wrapper for compatibility."""
+    if mover:
+        return _render_mover_stories([mover])
+    return ""
+
+
+def _render_mover_stories(movers: list) -> str:
+    """Render up to 2 mover stories."""
+    if not movers:
         return ""
     
-    title = (mover.get("title") or "").strip()
-    if not title:
-        return ""
+    movers_html = ""
     
-    url = mover.get("url") or "#"
-    source = mover.get("source") or ""
-    when = _fmt_ct(mover.get("when"), force_time=False, tz_suffix_policy="never") if mover.get("when") else ""
-    ticker = mover.get("ticker", "")
-    pct_change = mover.get("pct_change", 0)
-    price = mover.get("price")
-    
-    # Description
-    description = (mover.get("description") or "").strip()
-    if description and len(description) > 200:
-        sentences = re.split(r'[.!?]\s+', description)
-        truncated = ""
-        for sentence in sentences:
-            if len(truncated + sentence) <= 180:
-                truncated += sentence + ". "
-            else:
-                break
-        description = truncated.strip() if truncated else description[:197] + "..."
-    
-    # Price and change display
-    price_display = ""
-    if price:
-        color = "#10B981" if pct_change > 0 else "#EF4444"
-        arrow = "▲" if pct_change > 0 else "▼"
-        price_display = f'''
-        <span style="font-size:18px;font-weight:700;color:{color};margin-left:12px;">
-            {arrow} ${price:.2f} ({pct_change:+.1f}%)
-        </span>'''
-    
-    # Body HTML
-    body_html = ""
-    if description:
-        body_html = f'''
-        <tr><td style="padding-top:12px;font-size:14px;line-height:1.5;
-                     color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-            {escape(description)}
-        </td></tr>'''
-    
-    # Metadata
-    meta_parts = []
-    if ticker:
-        meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(ticker)}</span>')
-    if source:
-        meta_parts.append(f'<span style="color:#6B7280;">{escape(source)}</span>')
-    if when:
-        meta_parts.append(f'<span style="color:#6B7280;">{escape(when)}</span>')
-    
-    meta_html = ""
-    if meta_parts:
-        meta_html = f'''
-        <tr><td style="padding-top:12px;font-size:12px;color:#6B7280;">
-            {" • ".join(meta_parts)}
-        </td></tr>'''
-    
-    # Mover story container
-    return f"""
+    for i, mover in enumerate(movers):
+        if not mover or not mover.get("title"):
+            continue
+        
+        title = (mover.get("title") or "").strip()
+        url = mover.get("url") or "#"
+        source = mover.get("source") or ""
+        when = _fmt_ct(mover.get("when"), force_time=False, tz_suffix_policy="never") if mover.get("when") else ""
+        ticker = mover.get("ticker", "")
+        pct_change = mover.get("pct_change", 0)
+        price = mover.get("price")
+        
+        # Label based on position
+        if i == 0:
+            label_text = "TOP MOVER"
+        else:
+            label_text = "ALSO MOVING"
+        
+        # Description
+        description = (mover.get("description") or "").strip()
+        if description and len(description) > 180:
+            sentences = re.split(r'[.!?]\s+', description)
+            truncated = ""
+            for sentence in sentences:
+                if len(truncated + sentence) <= 160:
+                    truncated += sentence + ". "
+                else:
+                    break
+            description = truncated.strip() if truncated else description[:177] + "..."
+        
+        # Price and change display
+        price_display = ""
+        if price:
+            color = "#10B981" if pct_change > 0 else "#EF4444"
+            arrow = "▲" if pct_change > 0 else "▼"
+            price_display = f'''
+            <span style="font-size:18px;font-weight:700;color:{color};margin-left:12px;">
+                {arrow} ${price:.2f} ({pct_change:+.1f}%)
+            </span>'''
+        
+        # Body HTML
+        body_html = ""
+        if description:
+            body_html = f'''
+            <tr><td style="padding-top:12px;font-size:14px;line-height:1.5;
+                         color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
+                {escape(description)}
+            </td></tr>'''
+        
+        # Metadata
+        meta_parts = []
+        if ticker:
+            meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(ticker)}</span>')
+        if source:
+            meta_parts.append(f'<span style="color:#6B7280;">{escape(source)}</span>')
+        if when:
+            meta_parts.append(f'<span style="color:#6B7280;">{escape(when)}</span>')
+        
+        meta_html = ""
+        if meta_parts:
+            meta_html = f'''
+            <tr><td style="padding-top:12px;font-size:12px;color:#6B7280;">
+                {" • ".join(meta_parts)}
+            </td></tr>'''
+        
+        # Font size based on position
+        title_size = "20px" if i == 0 else "18px"
+        
+        # Mover story container
+        movers_html += f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;
               background:#FFFFFF;
@@ -728,10 +798,10 @@ def _render_mover_story(mover: dict) -> str:
   <tr>
     <td style="padding:18px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="font-weight:700;font-size:20px;line-height:1.3;color:#111827;
+        <tr><td style="font-weight:700;font-size:{title_size};line-height:1.3;color:#111827;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
           <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
-            <span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">TOP MOVER</span><br>
+            <span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">{label_text}</span><br>
             {escape(title.replace("📈 ", "").replace("📉 ", ""))}
             {price_display}
           </a>
@@ -743,6 +813,8 @@ def _render_mover_story(mover: dict) -> str:
   </tr>
 </table>
 """
+    
+    return movers_html
 
 
 # ---------- Enhanced card system ----------
@@ -1225,8 +1297,8 @@ def _section_container(title: str, inner_html: str, section_type: str = "default
 """
 
 
-def _generate_enhanced_preview(hero_obj=None, market_summary=None) -> str:
-    """Generate compelling preview text from hero article or market summary."""
+def _generate_enhanced_preview(heroes=None, market_summary=None) -> str:
+    """Generate compelling preview text from hero articles or market summary."""
     
     # First, try to use market summary if available
     if market_summary:
@@ -1246,8 +1318,9 @@ def _generate_enhanced_preview(hero_obj=None, market_summary=None) -> str:
             else:
                 return f"🔴 Weak Session • {up_count} up, {down_count} down"
     
-    # If we have a hero article with description, use that as fallback
-    if hero_obj:
+    # If we have hero articles with description, use that as fallback
+    if heroes and len(heroes) > 0:
+        hero_obj = heroes[0]  # Use first hero
         description = hero_obj.get("description") or hero_obj.get("body") or ""
         if description:
             # Clean and truncate for preview
@@ -1359,19 +1432,19 @@ def render_email(summary, companies, cryptos=None):
           </td></tr>
         </table>'''
 
-    # Hero selection and rendering
-    hero_obj = _select_hero(summary, companies or [], cryptos or [])
-    hero_html = _render_hero(hero_obj) if hero_obj else ""
+    # Hero selection and rendering - now up to 3 articles
+    heroes = _select_heroes(summary, companies or [], cryptos or [], max_heroes=3)
+    heroes_html = _render_heroes(heroes) if heroes else ""
     
-    # Biggest mover selection and rendering
-    mover_obj = _select_mover_story(companies or [], cryptos or [])
-    mover_html = _render_mover_story(mover_obj) if mover_obj else ""
+    # Mover stories selection and rendering - now up to 2 movers
+    mover_stories = _select_mover_stories(companies or [], cryptos or [], max_movers=2)
+    movers_html = _render_mover_stories(mover_stories) if mover_stories else ""
     
-    # Extract hero headline for mobile header AND for subject line
+    # Extract first hero headline for mobile header AND for subject line
     hero_headline = ""
     hero_headline_for_subject = ""
-    if hero_obj and hero_obj.get("title"):
-        hero_headline = hero_obj.get("title", "").strip()
+    if heroes and len(heroes) > 0 and heroes[0].get("title"):
+        hero_headline = heroes[0].get("title", "").strip()
         hero_headline_for_subject = hero_headline  # Keep full length for subject
         # Truncate if too long for header display
         if len(hero_headline) > 80:
@@ -1400,8 +1473,8 @@ def render_email(summary, companies, cryptos=None):
           </td></tr>
         </table>'''
 
-    # Email preview - use market summary first, then hero article if available
-    email_preview = _generate_enhanced_preview(hero_obj, summary)
+    # Email preview - use market summary first, then hero articles if available
+    email_preview = _generate_enhanced_preview(heroes, summary)
 
     # Minimal CSS for mobile responsiveness only
     css = """
@@ -1696,11 +1769,11 @@ def render_email(summary, companies, cryptos=None):
                   </td></tr>
                 </table>
 
-                <!-- Hero section -->
-                {hero_html}
+                <!-- Breaking News section (up to 3 articles) -->
+                {heroes_html}
                 
-                <!-- Mover story section -->
-                {mover_html}
+                <!-- Top Movers section (up to 2 movers) -->
+                {movers_html}
 
                 <!-- Content sections -->
                 {''.join(sections)}
