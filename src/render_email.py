@@ -348,8 +348,8 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
         
         for cand in hero_candidates:
             if isinstance(cand, dict) and cand.get("title"):
-                # Validate hero has meaningful content
-                if (cand.get("body") or cand.get("description") or 
+                # Validate hero has meaningful content - check description first
+                if (cand.get("description") or cand.get("body") or 
                     cand.get("content") or cand.get("first_paragraph")):
                     hero = cand
                     break
@@ -423,7 +423,7 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
             "source": best_entity.get("source", ""),
             "when": best_entity.get("when"),
             "body": best_entity.get("description", ""),
-            "description": best_entity.get("description", "")
+            "description": best_entity.get("description", "")  # Ensure description is passed through
         }
     
     return None
@@ -442,8 +442,12 @@ def _render_hero(hero: dict) -> str:
     source = hero.get("source") or ""
     when = _fmt_ct(hero.get("when"), force_time=False, tz_suffix_policy="never") if hero.get("when") else ""
     
-    # Enhanced paragraph extraction
-    para = _first_paragraph(hero, title=title)
+    # Use description field directly for the preview copy
+    para = (hero.get("description") or hero.get("body") or "").strip()
+    
+    # If no description, try other extraction methods
+    if not para:
+        para = _first_paragraph(hero, title=title)
     
     # Truncate paragraph if too long
     if para and len(para) > 280:
@@ -455,7 +459,7 @@ def _render_hero(hero: dict) -> str:
                 truncated += sentence + ". "
             else:
                 break
-        para = truncated.strip()
+        para = truncated.strip() if truncated else para[:277] + "..."
     
     # Body HTML
     body_html = ""
@@ -820,6 +824,14 @@ def render_email(summary, companies, cryptos=None):
     # Hero selection and rendering
     hero_obj = _select_hero(summary, companies or [], cryptos or [])
     hero_html = _render_hero(hero_obj) if hero_obj else ""
+    
+    # Extract hero headline for mobile header
+    hero_headline = ""
+    if hero_obj and hero_obj.get("title"):
+        hero_headline = hero_obj.get("title", "").strip()
+        # Truncate if too long for header
+        if len(hero_headline) > 80:
+            hero_headline = hero_headline[:77] + "..."
 
     # Sections with conditional rendering
     sections = []
@@ -850,8 +862,31 @@ def render_email(summary, companies, cryptos=None):
     # Minimal CSS for mobile responsiveness only
     css = """
 <style>
+/* Desktop/default view */
+.mobile-title {
+  display: none !important;
+}
+.desktop-title {
+  display: block !important;
+}
+
 /* Mobile responsiveness with MUCH larger text to match desktop feel */
 @media only screen and (max-width: 640px) {
+  /* Show/hide titles based on screen size */
+  .mobile-title {
+    display: block !important;
+    font-size: 32px !important;
+    line-height: 1.2 !important;
+    font-weight: 700;
+    color: #111827;
+    margin: 0 0 10px 0;
+    letter-spacing: -0.5px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  .desktop-title {
+    display: none !important;
+  }
+  
   .stack-col { 
     display: block !important; 
     width: 100% !important; 
@@ -881,12 +916,6 @@ def render_email(summary, companies, cryptos=None):
   
   .card-inner {
     padding: 18px 16px !important;  /* Slightly less horizontal padding */
-  }
-  
-  /* MUCH larger text sizes for desktop-like feel */
-  .responsive-title {
-    font-size: 48px !important;
-    line-height: 1.1 !important;
   }
   
   .header-subtitle {
@@ -984,6 +1013,11 @@ def render_email(summary, companies, cryptos=None):
 }
 
 @media only screen and (max-width: 480px) {
+  /* Mobile title adjustments for smaller screens */
+  .mobile-title {
+    font-size: 28px !important;
+  }
+  
   /* Even less padding for smaller screens */
   .outer-padding {
     padding: 6px 0px !important;  /* Almost no horizontal padding */
@@ -999,10 +1033,6 @@ def render_email(summary, companies, cryptos=None):
   
   .card-inner {
     padding: 16px 14px !important;  /* Less horizontal padding */
-  }
-  
-  .responsive-title {
-    font-size: 44px !important;
   }
   
   .header-subtitle {
@@ -1033,6 +1063,11 @@ def render_email(summary, companies, cryptos=None):
 }
 
 @media only screen and (max-width: 375px) {
+  /* Mobile title for smallest screens */
+  .mobile-title {
+    font-size: 24px !important;
+  }
+  
   /* iPhone SE and smaller - maximize width */
   .outer-padding {
     padding: 4px 0px !important;  /* No horizontal padding */
@@ -1048,10 +1083,6 @@ def render_email(summary, companies, cryptos=None):
   
   .card-inner {
     padding: 14px 12px !important;  /* Less horizontal padding */
-  }
-  
-  .responsive-title {
-    font-size: 40px !important;
   }
   
   .section-title {
@@ -1105,10 +1136,15 @@ def render_email(summary, companies, cryptos=None):
                 <!-- Header -->
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr><td style="text-align:center;">
-                    <div class="responsive-title" style="font-weight:700;font-size:42px;color:#111827;
+                    <!-- Desktop title (Intelligence Digest) -->
+                    <div class="desktop-title" style="font-weight:700;font-size:42px;color:#111827;
                                                         margin:0 0 10px 0;letter-spacing:-0.5px;
                                                         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
                       Intelligence Digest
+                    </div>
+                    <!-- Mobile title (Hero headline or fallback to Intelligence Digest) -->
+                    <div class="mobile-title" style="display:none;">
+                      {escape(hero_headline) if hero_headline else "Intelligence Digest"}
                     </div>
                     {f'<div class="header-subtitle" style="color:#6B7280;margin-bottom:16px;font-size:14px;font-weight:500;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
                     {market_summary}
