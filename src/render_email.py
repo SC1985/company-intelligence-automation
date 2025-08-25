@@ -335,7 +335,7 @@ def _first_paragraph(hero: dict, title: str = "") -> str:
 
 
 def _select_hero(summary: dict, companies: list, cryptos: list):
-    """Enhanced hero selection with better scoring."""
+    """Enhanced hero selection prioritizing breaking news."""
     # Check for explicit hero in summary
     hero = None
     if isinstance(summary, dict):
@@ -357,18 +357,23 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
     if hero:
         return hero
     
-    # Enhanced fallback: find best entity-based hero
+    # Enhanced fallback: prioritize BREAKING NEWS
     all_entities = (companies or []) + (cryptos or [])
     
-    # Scoring criteria for hero selection
+    # Scoring criteria for breaking news
     hero_candidates = []
     
-    market_keywords = {
-        "broad_market": ["market", "stocks", "equities", "indices", "s&p", "nasdaq", "dow", "trading"],
-        "economic": ["fed", "federal reserve", "inflation", "cpi", "jobs", "employment", "rates", "treasury"],
-        "sector": ["tech", "technology", "ai", "crypto", "bitcoin", "energy", "healthcare"],
-        "events": ["earnings", "guidance", "outlook", "merger", "acquisition", "ipo"]
+    # Breaking news keywords (higher priority)
+    breaking_keywords = {
+        "urgent": ["breaking", "just in", "alert", "exclusive", "developing"],
+        "major_event": ["announces", "launches", "unveils", "reveals", "reports", "surges", "plunges", "crashes", "soars"],
+        "earnings": ["earnings", "revenue", "profit", "beat", "miss", "guidance"],
+        "deals": ["acquisition", "merger", "buyout", "partnership", "deal"],
+        "regulatory": ["sec", "fda", "approval", "investigation", "lawsuit", "ruling"]
     }
+    
+    # Lower priority market commentary keywords
+    commentary_keywords = ["could", "might", "may", "outlook", "analysis", "preview", "review", "what to expect"]
     
     for entity in all_entities:
         headline = entity.get("headline", "")
@@ -378,26 +383,37 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
         score = 0
         headline_lower = headline.lower()
         
-        # Score based on market relevance
-        for category, keywords in market_keywords.items():
+        # Score based on breaking news indicators
+        for category, keywords in breaking_keywords.items():
             for keyword in keywords:
                 if keyword in headline_lower:
-                    if category == "broad_market":
-                        score += 15
-                    elif category == "economic":
-                        score += 12
-                    elif category == "sector":
-                        score += 8
+                    if category == "urgent":
+                        score += 25  # Highest priority for breaking news
+                    elif category == "major_event":
+                        score += 20
+                    elif category == "earnings":
+                        score += 18
+                    elif category == "deals":
+                        score += 18
                     else:
-                        score += 5
+                        score += 15
         
-        # Boost for recent content
+        # Penalize commentary/analysis pieces
+        for keyword in commentary_keywords:
+            if keyword in headline_lower:
+                score -= 10
+        
+        # Major boost for very recent content (breaking)
         if entity.get("when"):
             try:
                 pub_date = _parse_to_dt(entity.get("when"))
                 if pub_date:
                     hours_ago = (datetime.now(timezone.utc) - pub_date).total_seconds() / 3600
-                    if hours_ago < 12:
+                    if hours_ago < 2:
+                        score += 20  # Very recent = likely breaking
+                    elif hours_ago < 6:
+                        score += 15
+                    elif hours_ago < 12:
                         score += 10
                     elif hours_ago < 24:
                         score += 5
@@ -407,12 +423,15 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
         # Boost for quality content
         description = entity.get("description", "")
         if description and len(description) > 50:
-            score += 8
+            score += 5
+        
+        # Include company name for context
+        entity["company_name"] = entity.get("name", "")
         
         if score > 5:  # Minimum threshold
             hero_candidates.append((score, entity))
     
-    # Select the best candidate
+    # Select the best breaking news candidate
     if hero_candidates:
         hero_candidates.sort(reverse=True, key=lambda x: x[0])
         _, best_entity = hero_candidates[0]
@@ -423,7 +442,56 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
             "source": best_entity.get("source", ""),
             "when": best_entity.get("when"),
             "body": best_entity.get("description", ""),
-            "description": best_entity.get("description", "")  # Ensure description is passed through
+            "description": best_entity.get("description", ""),
+            "company_name": best_entity.get("company_name", "")
+        }
+    
+    return None
+
+
+def _select_mover_story(companies: list, cryptos: list):
+    """Select the biggest mover for the second story."""
+    all_entities = (companies or []) + (cryptos or [])
+    
+    # Find the biggest absolute mover with a headline
+    best_mover = None
+    best_move = 0
+    
+    for entity in all_entities:
+        # Get 1-day percentage change
+        pct_1d = entity.get("pct_1d")
+        if pct_1d is None:
+            continue
+            
+        abs_move = abs(pct_1d)
+        
+        # Must have a headline to be a story
+        headline = entity.get("headline", "")
+        if not headline:
+            continue
+            
+        # Track the biggest mover
+        if abs_move > best_move:
+            best_move = abs_move
+            best_mover = entity
+    
+    if best_mover and best_move > 0.5:  # At least 0.5% move
+        # Format the mover story
+        name = best_mover.get("name", "")
+        ticker = best_mover.get("ticker", "")
+        pct = best_mover.get("pct_1d", 0)
+        direction = "up" if pct > 0 else "down"
+        arrow = "📈" if pct > 0 else "📉"
+        
+        return {
+            "title": f"{arrow} {name} {direction} {abs(pct):.1f}% - {best_mover.get('headline', '')}",
+            "url": best_mover.get("news_url", ""),
+            "source": best_mover.get("source", ""),
+            "when": best_mover.get("when"),
+            "description": best_mover.get("description", ""),
+            "ticker": ticker,
+            "pct_change": pct,
+            "price": best_mover.get("price")
         }
     
     return None
@@ -441,6 +509,7 @@ def _render_hero(hero: dict) -> str:
     url = hero.get("url") or "#"
     source = hero.get("source") or ""
     when = _fmt_ct(hero.get("when"), force_time=False, tz_suffix_policy="never") if hero.get("when") else ""
+    company_name = hero.get("company_name", "")
     
     # Use description field directly for the preview copy
     para = (hero.get("description") or hero.get("body") or "").strip()
@@ -472,6 +541,8 @@ def _render_hero(hero: dict) -> str:
     
     # Metadata line
     meta_parts = []
+    if company_name:
+        meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(company_name)}</span>')
     if source:
         meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(source)}</span>')
     if when:
@@ -501,6 +572,97 @@ def _render_hero(hero: dict) -> str:
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
           <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
             {escape(title)}
+          </a>
+        </td></tr>
+        {body_html}
+        {meta_html}
+      </table>
+    </td>
+  </tr>
+</table>
+"""
+
+
+def _render_mover_story(mover: dict) -> str:
+    """Render the biggest mover as a secondary story."""
+    if not mover:
+        return ""
+    
+    title = (mover.get("title") or "").strip()
+    if not title:
+        return ""
+    
+    url = mover.get("url") or "#"
+    source = mover.get("source") or ""
+    when = _fmt_ct(mover.get("when"), force_time=False, tz_suffix_policy="never") if mover.get("when") else ""
+    ticker = mover.get("ticker", "")
+    pct_change = mover.get("pct_change", 0)
+    price = mover.get("price")
+    
+    # Description
+    description = (mover.get("description") or "").strip()
+    if description and len(description) > 200:
+        sentences = re.split(r'[.!?]\s+', description)
+        truncated = ""
+        for sentence in sentences:
+            if len(truncated + sentence) <= 180:
+                truncated += sentence + ". "
+            else:
+                break
+        description = truncated.strip() if truncated else description[:197] + "..."
+    
+    # Price and change display
+    price_display = ""
+    if price:
+        color = "#10B981" if pct_change > 0 else "#EF4444"
+        arrow = "▲" if pct_change > 0 else "▼"
+        price_display = f'''
+        <span style="font-size:18px;font-weight:700;color:{color};margin-left:12px;">
+            {arrow} ${price:.2f} ({pct_change:+.1f}%)
+        </span>'''
+    
+    # Body HTML
+    body_html = ""
+    if description:
+        body_html = f'''
+        <tr><td style="padding-top:12px;font-size:14px;line-height:1.5;
+                     color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
+            {escape(description)}
+        </td></tr>'''
+    
+    # Metadata
+    meta_parts = []
+    if ticker:
+        meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(ticker)}</span>')
+    if source:
+        meta_parts.append(f'<span style="color:#6B7280;">{escape(source)}</span>')
+    if when:
+        meta_parts.append(f'<span style="color:#6B7280;">{escape(when)}</span>')
+    
+    meta_html = ""
+    if meta_parts:
+        meta_html = f'''
+        <tr><td style="padding-top:12px;font-size:12px;color:#6B7280;">
+            {" • ".join(meta_parts)}
+        </td></tr>'''
+    
+    # Mover story container
+    return f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+       style="border-collapse:collapse;
+              background:#FFFFFF;
+              border:1px solid #E5E7EB;
+              border-radius:16px;margin:20px 0;
+              box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+  <tr>
+    <td style="padding:18px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr><td style="font-weight:700;font-size:20px;line-height:1.3;color:#111827;
+                     font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
+          <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
+            <span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">TOP MOVER</span><br>
+            {escape(title.replace("📈 ", "").replace("📉 ", ""))}
+            {price_display}
           </a>
         </td></tr>
         {body_html}
@@ -839,6 +1001,10 @@ def render_email(summary, companies, cryptos=None):
     hero_obj = _select_hero(summary, companies or [], cryptos or [])
     hero_html = _render_hero(hero_obj) if hero_obj else ""
     
+    # Biggest mover selection and rendering
+    mover_obj = _select_mover_story(companies or [], cryptos or [])
+    mover_html = _render_mover_story(mover_obj) if mover_obj else ""
+    
     # Extract hero headline for mobile header AND for subject line
     hero_headline = ""
     hero_headline_for_subject = ""
@@ -1171,6 +1337,9 @@ def render_email(summary, companies, cryptos=None):
 
                 <!-- Hero section -->
                 {hero_html}
+                
+                <!-- Mover story section -->
+                {mover_html}
 
                 <!-- Content sections -->
                 {''.join(sections)}
