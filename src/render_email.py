@@ -626,7 +626,7 @@ def _render_hero(hero: dict) -> str:
   <tr>
     <td style="padding:20px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td class="hero-title" style="font-weight:700;font-size:24px;line-height:1.3;color:#111827;
+        <tr><td class="hero-title" style="font-weight:700;font-size:20px;line-height:1.3;color:#111827;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
           <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
             {label_html}
@@ -940,10 +940,28 @@ def _section_container(title: str, inner_html: str):
 """
 
 
-def _generate_enhanced_preview(hero_obj=None) -> str:
-    """Generate compelling preview text from hero article or fallback."""
+def _generate_enhanced_preview(hero_obj=None, market_summary=None) -> str:
+    """Generate compelling preview text from hero article or market summary."""
     
-    # If we have a hero article with description, use that
+    # First, try to use market summary if available
+    if market_summary:
+        up_count = market_summary.get("up_count", 0)
+        down_count = market_summary.get("down_count", 0)
+        
+        if up_count or down_count:
+            total = up_count + down_count
+            up_pct = (up_count / total * 100) if total > 0 else 0
+            
+            if up_pct >= 70:
+                return f"🟢 Strong Session • {up_count} up, {down_count} down"
+            elif up_pct >= 60:
+                return f"🟡 Positive Session • {up_count} up, {down_count} down"
+            elif up_pct >= 40:
+                return f"⚪ Mixed Session • {up_count} up, {down_count} down"
+            else:
+                return f"🔴 Weak Session • {up_count} up, {down_count} down"
+    
+    # If we have a hero article with description, use that as fallback
     if hero_obj:
         description = hero_obj.get("description") or hero_obj.get("body") or ""
         if description:
@@ -965,7 +983,7 @@ def _generate_enhanced_preview(hero_obj=None) -> str:
             
             return preview
     
-    # Fallback to market-focused previews if no hero
+    # Final fallback to market-focused previews
     now = datetime.now()
     current_time = now.strftime("%H:%M")
     day_name = now.strftime("%A")
@@ -1097,8 +1115,8 @@ def render_email(summary, companies, cryptos=None):
           </td></tr>
         </table>'''
 
-    # Email preview - use hero article description if available
-    email_preview = _generate_enhanced_preview(hero_obj)
+    # Email preview - use market summary first, then hero article if available
+    email_preview = _generate_enhanced_preview(hero_obj, summary)
 
     # Minimal CSS for mobile responsiveness only
     css = """
@@ -1174,7 +1192,7 @@ def render_email(summary, companies, cryptos=None):
   }
   
   .hero-title {
-    font-size: 32px !important;
+    font-size: 28px !important;  /* Reduced from 32px to match mover */
     line-height: 1.2 !important;
   }
   
@@ -1285,7 +1303,7 @@ def render_email(summary, companies, cryptos=None):
   }
   
   .hero-title {
-    font-size: 28px !important;
+    font-size: 24px !important;  /* Reduced from 28px */
   }
   
   .card-title {
@@ -1331,7 +1349,7 @@ def render_email(summary, companies, cryptos=None):
   }
   
   .hero-title {
-    font-size: 26px !important;
+    font-size: 22px !important;  /* Reduced from 26px */
   }
   
   .card-title {
