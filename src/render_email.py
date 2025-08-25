@@ -565,9 +565,9 @@ def _render_hero(hero: dict) -> str:
     # Add a label for breaking news vs market analysis
     label_html = ""
     if is_breaking:
-        label_html = '''<span style="color:#DC2626;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">● BREAKING NEWS</span><br>'''
+        label_html = '''<span style="color:#DC2626;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">● BREAKING NEWS</span><br>'''
     else:
-        label_html = '''<span style="color:#6B7280;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">MARKET ANALYSIS</span><br>'''
+        label_html = '''<span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">MARKET ANALYSIS</span><br>'''
     
     # Use description field directly for the preview copy
     para = (hero.get("description") or hero.get("body") or "").strip()
@@ -577,22 +577,22 @@ def _render_hero(hero: dict) -> str:
         para = _first_paragraph(hero, title=title)
     
     # Truncate paragraph if too long
-    if para and len(para) > 280:
+    if para and len(para) > 200:
         # Find a good breaking point
         sentences = re.split(r'[.!?]\s+', para)
         truncated = ""
         for sentence in sentences:
-            if len(truncated + sentence) <= 220:
+            if len(truncated + sentence) <= 180:
                 truncated += sentence + ". "
             else:
                 break
-        para = truncated.strip() if truncated else para[:277] + "..."
+        para = truncated.strip() if truncated else para[:197] + "..."
     
     # Body HTML
     body_html = ""
     if para:
         body_html = f'''
-        <tr><td class="hero-body" style="padding-top:14px;font-size:15px;line-height:1.6;
+        <tr><td class="hero-body" style="padding-top:12px;font-size:14px;line-height:1.5;
                      color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
             {escape(para)}
         </td></tr>'''
@@ -602,20 +602,18 @@ def _render_hero(hero: dict) -> str:
     if company_name:
         meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(company_name)}</span>')
     if source:
-        meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(source)}</span>')
+        meta_parts.append(f'<span style="color:#6B7280;">{escape(source)}</span>')
     if when:
         meta_parts.append(f'<span style="color:#6B7280;">{escape(when)}</span>')
     
     meta_html = ""
     if meta_parts:
         meta_html = f'''
-        <tr><td style="padding-top:14px;font-size:13px;
-                     border-top:1px solid #E5E7EB;
-                     padding-top:12px;color:#6B7280;">
+        <tr><td style="padding-top:12px;font-size:12px;color:#6B7280;">
             {" • ".join(meta_parts)}
         </td></tr>'''
     
-    # Hero container with light background
+    # Hero container with same styling as mover story
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        class="hero-container" style="border-collapse:collapse;
@@ -624,7 +622,7 @@ def _render_hero(hero: dict) -> str:
               border-radius:16px;margin:20px 0;
               box-shadow:0 4px 12px rgba(0,0,0,0.08);">
   <tr>
-    <td style="padding:20px;">
+    <td class="hero-padding" style="padding:18px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         <tr><td class="hero-title" style="font-weight:700;font-size:20px;line-height:1.3;color:#111827;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
@@ -1165,7 +1163,11 @@ def render_email(summary, companies, cryptos=None):
   }
   
   .hero-container td {
-    padding: 20px 16px !important;  /* Slightly less horizontal padding */
+    padding: 18px 16px !important;  /* Matching mover story padding */
+  }
+  
+  .hero-padding {
+    padding: 18px 16px !important;  /* Ensure consistency */
   }
   
   /* Section containers get MUCH less padding for wider cards */
@@ -1197,7 +1199,7 @@ def render_email(summary, companies, cryptos=None):
   }
   
   .hero-body {
-    font-size: 18px !important;
+    font-size: 16px !important;  /* Reduced to match mover */
     line-height: 1.5 !important;
   }
   
