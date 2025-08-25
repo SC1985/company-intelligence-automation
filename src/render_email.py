@@ -719,29 +719,43 @@ def _section_container(title: str, inner_html: str):
 """
 
 
-def _generate_enhanced_preview() -> str:
-    """Generate compelling preview text optimized for inbox engagement."""
+def _generate_enhanced_preview(hero_obj=None) -> str:
+    """Generate compelling preview text from hero article or fallback."""
+    
+    # If we have a hero article with description, use that
+    if hero_obj:
+        description = hero_obj.get("description") or hero_obj.get("body") or ""
+        if description:
+            # Clean and truncate for preview
+            preview = description.strip()
+            # Remove any HTML if present
+            preview = re.sub(r'<[^>]+>', '', preview)
+            # Clean up whitespace
+            preview = re.sub(r'\s+', ' ', preview)
+            
+            # Truncate intelligently for inbox preview (usually shows ~90-110 chars)
+            if len(preview) > 100:
+                # Try to cut at sentence boundary
+                sentences = re.split(r'[.!?]\s+', preview)
+                if sentences and len(sentences[0]) <= 100:
+                    return sentences[0] + "."
+                # Otherwise cut at word boundary
+                preview = preview[:97].rsplit(' ', 1)[0] + "..."
+            
+            return preview
+    
+    # Fallback to market-focused previews if no hero
     now = datetime.now()
     current_time = now.strftime("%H:%M")
     day_name = now.strftime("%A")
     
-    # More engaging preview options
     preview_options = [
-        f"🔥 {current_time} Market Intelligence: Top movers, breaking news & strategic signals across your portfolio",
-        f"⚡ {day_name} Digest: Live performance data, sentiment analysis & key developments in your holdings", 
-        f"📈 Strategic Brief {current_time}: Real-time insights, news synthesis & momentum indicators for smart decisions",
-        f"🎯 Portfolio Pulse: Market movements, sector analysis & breaking news from your strategic investments",
-        f"💡 {current_time} Intelligence: Performance metrics, news highlights & market opportunities at your fingertips"
+        f"Top movers, breaking news & strategic signals across your portfolio at {current_time}",
+        f"Live performance data, sentiment analysis & key developments in your holdings", 
+        f"Real-time insights, news synthesis & momentum indicators for {day_name}",
+        f"Market movements, sector analysis & breaking news from your investments",
+        f"Performance metrics, news highlights & market opportunities • {current_time} update"
     ]
-    
-    # Add variety based on time of day
-    hour = now.hour
-    if 5 <= hour < 12:
-        preview_options.append(f"🌅 Morning Intelligence: Pre-market insights & overnight developments in your portfolio")
-    elif 12 <= hour < 17:
-        preview_options.append(f"☀️ Midday Update: Live market pulse & breaking news across your strategic holdings")
-    elif 17 <= hour < 21:
-        preview_options.append(f"🌆 Evening Wrap: Today's performance & after-hours developments in your investments")
     
     # Rotate based on day of year for consistency with variety
     index = now.timetuple().tm_yday % len(preview_options)
@@ -825,11 +839,13 @@ def render_email(summary, companies, cryptos=None):
     hero_obj = _select_hero(summary, companies or [], cryptos or [])
     hero_html = _render_hero(hero_obj) if hero_obj else ""
     
-    # Extract hero headline for mobile header
+    # Extract hero headline for mobile header AND for subject line
     hero_headline = ""
+    hero_headline_for_subject = ""
     if hero_obj and hero_obj.get("title"):
         hero_headline = hero_obj.get("title", "").strip()
-        # Truncate if too long for header
+        hero_headline_for_subject = hero_headline  # Keep full length for subject
+        # Truncate if too long for header display
         if len(hero_headline) > 80:
             hero_headline = hero_headline[:77] + "..."
 
@@ -856,8 +872,8 @@ def render_email(summary, companies, cryptos=None):
           </td></tr>
         </table>'''
 
-    # Email preview
-    email_preview = _generate_enhanced_preview()
+    # Email preview - use hero article description if available
+    email_preview = _generate_enhanced_preview(hero_obj)
 
     # Minimal CSS for mobile responsiveness only
     css = """
@@ -1111,6 +1127,7 @@ def render_email(summary, companies, cryptos=None):
     <meta name="description" content="{escape(email_preview)}">
     <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
     <title>Intelligence Digest</title>
+    <!-- HERO_HEADLINE:{escape(hero_headline_for_subject) if hero_headline_for_subject else ''} -->
     {css}
   </head>
   <body style="margin:0;padding:0;background:#F7F8FA;color:#111827;
