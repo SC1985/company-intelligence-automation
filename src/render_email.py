@@ -989,7 +989,7 @@ def _build_crypto_card(c):
     elif ticker == "ETH-USD":
         market_dominance_html = '''
         <tr><td style="padding-bottom:8px;">
-            <span style="color:#8B5CF6;font-size:13px;font-weight:600;">
+            <span style="color:#3B82F6;font-size:13px;font-weight:600;">
                 ⚡ Smart Contract Leader
             </span>
         </td></tr>'''
@@ -1089,28 +1089,27 @@ def _build_crypto_card(c):
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         <tr><td style="border-top:1px solid #E5E7EB;padding-top:14px;">
             {_button("News", news_url, "primary")}
-            {_button("Updates", pr_url, "secondary")}
+            {_button("Press", pr_url, "secondary")}
         </td></tr>
     </table>'''
 
-    # Card with crypto-specific styling
+    # Card with same styling as company cards
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 12px;
-              background:linear-gradient(135deg, #FFFFFF 0%, #F9FAFB 100%);
+              background:#FFFFFF;
               border:1px solid #E5E7EB;
               border-radius:14px;
               box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
   <tr>
     <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <!-- Header with crypto icon -->
+        <!-- Header -->
         <tr><td>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
             <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;
                          font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
-                         padding-bottom:4px;">
-                <span style="margin-right:6px;">₿</span>{escape(str(name))}
+                         padding-bottom:4px;">{escape(str(name))}
             </td></tr>
             <tr><td>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
