@@ -1,0 +1,58 @@
+name: Executive Intelligence Brief (NextGen Dynamic)
+
+on:
+  schedule:
+    # Daily at 8am Central Time
+    # 8am CST = 2pm UTC (14:00) 
+    # 8am CDT = 1pm UTC (13:00) during daylight saving
+    # Using 13:00 UTC to account for CDT (most of the year)
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Do not send email; log only"
+        required: false
+        default: "false"
+      copy_sender:
+        description: "Also send a copy to SENDER_EMAIL and ADMIN_EMAILS"
+        required: false
+        default: "false"
+      smtp_debug:
+        description: "Log SMTP wire conversation (no secrets)"
+        required: false
+        default: "false"
+
+jobs:
+  intelligence-execution:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install matplotlib pillow yfinance pandas requests
+
+      - name: Run Intelligence Engine (NextGen digest)
+        env:
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          COPY_SENDER: ${{ github.event.inputs.copy_sender || 'false' }}
+          SMTP_DEBUG: ${{ github.event.inputs.smtp_debug || 'false' }}
+          NEXTGEN_DIGEST: "true"
+        run: python src/ci_entrypoint.py
