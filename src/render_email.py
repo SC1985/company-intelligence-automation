@@ -966,40 +966,43 @@ def _build_card(c):
             <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;
                          font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
                          padding-bottom:4px;">{escape(str(name))}</td></tr>
-            <tr><td>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td class="ticker-text" style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
-                  <td class="price-cell" style="text-align:right;font-size:16px;">{price_fmt}</td>
-                </tr>
-              </table>
-            </td></tr>
-          </table>
-        </td></tr>
-        
-        <!-- Performance chips -->
-        <tr><td>{chips}</td></tr>
-        
-        <!-- Momentum and Volume indicators -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            {momentum_html}
-            {volume_html}
-          </table>
-        </td></tr>
-        
-        <!-- 52-week range -->  
-        <tr><td>{range_html}</td></tr>
-        
-        <!-- News and events -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
-            {bullets_html}
-          </table>
-        </td></tr>
-        
-        <!-- Action buttons -->
-        <tr><td>{ctas}</td></tr>
+                  <tr><td>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td class="ticker-text" style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
+                        <td class="price-cell" style="text-align:right;font-size:16px;">{price_fmt}</td>
+                      </tr>
+                    </table>
+                  </td></tr>
+                </table>
+              </td></tr>
+              
+              <!-- Performance chips -->
+              <tr><td>{chips}</td></tr>
+              
+              <!-- Momentum and Volume indicators -->
+              <tr><td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  {momentum_html}
+                  {volume_html}
+                </table>
+              </td></tr>
+              
+              <!-- 52-week range -->  
+              <tr><td>{range_html}</td></tr>
+              
+              <!-- News and events -->
+              <tr><td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
+                  {bullets_html}
+                </table>
+              </td></tr>
+              
+              <!-- Action buttons -->
+              <tr><td>{ctas}</td></tr>
+            </table>
+          </td>
+        </tr>
       </table>
     </td>
   </tr>
@@ -1166,63 +1169,63 @@ def _build_crypto_card(c):
         </td></tr>
     </table>'''
 
-    # Card with light purple left border for crypto
+    # Card with light purple left border for crypto - using nested table approach
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;margin:0 0 12px;
-              background:#FFFFFF;
-              border-top:1px solid #E5E7EB;
-              border-right:1px solid #E5E7EB;
-              border-bottom:1px solid #E5E7EB;
-              border-left:3px solid #C4B5FD;
-              border-radius:14px;
-              box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
+       style="border-collapse:collapse;margin:0 0 12px;">
   <tr>
-    <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <!-- Header -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;
-                         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
-                         padding-bottom:4px;">{escape(str(name))}
-            </td></tr>
-            <tr><td>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td class="ticker-text" style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
-                  <td class="price-cell" style="text-align:right;font-size:16px;">{price_fmt}</td>
-                </tr>
-              </table>
-            </td></tr>
-          </table>
-        </td></tr>
-        
-        <!-- Performance chips -->
-        <tr><td>{chips}</td></tr>
-        
-        <!-- Crypto-specific indicators -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            {momentum_html}
-            {market_dominance_html}
-            {volume_html}
-            {ath_html}
-          </table>
-        </td></tr>
-        
-        <!-- 52-week range -->  
-        <tr><td>{range_html}</td></tr>
-        
-        <!-- News -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
-            {bullets_html}
-          </table>
-        </td></tr>
-        
-        <!-- Action buttons -->
-        <tr><td>{ctas}</td></tr>
+    <td style="background:#C4B5FD;width:3px;border-radius:14px 0 0 14px;">&nbsp;</td>
+    <td style="background:#FFFFFF;border:1px solid #E5E7EB;border-left:none;border-radius:0 14px 14px 0;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <tr>
+          <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <!-- Header -->
+              <tr><td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;
+                               font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
+                               padding-bottom:4px;">{escape(str(name))}
+                  </td></tr>
+                  <tr><td>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td class="ticker-text" style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
+                        <td class="price-cell" style="text-align:right;font-size:16px;">{price_fmt}</td>
+                      </tr>
+                    </table>
+                  </td></tr>
+                </table>
+              </td></tr>
+              
+              <!-- Performance chips -->
+              <tr><td>{chips}</td></tr>
+              
+              <!-- Crypto-specific indicators -->
+              <tr><td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  {momentum_html}
+                  {market_dominance_html}
+                  {volume_html}
+                  {ath_html}
+                </table>
+              </td></tr>
+              
+              <!-- 52-week range -->  
+              <tr><td>{range_html}</td></tr>
+              
+              <!-- News -->
+              <tr><td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
+                  {bullets_html}
+                </table>
+              </td></tr>
+              
+              <!-- Action buttons -->
+              <tr><td>{ctas}</td></tr>
+            </table>
+          </td>
+        </tr>
       </table>
     </td>
   </tr>
