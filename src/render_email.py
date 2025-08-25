@@ -335,7 +335,7 @@ def _first_paragraph(hero: dict, title: str = "") -> str:
 
 
 def _select_hero(summary: dict, companies: list, cryptos: list):
-    """Enhanced hero selection prioritizing breaking news."""
+    """Enhanced hero selection prioritizing breaking news with fallback."""
     # Check for explicit hero in summary
     hero = None
     if isinstance(summary, dict):
@@ -357,11 +357,11 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
     if hero:
         return hero
     
-    # Enhanced fallback: prioritize BREAKING NEWS
+    # Enhanced fallback: prioritize BREAKING NEWS, with backup options
     all_entities = (companies or []) + (cryptos or [])
     
-    # Scoring criteria for breaking news
-    hero_candidates = []
+    breaking_candidates = []  # For breaking news
+    general_candidates = []   # For backup articles
     
     # Breaking news keywords (higher priority)
     breaking_keywords = {
@@ -372,78 +372,128 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
         "regulatory": ["sec", "fda", "approval", "investigation", "lawsuit", "ruling"]
     }
     
-    # Lower priority market commentary keywords
-    commentary_keywords = ["could", "might", "may", "outlook", "analysis", "preview", "review", "what to expect"]
+    # General interest keywords for backup
+    general_keywords = {
+        "analysis": ["analysis", "outlook", "forecast", "prediction", "expects"],
+        "market": ["market", "stocks", "trading", "investors", "wall street"],
+        "sector": ["tech", "technology", "ai", "crypto", "energy", "healthcare"],
+        "guidance": ["strategy", "plans", "future", "roadmap", "vision"]
+    }
+    
+    # Lower priority commentary keywords
+    commentary_keywords = ["could", "might", "may", "what to expect", "preview", "review"]
     
     for entity in all_entities:
         headline = entity.get("headline", "")
         if not headline:
             continue
         
-        score = 0
+        breaking_score = 0
+        general_score = 0
         headline_lower = headline.lower()
         
-        # Score based on breaking news indicators
+        # Score for breaking news
         for category, keywords in breaking_keywords.items():
             for keyword in keywords:
                 if keyword in headline_lower:
                     if category == "urgent":
-                        score += 25  # Highest priority for breaking news
+                        breaking_score += 25
                     elif category == "major_event":
-                        score += 20
+                        breaking_score += 20
                     elif category == "earnings":
-                        score += 18
+                        breaking_score += 18
                     elif category == "deals":
-                        score += 18
+                        breaking_score += 18
                     else:
-                        score += 15
+                        breaking_score += 15
         
-        # Penalize commentary/analysis pieces
+        # Score for general interest (backup)
+        for category, keywords in general_keywords.items():
+            for keyword in keywords:
+                if keyword in headline_lower:
+                    if category == "analysis":
+                        general_score += 8
+                    elif category == "market":
+                        general_score += 10
+                    elif category == "sector":
+                        general_score += 9
+                    else:
+                        general_score += 7
+        
+        # Penalize pure commentary for breaking news
         for keyword in commentary_keywords:
             if keyword in headline_lower:
-                score -= 10
+                breaking_score -= 10
+                # But don't penalize as much for general articles
+                general_score -= 3
         
-        # Major boost for very recent content (breaking)
+        # Boost for recency (applies to both)
+        recency_boost = 0
         if entity.get("when"):
             try:
                 pub_date = _parse_to_dt(entity.get("when"))
                 if pub_date:
                     hours_ago = (datetime.now(timezone.utc) - pub_date).total_seconds() / 3600
                     if hours_ago < 2:
-                        score += 20  # Very recent = likely breaking
+                        recency_boost = 20  # Very recent
                     elif hours_ago < 6:
-                        score += 15
+                        recency_boost = 15
                     elif hours_ago < 12:
-                        score += 10
+                        recency_boost = 10
                     elif hours_ago < 24:
-                        score += 5
+                        recency_boost = 5
             except:
                 pass
+        
+        breaking_score += recency_boost
+        general_score += recency_boost
         
         # Boost for quality content
         description = entity.get("description", "")
         if description and len(description) > 50:
-            score += 5
+            breaking_score += 5
+            general_score += 5
         
         # Include company name for context
         entity["company_name"] = entity.get("name", "")
         
-        if score > 5:  # Minimum threshold
-            hero_candidates.append((score, entity))
+        # Add to appropriate candidate list
+        if breaking_score > 15:  # Higher threshold for breaking news
+            breaking_candidates.append((breaking_score, entity))
+        
+        if general_score > 5:  # Lower threshold for general articles
+            general_candidates.append((general_score, entity))
     
-    # Select the best breaking news candidate
-    if hero_candidates:
-        hero_candidates.sort(reverse=True, key=lambda x: x[0])
-        _, best_entity = hero_candidates[0]
+    # First try breaking news candidates
+    if breaking_candidates:
+        breaking_candidates.sort(reverse=True, key=lambda x: x[0])
+        _, best_breaking = breaking_candidates[0]
         
         return {
-            "title": best_entity.get("headline"),
-            "url": best_entity.get("news_url", ""),
-            "source": best_entity.get("source", ""),
-            "when": best_entity.get("when"),
-            "body": best_entity.get("description", ""),
-            "description": best_entity.get("description", ""),
-            "company_name": best_entity.get("company_name", "")
+            "title": best_breaking.get("headline"),
+            "url": best_breaking.get("news_url", ""),
+            "source": best_breaking.get("source", ""),
+            "when": best_breaking.get("when"),
+            "body": best_breaking.get("description", ""),
+            "description": best_breaking.get("description", ""),
+            "company_name": best_breaking.get("company_name", ""),
+            "is_breaking": True  # Flag to indicate this is breaking news
+        }
+    
+    # Fallback to best general article
+    if general_candidates:
+        general_candidates.sort(reverse=True, key=lambda x: x[0])
+        _, best_general = general_candidates[0]
+        
+        return {
+            "title": best_general.get("headline"),
+            "url": best_general.get("news_url", ""),
+            "source": best_general.get("source", ""),
+            "when": best_general.get("when"),
+            "body": best_general.get("description", ""),
+            "description": best_general.get("description", ""),
+            "company_name": best_general.get("company_name", ""),
+            "is_breaking": False  # Flag to indicate this is not breaking news
         }
     
     return None
@@ -510,6 +560,14 @@ def _render_hero(hero: dict) -> str:
     source = hero.get("source") or ""
     when = _fmt_ct(hero.get("when"), force_time=False, tz_suffix_policy="never") if hero.get("when") else ""
     company_name = hero.get("company_name", "")
+    is_breaking = hero.get("is_breaking", False)
+    
+    # Add a label for breaking news vs market analysis
+    label_html = ""
+    if is_breaking:
+        label_html = '''<span style="color:#DC2626;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">● BREAKING NEWS</span><br>'''
+    else:
+        label_html = '''<span style="color:#6B7280;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">MARKET ANALYSIS</span><br>'''
     
     # Use description field directly for the preview copy
     para = (hero.get("description") or hero.get("body") or "").strip()
@@ -571,6 +629,7 @@ def _render_hero(hero: dict) -> str:
         <tr><td class="hero-title" style="font-weight:700;font-size:24px;line-height:1.3;color:#111827;
                      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
           <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
+            {label_html}
             {escape(title)}
           </a>
         </td></tr>
