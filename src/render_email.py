@@ -1,6 +1,8 @@
 # src/render_email.py
+# Investment Edge - Enhanced Company and Crypto Cards
 # Fixed: Using hybrid color scheme that works in both dark and light modes
 # Fixed: Increased width of company modules on mobile only
+# Enhanced: Added momentum indicators, volume analysis, and crypto-specific metrics
 
 from datetime import datetime, timezone
 from html import escape
@@ -215,6 +217,23 @@ def _range_bar(pos: float, low: float, high: float):
             f'<div class="range-title" style="font-size:12px;color:#374151;margin-bottom:6px;font-weight:600;">'
             f'52-Week Range</div>'
             + track + caption + '</div>')
+
+
+def calculate_momentum_score(pct_1d, pct_1w, pct_1m):
+    """Calculate momentum score based on multiple timeframes."""
+    score = 0
+    if pct_1d and pct_1d > 0: score += 1
+    if pct_1w and pct_1w > 0: score += 2
+    if pct_1m and pct_1m > 0: score += 3
+    
+    if score >= 5:
+        return "Strong Momentum 💪", "#10B981"
+    elif score >= 3:
+        return "Building Strength 📈", "#3B82F6"
+    elif score <= 1:
+        return "Losing Steam 📉", "#EF4444"
+    else:
+        return "Neutral Trend ➡️", "#6B7280"
 
 
 def _belongs_to_company(c: dict, headline: str) -> bool:
@@ -729,25 +748,21 @@ def _render_mover_story(mover: dict) -> str:
 # ---------- Enhanced card system ----------
 
 def _build_card(c):
-    """Card building with hybrid colors."""
+    """Enhanced card building with momentum indicators and volume analysis."""
     name = c.get("name") or c.get("ticker") or c.get("symbol") or "Unknown"
     ticker = str(c.get("ticker") or c.get("symbol") or "")
     is_crypto = ticker.endswith("-USD") or (str(c.get("asset_class") or "").lower() == "crypto")
 
-    # Price formatting
+    # For crypto, use enhanced crypto card builder
+    if is_crypto:
+        return _build_crypto_card(c)
+
+    # Price formatting for stocks
     price_v = _safe_float(c.get("price"), None)
     if price_v is None:
         price_fmt = '<span style="color:#9CA3AF;">--</span>'
     else:
-        if is_crypto:
-            if price_v >= 1000:
-                price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.0f}</span>'
-            elif price_v >= 1:
-                price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
-            else:
-                price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:.4f}</span>'
-        else:
-            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
+        price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
 
     # Performance chips
     chips_line1 = _chip("1D", c.get("pct_1d")) + _chip("1W", c.get("pct_1w"))
@@ -758,6 +773,36 @@ def _build_card(c):
         <tr><td style="line-height:1.6;padding-bottom:6px;">{chips_line1}</td></tr>
         <tr><td style="line-height:1.6;">{chips_line2}</td></tr>
     </table>'''
+
+    # Momentum indicator
+    momentum_text, momentum_color = calculate_momentum_score(
+        c.get("pct_1d"), c.get("pct_1w"), c.get("pct_1m")
+    )
+    momentum_html = f'''
+    <tr><td style="padding-bottom:8px;">
+        <span style="color:{momentum_color};font-size:13px;font-weight:600;">
+            {momentum_text}
+        </span>
+    </td></tr>'''
+
+    # Volume indicator
+    volume_html = ""
+    vol_multiplier = _safe_float(c.get("vol_x_avg"), None)
+    if vol_multiplier is not None:
+        if vol_multiplier > 2.0:
+            volume_html = f'''
+            <tr><td style="padding-bottom:8px;">
+                <span style="color:#F59E0B;font-size:13px;font-weight:600;">
+                    🔥 Volume: {vol_multiplier:.1f}× average
+                </span>
+            </td></tr>'''
+        elif vol_multiplier > 1.5:
+            volume_html = f'''
+            <tr><td style="padding-bottom:8px;">
+                <span style="color:#3B82F6;font-size:13px;font-weight:600;">
+                    📊 Volume: {vol_multiplier:.1f}× average
+                </span>
+            </td></tr>'''
 
     # News bullet
     bullets = []
@@ -788,9 +833,12 @@ def _build_card(c):
         if event_date:
             bullets.append(f'<span style="color:#7C3AED;">📅 Next: {event_date}</span>')
 
-    vol_multiplier = _safe_float(c.get("vol_x_avg"), None)
-    if vol_multiplier is not None and vol_multiplier > 1.5:
-        bullets.append(f'<span style="color:#F59E0B;">📊 Volume: {vol_multiplier:.1f}× avg</span>')
+    # Earnings date if available
+    earnings_date = c.get("earnings_date")
+    if earnings_date:
+        earnings_fmt = _fmt_ct(earnings_date, force_time=False, tz_suffix_policy="never")
+        if earnings_fmt:
+            bullets.append(f'<span style="color:#10B981;">📈 Earnings: {earnings_fmt}</span>')
 
     # Bullets HTML
     bullets_html = ""
@@ -837,7 +885,7 @@ def _build_card(c):
               border-radius:14px;
               box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
   <tr>
-    <td class="card-inner" style="padding:20px 22px;max-height:360px;overflow:hidden;vertical-align:top;">
+    <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         <!-- Header -->
         <tr><td>
@@ -859,10 +907,239 @@ def _build_card(c):
         <!-- Performance chips -->
         <tr><td>{chips}</td></tr>
         
+        <!-- Momentum and Volume indicators -->
+        <tr><td>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            {momentum_html}
+            {volume_html}
+          </table>
+        </td></tr>
+        
         <!-- 52-week range -->  
         <tr><td>{range_html}</td></tr>
         
         <!-- News and events -->
+        <tr><td>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
+            {bullets_html}
+          </table>
+        </td></tr>
+        
+        <!-- Action buttons -->
+        <tr><td>{ctas}</td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
+"""
+
+
+def _build_crypto_card(c):
+    """Enhanced crypto card with specific metrics."""
+    name = c.get("name") or c.get("ticker") or c.get("symbol") or "Unknown"
+    ticker = str(c.get("ticker") or c.get("symbol") or "")
+    
+    # Crypto-specific price formatting
+    price_v = _safe_float(c.get("price"), None)
+    if price_v is None:
+        price_fmt = '<span style="color:#9CA3AF;">--</span>'
+    else:
+        if price_v >= 1000:
+            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.0f}</span>'
+        elif price_v >= 1:
+            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
+        elif price_v >= 0.01:
+            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:.4f}</span>'
+        else:
+            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:.8f}</span>'
+
+    # Performance chips
+    chips_line1 = _chip("1D", c.get("pct_1d")) + _chip("1W", c.get("pct_1w"))
+    chips_line2 = _chip("1M", c.get("pct_1m")) + _chip("YTD", c.get("pct_ytd"))
+    
+    chips = f'''
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;">
+        <tr><td style="line-height:1.6;padding-bottom:6px;">{chips_line1}</td></tr>
+        <tr><td style="line-height:1.6;">{chips_line2}</td></tr>
+    </table>'''
+
+    # Momentum indicator
+    momentum_text, momentum_color = calculate_momentum_score(
+        c.get("pct_1d"), c.get("pct_1w"), c.get("pct_1m")
+    )
+    momentum_html = f'''
+    <tr><td style="padding-bottom:8px;">
+        <span style="color:{momentum_color};font-size:13px;font-weight:600;">
+            {momentum_text}
+        </span>
+    </td></tr>'''
+
+    # Market cap and volume indicators
+    market_cap = c.get("market_cap")
+    volume_24h = c.get("volume_24h")
+    
+    market_dominance_html = ""
+    if ticker == "BTC-USD":
+        market_dominance_html = '''
+        <tr><td style="padding-bottom:8px;">
+            <span style="color:#F59E0B;font-size:13px;font-weight:600;">
+                👑 Market Leader
+            </span>
+        </td></tr>'''
+    elif ticker == "ETH-USD":
+        market_dominance_html = '''
+        <tr><td style="padding-bottom:8px;">
+            <span style="color:#8B5CF6;font-size:13px;font-weight:600;">
+                ⚡ Smart Contract Leader
+            </span>
+        </td></tr>'''
+    
+    # Volume indicator
+    volume_html = ""
+    if volume_24h:
+        if volume_24h > 1_000_000_000:
+            volume_html = f'''
+            <tr><td style="padding-bottom:8px;">
+                <span style="color:#3B82F6;font-size:13px;font-weight:600;">
+                    💎 ${volume_24h/1_000_000_000:.1f}B daily volume
+                </span>
+            </td></tr>'''
+        elif volume_24h > 1_000_000:
+            volume_html = f'''
+            <tr><td style="padding-bottom:8px;">
+                <span style="color:#6B7280;font-size:13px;font-weight:600;">
+                    💰 ${volume_24h/1_000_000:.1f}M daily volume
+                </span>
+            </td></tr>'''
+    
+    # ATH distance indicator
+    ath_change = c.get("ath_change")
+    ath_html = ""
+    if ath_change:
+        if ath_change > -10:
+            ath_html = f'''
+            <tr><td style="padding-bottom:8px;">
+                <span style="color:#10B981;font-size:13px;font-weight:600;">
+                    🎯 Near ATH ({ath_change:.1f}%)
+                </span>
+            </td></tr>'''
+        elif ath_change < -50:
+            ath_html = f'''
+            <tr><td style="padding-bottom:8px;">
+                <span style="color:#EF4444;font-size:13px;font-weight:600;">
+                    📉 {abs(ath_change):.0f}% from ATH
+                </span>
+            </td></tr>'''
+
+    # News bullet
+    bullets = []
+    headline = c.get("headline")
+    source = c.get("source")
+    when_fmt = _fmt_ct(c.get("when"), force_time=False, tz_suffix_policy="never") if c.get("when") else None
+
+    if headline and _belongs_to_company(c, headline):
+        # Truncate long headlines
+        display_headline = headline[:100] + "..." if len(headline) > 100 else headline
+        
+        if source and when_fmt:
+            bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({source}, {when_fmt})</span>')
+        elif source:
+            bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({source})</span>')
+        elif when_fmt:
+            bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({when_fmt})</span>')
+        else:
+            bullets.append(f"★ {display_headline}")
+    else:
+        crypto_name = name.replace(" (Crypto)", "").strip()
+        bullets.append(f'★ <span style="color:#6B7280;">Latest {crypto_name} updates — see News</span>')
+
+    # Bullets HTML
+    bullets_html = ""
+    for i, bullet in enumerate(bullets):
+        if i == 0:  # Main news item
+            bullets_html += f'''
+            <tr><td class="bullet-main" style="padding-bottom:10px;
+                          display:-webkit-box;-webkit-box-orient:vertical;
+                          -webkit-line-clamp:3;overflow:hidden;text-overflow:ellipsis;
+                          line-height:1.5;color:#374151;font-size:14px;font-weight:500;">
+                {bullet}
+            </td></tr>'''
+
+    # Range bar
+    range_html = _range_bar(
+        _safe_float(c.get("range_pct"), 50.0),
+        _safe_float(c.get("low_52w"), 0.0),
+        _safe_float(c.get("high_52w"), 0.0)
+    )
+
+    # Action buttons
+    news_url = c.get("news_url") or f"https://finance.yahoo.com/quote/{escape(ticker)}/news"
+    
+    # Crypto-specific URLs
+    if ticker == "BTC-USD":
+        pr_url = "https://bitcoin.org/en/news"
+    elif ticker == "ETH-USD":
+        pr_url = "https://blog.ethereum.org"
+    elif ticker == "XRP-USD":
+        pr_url = "https://ripple.com/insights"
+    else:
+        pr_url = c.get("pr_url") or news_url
+    
+    ctas = f'''
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr><td style="border-top:1px solid #E5E7EB;padding-top:14px;">
+            {_button("News", news_url, "primary")}
+            {_button("Updates", pr_url, "secondary")}
+        </td></tr>
+    </table>'''
+
+    # Card with crypto-specific styling
+    return f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+       style="border-collapse:collapse;margin:0 0 12px;
+              background:linear-gradient(135deg, #FFFFFF 0%, #F9FAFB 100%);
+              border:1px solid #E5E7EB;
+              border-radius:14px;
+              box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
+  <tr>
+    <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <!-- Header with crypto icon -->
+        <tr><td>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;
+                         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
+                         padding-bottom:4px;">
+                <span style="margin-right:6px;">₿</span>{escape(str(name))}
+            </td></tr>
+            <tr><td>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td class="ticker-text" style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
+                  <td class="price-cell" style="text-align:right;font-size:16px;">{price_fmt}</td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+        
+        <!-- Performance chips -->
+        <tr><td>{chips}</td></tr>
+        
+        <!-- Crypto-specific indicators -->
+        <tr><td>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            {momentum_html}
+            {market_dominance_html}
+            {volume_html}
+            {ath_html}
+          </table>
+        </td></tr>
+        
+        <!-- 52-week range -->  
+        <tr><td>{range_html}</td></tr>
+        
+        <!-- News -->
         <tr><td>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
             {bullets_html}
@@ -994,10 +1271,10 @@ def _generate_enhanced_preview(hero_obj=None, market_summary=None) -> str:
     return preview_options[index]
 
 
-# ---------- Main renderer with hybrid color scheme ----------
+# ---------- Main renderer with Investment Edge branding ----------
 
 def render_email(summary, companies, cryptos=None):
-    """Email rendering with hybrid color scheme that works in both dark and light modes."""
+    """Investment Edge email rendering with enhanced cards."""
     
     # Entity processing
     company_cards = []
@@ -1009,14 +1286,14 @@ def render_email(summary, companies, cryptos=None):
         is_crypto = ticker.endswith("-USD") or (str(c.get("asset_class") or "").lower() == "crypto")
         
         if is_crypto:
-            crypto_cards.append(_build_card(c))
+            crypto_cards.append(_build_crypto_card(c))
         else:
             company_cards.append(_build_card(c))
 
     # Process explicit crypto list
     if cryptos:
         for cx in cryptos:
-            crypto_cards.append(_build_card(cx))
+            crypto_cards.append(_build_crypto_card(cx))
 
     # Header metadata
     summary = summary or {}
@@ -1356,7 +1633,7 @@ def render_email(summary, companies, cryptos=None):
 </style>
 """
 
-    # HTML structure with inline hybrid colors
+    # HTML structure with Investment Edge branding
     html = f"""<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -1366,7 +1643,7 @@ def render_email(summary, companies, cryptos=None):
     <meta name="supported-color-schemes" content="light">
     <meta name="description" content="{escape(email_preview)}">
     <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
-    <title>Intelligence Digest</title>
+    <title>Investment Edge</title>
     <!-- HERO_HEADLINE:{escape(hero_headline_for_subject) if hero_headline_for_subject else ''} -->
     {css}
   </head>
@@ -1396,7 +1673,7 @@ def render_email(summary, companies, cryptos=None):
                     <div class="responsive-title" style="font-weight:700;font-size:42px;color:#111827;
                                                         margin:0 0 10px 0;letter-spacing:-0.5px;
                                                         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
-                      Intelligence Digest
+                      Investment Edge
                     </div>
                     {f'<div class="header-subtitle" style="color:#6B7280;margin-bottom:16px;font-size:14px;font-weight:500;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
                     {market_summary}
@@ -1418,7 +1695,7 @@ def render_email(summary, companies, cryptos=None):
                        style="border-top:1px solid #E5E7EB;margin-top:28px;">
                   <tr><td class="footer-text" style="text-align:center;padding:24px 16px;color:#6B7280;font-size:13px;">
                     <div style="margin-bottom:8px;font-weight:500;">
-                      You're receiving this because you subscribed to Intelligence Digest
+                      You're receiving this because you subscribed to Investment Edge
                     </div>
                     <div style="color:#9CA3AF;font-weight:400;">
                       Engineered with precision • Delivered with speed ⚡
