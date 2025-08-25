@@ -1,3 +1,6 @@
+# src/nextgen_digest.py
+# Enhanced with better crypto data fetching and additional metrics
+
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 import json, os, time, re
@@ -205,7 +208,7 @@ def _get_equity_series(symbol: str, alpha_key: Optional[str]) -> Tuple[str, List
     
     return "none", [], []
 
-# -------------------- History helpers (crypto) --------------------
+# -------------------- Enhanced crypto helpers --------------------
 
 COINGECKO_IDS = {
     "BTC-USD": "bitcoin",
@@ -214,7 +217,82 @@ COINGECKO_IDS = {
     "XRP-USD": "ripple",
 }
 
+def _fetch_enhanced_crypto_data(symbol: str, coingecko_id: str = None, logger=None) -> Dict[str, Any]:
+    """Enhanced crypto data fetching with comprehensive metrics."""
+    
+    if not coingecko_id:
+        coingecko_id = COINGECKO_IDS.get(symbol, symbol.replace("-USD", "").lower())
+    
+    # Try to get comprehensive data from CoinGecko
+    try:
+        # First, get current market data
+        url = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}?localization=false&tickers=false&community_data=false&developer_data=false"
+        data = _http_get_json(url, timeout=20)
+        
+        if data and "market_data" in data:
+            market_data = data.get("market_data", {})
+            
+            # Extract all the enhanced metrics
+            current_price = market_data.get("current_price", {}).get("usd")
+            price_change_24h = market_data.get("price_change_percentage_24h")
+            price_change_7d = market_data.get("price_change_percentage_7d")
+            price_change_30d = market_data.get("price_change_percentage_30d")
+            price_change_1y = market_data.get("price_change_percentage_1y")
+            
+            # Additional metrics
+            market_cap = market_data.get("market_cap", {}).get("usd")
+            volume_24h = market_data.get("total_volume", {}).get("usd")
+            ath = market_data.get("ath", {}).get("usd")
+            ath_change_percentage = market_data.get("ath_change_percentage", {}).get("usd")
+            atl = market_data.get("atl", {}).get("usd")
+            
+            # Calculate 52-week range
+            low_52w = market_data.get("low_24h", {}).get("usd")  # Will be replaced with historical data
+            high_52w = market_data.get("high_24h", {}).get("usd")  # Will be replaced with historical data
+            
+            if logger:
+                logger.info(f"{symbol}: Enhanced crypto data fetched - price=${current_price}, cap=${market_cap}")
+            
+            # Get historical data for proper 52-week range
+            hist_url = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart?vs_currency=usd&days=365"
+            hist_data = _http_get_json(hist_url, timeout=20)
+            
+            if hist_data and "prices" in hist_data:
+                prices = [p[1] for p in hist_data.get("prices", []) if len(p) > 1]
+                if prices:
+                    low_52w = min(prices)
+                    high_52w = max(prices)
+            
+            # Calculate range position
+            range_pct = 50.0
+            if high_52w and low_52w and high_52w > low_52w and current_price:
+                range_pct = ((current_price - low_52w) / (high_52w - low_52w)) * 100
+                range_pct = max(0.0, min(100.0, range_pct))
+            
+            return {
+                "price": current_price,
+                "pct_1d": price_change_24h,
+                "pct_1w": price_change_7d,
+                "pct_1m": price_change_30d,
+                "pct_ytd": price_change_1y,  # Using 1y as proxy for YTD
+                "market_cap": market_cap,
+                "volume_24h": volume_24h,
+                "ath": ath,
+                "ath_change": ath_change_percentage,
+                "atl": atl,
+                "low_52w": low_52w,
+                "high_52w": high_52w,
+                "range_pct": range_pct,
+                "data_source": "coingecko_enhanced"
+            }
+    except Exception as e:
+        if logger:
+            logger.warning(f"{symbol}: Enhanced crypto fetch failed - {e}")
+    
+    return None
+
 def _fetch_coingecko_crypto(symbol_usd: str, id_hint: Optional[str] = None) -> Tuple[List[datetime], List[float]]:
+    """Fallback method for basic crypto price history."""
     cid = (id_hint or COINGECKO_IDS.get(symbol_usd) or symbol_usd.replace("-USD", "").lower())
     url = f"https://api.coingecko.com/api/v3/coins/{cid}/market_chart?vs_currency=usd&days=400"
     data = _http_get_json(url)
@@ -233,6 +311,38 @@ def _fetch_coingecko_crypto(symbol_usd: str, id_hint: Optional[str] = None) -> T
             continue
     
     return _validate_price_data(dt, cl)
+
+def _fetch_crypto_news(symbol: str, coingecko_id: str = None) -> Dict[str, str]:
+    """Get crypto-specific news from multiple sources."""
+    
+    # Try CoinGecko status updates first
+    if coingecko_id:
+        url = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/status_updates?per_page=5"
+        data = _http_get_json(url, timeout=15)
+        if data and isinstance(data.get("status_updates"), list) and data["status_updates"]:
+            for update in data["status_updates"]:
+                title = update.get("user_title") or update.get("category") or "Update"
+                desc = (update.get("description") or "")[:500]
+                
+                # Skip generic updates
+                if title.lower() not in ("general", "update") or desc:
+                    # Use description as title if more descriptive
+                    if desc and len(desc.split(".")[0]) > 10:
+                        title = desc.split(".")[0].strip()
+                    
+                    return {
+                        "title": title,
+                        "description": desc,
+                        "source": "CoinGecko",
+                        "url": update.get("url") or "https://www.coingecko.com/",
+                        "when": update.get("created_at")
+                    }
+    
+    # Fallback to NewsAPI if available
+    if os.getenv("NEWSAPI_KEY"):
+        return _news_headline_via_newsapi(symbol.replace("-USD", ""), symbol.replace("-USD", ""))
+    
+    return None
 
 def _fetch_alpha_vantage_crypto(symbol_usd: str, alpha_key: Optional[str]) -> Tuple[List[datetime], List[float]]:
     if not alpha_key:
@@ -322,6 +432,9 @@ def _enhanced_score_article(ticker: str, article: Dict[str, Any]) -> int:
         "PLTR": ["Palantir"],
         "KOPN": ["Kopin"],
         "SKYQ": ["Sky Quarry"],
+        "BTC-USD": ["Bitcoin", "BTC"],
+        "ETH-USD": ["Ethereum", "ETH"],
+        "XRP-USD": ["Ripple", "XRP"],
     }
     
     names = company_names.get(t, [])
@@ -338,6 +451,8 @@ def _enhanced_score_article(ticker: str, article: Dict[str, Any]) -> int:
         "NVDA": ["AMD", "Intel"],
         "META": ["TikTok", "Twitter", "YouTube"],
         "AMD": ["Intel", "NVIDIA"],
+        "BTC-USD": ["Ethereum", "Dogecoin", "Shiba"],
+        "ETH-USD": ["Bitcoin", "Solana", "Cardano"],
     }
     
     comp_list = competitors.get(t, [])
@@ -459,7 +574,10 @@ def _news_headline_via_newsapi(ticker: str, name: str) -> Optional[Dict[str, str
         "AMD": "AMD processor",
         "PLTR": "Palantir",
         "KOPN": "Kopin",
-        "SKYQ": "Sky Quarry"
+        "SKYQ": "Sky Quarry",
+        "BTC-USD": "Bitcoin cryptocurrency",
+        "ETH-USD": "Ethereum crypto",
+        "XRP-USD": "Ripple XRP"
     }
     
     search_term = company_terms.get(ticker, f"{name} {ticker}")
@@ -750,46 +868,33 @@ async def build_nextgen_html(logger) -> str:
         if is_crypto:
             # ---- Enhanced crypto data handling ----
             rate_limiter.pace_call("coingecko_prices", min_interval=1.2, max_per_minute=25)
-            dt, cl = _fetch_coingecko_crypto(sym, id_hint=e.get("coingecko_id"))
-            provider = "coingecko" if cl else None
             
-            if not cl and alpha_key:
-                rate_limiter.pace_call("alpha_vantage", min_interval=12.0, max_per_minute=5)
-                dt, cl = _fetch_alpha_vantage_crypto(sym, alpha_key)
-                provider = "alphavantage" if cl else None
-
-            if cl and len(cl) >= 7:  # Require minimum data
-                latest = cl[-1]
-                d1 = _nearest(cl, 1)
-                w1 = _nearest(cl, 7) 
-                m1 = _nearest(cl, 30)
-                
-                # Enhanced 52-week range calculation
-                window = cl[-365:] if len(cl) >= 365 else cl[-252:] if len(cl) >= 252 else cl
-                if len(window) >= 30:  # Require minimum for range calculation
-                    low52, high52 = float(min(window)), float(max(window))
-                    range_pct = _pos_in_range(latest, low52, high52)
-                else:
-                    low52, high52, range_pct = latest * 0.8, latest * 1.2, 50.0
-                
-                # YTD calculation with better date handling
-                pytd = None
-                if dt and len(dt) >= 30:
-                    current_year = datetime.now().year
-                    last_year = current_year - 1
-                    for i in range(len(dt)-1, -1, -1):
-                        if dt[i].year == last_year:
-                            pytd = _pct(latest, cl[i])
-                            break
-
+            # Try enhanced data fetching first
+            enhanced_data = _fetch_enhanced_crypto_data(sym, e.get("coingecko_id"), logger)
+            
+            if enhanced_data and enhanced_data.get("price"):
+                # Use enhanced data with all metrics
                 cryptos.append({
-                    "name": name, "ticker": sym, "price": latest,
-                    "pct_1d": _pct(latest, d1), "pct_1w": _pct(latest, w1),
-                    "pct_1m": _pct(latest, m1), "pct_ytd": pytd,
-                    "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
-                    "headline": headline, "source": h_source, "when": h_when,
+                    "name": name, 
+                    "ticker": sym, 
+                    "price": enhanced_data["price"],
+                    "pct_1d": enhanced_data.get("pct_1d"),
+                    "pct_1w": enhanced_data.get("pct_1w"),
+                    "pct_1m": enhanced_data.get("pct_1m"),
+                    "pct_ytd": enhanced_data.get("pct_ytd"),
+                    "low_52w": enhanced_data.get("low_52w"),
+                    "high_52w": enhanced_data.get("high_52w"),
+                    "range_pct": enhanced_data.get("range_pct", 50.0),
+                    "market_cap": enhanced_data.get("market_cap"),
+                    "volume_24h": enhanced_data.get("volume_24h"),
+                    "ath": enhanced_data.get("ath"),
+                    "ath_change": enhanced_data.get("ath_change"),
+                    "headline": headline,
+                    "source": h_source,
+                    "when": h_when,
                     "description": description,
-                    "next_event": None, "vol_x_avg": None,
+                    "next_event": None,
+                    "vol_x_avg": None,
                     "news_url": h_url,
                     "pr_url": {
                         "BTC-USD":"https://bitcoin.org",
@@ -798,24 +903,83 @@ async def build_nextgen_html(logger) -> str:
                         "XRP-USD":"https://ripple.com/insights/"
                     }.get(sym, _news_url_for(sym)),
                 })
-                logger.info(f"{sym}: crypto success - provider={provider}, bars={len(cl)}, price=${latest:.6f}")
-            else:
-                # Enhanced placeholder with realistic data
-                base_prices = {"BTC-USD": 45000, "ETH-USD": 2800, "DOGE-USD": 0.08, "XRP-USD": 0.50}
-                placeholder_price = base_prices.get(sym, 1.0)
                 
-                cryptos.append({
-                    "name": name, "ticker": sym, "price": placeholder_price,
-                    "pct_1d": None, "pct_1w": None, "pct_1m": None, "pct_ytd": None,
-                    "low_52w": placeholder_price * 0.5, "high_52w": placeholder_price * 2.0, 
-                    "range_pct": 50.0,
-                    "headline": headline, "source": h_source, "when": h_when,
-                    "description": description,
-                    "next_event": None, "vol_x_avg": None,
-                    "news_url": h_url, "pr_url": h_url,
-                })
-                failed_entities.append(f"{sym} (crypto data unavailable)")
-                logger.warning(f"{sym}: crypto data unavailable - using placeholder")
+                # Track movers
+                if enhanced_data.get("pct_1d") is not None:
+                    pct = enhanced_data["pct_1d"]
+                    if pct >= 0: up += 1
+                    else: down += 1
+                    movers.append({"ticker": sym, "pct": pct})
+                
+                logger.info(f"{sym}: crypto success - enhanced data, price=${enhanced_data['price']:.6f}")
+            else:
+                # Fallback to basic historical data
+                dt, cl = _fetch_coingecko_crypto(sym, id_hint=e.get("coingecko_id"))
+                provider = "coingecko" if cl else None
+                
+                if not cl and alpha_key:
+                    rate_limiter.pace_call("alpha_vantage", min_interval=12.0, max_per_minute=5)
+                    dt, cl = _fetch_alpha_vantage_crypto(sym, alpha_key)
+                    provider = "alphavantage" if cl else None
+
+                if cl and len(cl) >= 7:  # Require minimum data
+                    latest = cl[-1]
+                    d1 = _nearest(cl, 1)
+                    w1 = _nearest(cl, 7) 
+                    m1 = _nearest(cl, 30)
+                    
+                    # Enhanced 52-week range calculation
+                    window = cl[-365:] if len(cl) >= 365 else cl[-252:] if len(cl) >= 252 else cl
+                    if len(window) >= 30:  # Require minimum for range calculation
+                        low52, high52 = float(min(window)), float(max(window))
+                        range_pct = _pos_in_range(latest, low52, high52)
+                    else:
+                        low52, high52, range_pct = latest * 0.8, latest * 1.2, 50.0
+                    
+                    # YTD calculation with better date handling
+                    pytd = None
+                    if dt and len(dt) >= 30:
+                        current_year = datetime.now().year
+                        last_year = current_year - 1
+                        for i in range(len(dt)-1, -1, -1):
+                            if dt[i].year == last_year:
+                                pytd = _pct(latest, cl[i])
+                                break
+
+                    cryptos.append({
+                        "name": name, "ticker": sym, "price": latest,
+                        "pct_1d": _pct(latest, d1), "pct_1w": _pct(latest, w1),
+                        "pct_1m": _pct(latest, m1), "pct_ytd": pytd,
+                        "low_52w": low52, "high_52w": high52, "range_pct": range_pct,
+                        "headline": headline, "source": h_source, "when": h_when,
+                        "description": description,
+                        "next_event": None, "vol_x_avg": None,
+                        "news_url": h_url,
+                        "pr_url": {
+                            "BTC-USD":"https://bitcoin.org",
+                            "ETH-USD":"https://blog.ethereum.org", 
+                            "DOGE-USD":"https://blog.dogecoin.com",
+                            "XRP-USD":"https://ripple.com/insights/"
+                        }.get(sym, _news_url_for(sym)),
+                    })
+                    logger.info(f"{sym}: crypto success - provider={provider}, bars={len(cl)}, price=${latest:.6f}")
+                else:
+                    # Enhanced placeholder with realistic data
+                    base_prices = {"BTC-USD": 45000, "ETH-USD": 2800, "DOGE-USD": 0.08, "XRP-USD": 0.50}
+                    placeholder_price = base_prices.get(sym, 1.0)
+                    
+                    cryptos.append({
+                        "name": name, "ticker": sym, "price": placeholder_price,
+                        "pct_1d": None, "pct_1w": None, "pct_1m": None, "pct_ytd": None,
+                        "low_52w": placeholder_price * 0.5, "high_52w": placeholder_price * 2.0, 
+                        "range_pct": 50.0,
+                        "headline": headline, "source": h_source, "when": h_when,
+                        "description": description,
+                        "next_event": None, "vol_x_avg": None,
+                        "news_url": h_url, "pr_url": h_url,
+                    })
+                    failed_entities.append(f"{sym} (crypto data unavailable)")
+                    logger.warning(f"{sym}: crypto data unavailable - using placeholder")
             continue
 
         # ---- Enhanced equity data handling ----
