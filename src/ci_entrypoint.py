@@ -5,6 +5,7 @@ import inspect
 import logging
 import os
 import sys
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +22,70 @@ async def maybe_call(fn, *args, **kwargs):
     if inspect.isawaitable(result):
         return await result
     return result
+
+def extract_hero_headline(html):
+    """Extract hero headline from HTML comment."""
+    if not html:
+        return None
+    
+    # Look for the special comment
+    match = re.search(r'<!-- HERO_HEADLINE:(.*?) -->', html)
+    if match:
+        headline = match.group(1).strip()
+        # Unescape HTML entities
+        headline = headline.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+        return headline if headline else None
+    return None
+
+def generate_hero_based_subject(hero_headline=None):
+    """Generate subject line based on hero headline or fallback."""
+    today = datetime.now().strftime("%B %d")
+    current_hour = datetime.now().hour
+    
+    # Time-aware emoji
+    if 5 <= current_hour < 12:
+        time_emoji = "🌅"
+    elif 12 <= current_hour < 17:
+        time_emoji = "📊"
+    elif 17 <= current_hour < 21:
+        time_emoji = "🌆"
+    else:
+        time_emoji = "🌙"
+    
+    if hero_headline:
+        # Clean up the headline for subject use
+        hero_headline = hero_headline.strip()
+        
+        # If headline is too long, truncate intelligently
+        if len(hero_headline) > 60:
+            # Try to cut at a word boundary
+            hero_headline = hero_headline[:57].rsplit(' ', 1)[0] + "..."
+        
+        # Hero-based subject lines (no "Intelligence Digest" to avoid duplication)
+        subjects = [
+            f"{time_emoji} {hero_headline}",
+            f"{hero_headline} • {today}",
+            f"📰 {hero_headline}",
+            f"⚡ {hero_headline}",
+        ]
+        
+        # Pick one based on time of day
+        index = current_hour % len(subjects)
+        return subjects[index]
+    
+    else:
+        # Fallback subjects when no hero (avoid "Intelligence Digest" in subject)
+        subjects = [
+            f"{time_emoji} Market Update • {today}",
+            f"📊 Portfolio Performance • {today}",
+            f"⚡ Today's Market Signals",
+            f"🎯 Investment Updates • {today}",
+            f"💡 Market Intelligence • {today}",
+        ]
+        
+        # Rotate based on day
+        day_index = datetime.now().timetuple().tm_yday % len(subjects)
+        return subjects[day_index]
 
 async def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -92,37 +157,14 @@ async def main():
     if not html or not isinstance(html, str):
         raise RuntimeError("Could not build HTML (NextGen + fallbacks exhausted).")
 
-    # 🔥 NEW: Enhanced subject line generation
-    today = datetime.now().strftime("%B %d, %Y")
-    current_hour = datetime.now().hour
+    # Extract hero headline from HTML for subject generation
+    hero_headline = extract_hero_headline(html)
     
-    # Time-aware subject lines
-    if 5 <= current_hour < 12:
-        time_emoji = "🌅"
-        time_context = "Morning"
-    elif 12 <= current_hour < 17:
-        time_emoji = "☀️" 
-        time_context = "Midday"
-    elif 17 <= current_hour < 21:
-        time_emoji = "🌆"
-        time_context = "Evening"  
-    else:
-        time_emoji = "🌙"
-        time_context = "Late"
+    if hero_headline:
+        logger.info(f"Extracted hero headline: {hero_headline[:50]}...")
     
-    # Check for market signals in HTML to customize subject
-    alert_count = html.count('MAJOR') + html.count('SIGNIFICANT') if html else 0
-    if alert_count > 2:
-        urgency_emoji = "🔥"
-        urgency_text = f" • {alert_count} Key Signals"
-    elif alert_count > 0:
-        urgency_emoji = "⚡"
-        urgency_text = f" • {alert_count} Updates"
-    else:
-        urgency_emoji = time_emoji
-        urgency_text = ""
-        
-    subject = f"{urgency_emoji} Intelligence Digest • {today.split(',')[0]}{urgency_text}"
+    # Generate subject based on hero headline
+    subject = generate_hero_based_subject(hero_headline)
     
     logger.info(f"Generated subject: {subject}")
     logger.info(f"Email HTML length: {len(html)} characters")
