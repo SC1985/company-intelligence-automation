@@ -1185,14 +1185,30 @@ def _grid(cards):
     return "".join(rows)
 
 
-def _section_container(title: str, inner_html: str):
-    """Section container with hybrid colors."""
+def _section_container(title: str, inner_html: str, section_type: str = "default"):
+    """Section container with colored accents and subtle tints for distinction."""
     safe_title = escape(title)
+    
+    # Different accent colors and backgrounds for different sections
+    if section_type == "stocks":
+        border_color = "#3B82F6"  # Blue for stocks
+        bg_color = "#F8FAFC"      # Very subtle blue-gray tint
+        shadow_color = "rgba(59,130,246,0.08)"  # Blue-tinted shadow
+    elif section_type == "crypto":
+        border_color = "#8B5CF6"  # Purple for crypto
+        bg_color = "#FAF9FB"      # Very subtle purple-gray tint
+        shadow_color = "rgba(139,92,246,0.08)"  # Purple-tinted shadow
+    else:
+        border_color = "#E5E7EB"  # Default gray
+        bg_color = "#F9FAFB"
+        shadow_color = "rgba(0,0,0,0.04)"
+    
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;background:#F9FAFB;
+       style="border-collapse:collapse;background:{bg_color};
+              border-left:4px solid {border_color};
               border-radius:16px;margin:24px 0;
-              box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+              box-shadow:0 2px 8px {shadow_color};">
   <tr>
     <td style="padding:28px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -1365,10 +1381,10 @@ def render_email(summary, companies, cryptos=None):
     sections = []
     
     if company_cards:
-        sections.append(_section_container("Stocks & ETFs", _grid(company_cards)))
+        sections.append(_section_container("Stocks & ETFs", _grid(company_cards), "stocks"))
     
     if crypto_cards:
-        sections.append(_section_container("Digital Assets", _grid(crypto_cards)))
+        sections.append(_section_container("Digital Assets", _grid(crypto_cards), "crypto"))
     
     # Data quality footer
     quality_note = ""
