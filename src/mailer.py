@@ -1,1805 +1,530 @@
-def _select_hero(summary: dict, companies: list, cryptos: list):
-    """Legacy single hero selection - wrapper for compatibility."""
-    heroes = _select_heroes(summary, companies, cryptos, max_heroes=1)
-    return heroes[0] if heroes else None# src/render_email.py
-# Investment Edge - Enhanced Company and Crypto Cards
-# Fixed: Using hybrid color scheme that works in both dark and light modes
-# Fixed: Increased width of company modules on mobile only
-# Enhanced: Added momentum indicators, volume analysis, and crypto-specific metrics
-
-from datetime import datetime, timezone
-from html import escape
-from email.utils import parsedate_to_datetime
+import os
 import re
+import smtplib
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.header import Header
+from email.utils import make_msgid, formataddr
+import hashlib
+import socket
 
-try:
-    from zoneinfo import ZoneInfo
-except Exception:
-    ZoneInfo = None
+_SURROGATE_RE = re.compile(r'[\ud800-\udfff]')
 
-CENTRAL_TZ = ZoneInfo("America/Chicago") if ZoneInfo else None
+def _split_recipients(raw: str):
+    if not raw:
+        return []
+    parts = re.split(r"[;,\s]+", raw)
+    return [p.strip() for p in parts if p.strip()]
 
-
-# ---------- Enhanced time helpers ----------
-
-def _parse_to_dt(value):
-    """Enhanced datetime parsing with better error handling."""
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    s = str(value).strip()
-    if not s:
-        return None
-    
-    # Handle epoch seconds/milliseconds
-    if s.isdigit():
-        try:
-            iv = int(s)
-            if iv > 10_000_000_000:  # Likely milliseconds
-                iv //= 1000
-            return datetime.fromtimestamp(iv, tz=timezone.utc)
-        except (ValueError, OverflowError):
-            pass
-    
-    # Handle ISO 8601 formats
-    try:
-        s2 = s[:-1] + "+00:00" if s.endswith("Z") else s
-        dt = datetime.fromisoformat(s2)
-        if dt and dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except ValueError:
-        pass
-    
-    # RFC 2822 format
-    try:
-        dt = parsedate_to_datetime(s)
-        if dt and dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except (ValueError, TypeError):
-        pass
-    
-    # Date-only fallback
-    try:
-        if len(s) >= 10 and s[4:5] == "-" and s[7:8] == "-":
-            return datetime.strptime(s[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    except ValueError:
-        pass
-    
-    return None
-
-
-def _fmt_ct(value, force_time=None, tz_suffix_policy="auto"):
-    """Enhanced Central Time formatting with better error handling."""
-    dt = _parse_to_dt(value) or value
-    if not isinstance(dt, datetime):
-        return str(value)
-    
-    try:
-        dtc = dt.astimezone(CENTRAL_TZ) if CENTRAL_TZ else dt
-    except (ValueError, OverflowError):
-        dtc = dt
-    
-    has_time = not (dtc.hour == 0 and dtc.minute == 0 and dtc.second == 0)
-    show_time = force_time if force_time is not None else has_time
-    
-    try:
-        out = dtc.strftime("%m/%d/%Y %H:%M") if show_time else dtc.strftime("%m/%d/%Y")
-    except (ValueError, OverflowError):
-        return str(value)
-    
-    if tz_suffix_policy == "always":
-        return out + " CST"
-    if tz_suffix_policy == "auto" and show_time:
-        return out + " CST"
-    return out
-
-
-# ---------- Enhanced visual helpers ----------
-
-def _safe_float(x, default=None):
-    """Enhanced float conversion with better validation."""
-    if x is None:
-        return default
-    try:
-        val = float(x)
-        # Filter out obvious bad data
-        if val != val:  # NaN check
-            return default
-        if abs(val) > 1e10:  # Unreasonably large
-            return default
-        return val
-    except (ValueError, TypeError, OverflowError):
-        return default
-
-
-def _chip(label: str, value):
-    """Performance chip with hybrid colors that work in both modes."""
-    v = _safe_float(value, None)
-    
-    if v is None:
-        # Neutral gray that works in both modes
-        bg = "#6B7280"
-        color = "#FFFFFF"
-        sign = ""
-        txt = "--"
-    else:
-        if v >= 0:
-            # Green that is visible in both modes
-            bg = "#10B981"
-            color = "#FFFFFF"
-            sign = "▲"
-        else:
-            # Red that is visible in both modes
-            bg = "#EF4444"
-            color = "#FFFFFF"
-            sign = "▼"
-        txt = f"{abs(v):.1f}%"
-    
-    safe_label = escape(label)
-    
-    return (f'<span class="chip" style="background:{bg};color:{color};'
-            f'padding:5px 12px;border-radius:12px;font-size:12px;font-weight:700;'
-            f'margin:2px 6px 4px 0;display:inline-block;'
-            f'box-shadow:0 2px 6px rgba(0,0,0,0.15);white-space:nowrap;'
-            f'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;"'
-            f'>{safe_label} {sign} {txt}</span>')
-
-
-def _button(label: str, url: str, style="primary"):
-    """Button with hybrid colors."""
-    safe_label = escape(label)
-    href = escape(url or "#")
-    
-    if style == "primary":
-        bg = "#4B5563"
-        color = "#FFFFFF"
-    else:  # secondary
-        bg = "#9CA3AF"
-        color = "#FFFFFF"
-    
-    return (f'<table role="presentation" cellpadding="0" cellspacing="0" style="display:inline-block;margin-right:8px;margin-bottom:4px;">'
-            f'<tr><td class="btn" style="background:{bg};color:{color};'
-            f'border-radius:10px;font-size:13px;font-weight:600;padding:10px 16px;'
-            f'box-shadow:0 2px 6px rgba(0,0,0,0.15);'
-            f'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
-            f'<a href="{href}" target="_blank" rel="noopener noreferrer" '
-            f'style="color:{color};text-decoration:none;display:block;">'
-            f'{safe_label} →</a></td></tr></table>')
-
-
-def _range_bar(pos: float, low: float, high: float):
-    """52-week range bar with hybrid colors."""
-    pct = max(0.0, min(100.0, _safe_float(pos, 0.0)))
-    left = f"{pct:.1f}%"
-    right = f"{100 - pct:.1f}%"
-    
-    low_v = _safe_float(low, 0.0) or 0.0
-    high_v = _safe_float(high, 0.0) or 0.0
-    current_v = low_v + (high_v - low_v) * (pct / 100.0) if high_v > low_v else low_v
-    
-    # Position-based marker colors
-    if pct < 25:
-        marker_color = "#EF4444"  # Red
-        marker_label = "Low"
-    elif pct > 75:  
-        marker_color = "#10B981"  # Green
-        marker_label = "High"
-    else:
-        marker_color = "#3B82F6"  # Blue
-        marker_label = "Mid"
-    
-    # Neutral gray track that works in both modes
-    track_bg = "#E5E7EB"
-    
-    # Track
-    track = (
-        f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
-        f'style="border-collapse:collapse;border-radius:8px;'
-        f'background:{track_bg};height:10px;overflow:hidden;'
-        f'min-width:200px;box-shadow:inset 0 1px 2px rgba(0,0,0,0.1);">'
-        f'<tr>'
-        f'<td style="width:{left};background:{track_bg};height:10px;padding:0;">&nbsp;</td>'
-        f'<td style="width:10px;background:{marker_color};height:10px;padding:0;">&nbsp;</td>'
-        f'<td style="width:{right};background:{track_bg};height:10px;padding:0;">&nbsp;</td>'
-        f'</tr></table>'
-    )
-    
-    # Caption
-    caption = (f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:6px;">'
-               f'<tr>'
-               f'<td class="range-label" style="font-size:11px;color:#6B7280;text-align:left;font-weight:500;">Low ${low_v:.2f}</td>'
-               f'<td class="range-current" style="font-size:12px;color:{marker_color};font-weight:700;text-align:center;">'
-               f'${current_v:.2f}</td>'
-               f'<td class="range-label" style="font-size:11px;color:#6B7280;text-align:right;font-weight:500;">High ${high_v:.2f}</td>'
-               f'</tr></table>')
-    
-    return (f'<div style="margin:14px 0 10px 0;">'
-            f'<div class="range-title" style="font-size:12px;color:#374151;margin-bottom:6px;font-weight:600;">'
-            f'52-Week Range</div>'
-            + track + caption + '</div>')
-
-
-def calculate_momentum_score(pct_1d, pct_1w, pct_1m):
-    """Calculate momentum score based on multiple timeframes."""
-    score = 0
-    if pct_1d and pct_1d > 0: score += 1
-    if pct_1w and pct_1w > 0: score += 2
-    if pct_1m and pct_1m > 0: score += 3
-    
-    if score >= 5:
-        return "Strong Momentum 💪", "#10B981"
-    elif score >= 3:
-        return "Building Strength 📈", "#3B82F6"
-    elif score <= 1:
-        return "Losing Steam 📉", "#EF4444"
-    else:
-        return "Neutral Trend ➡️", "#6B7280"
-
-
-def _belongs_to_company(c: dict, headline: str) -> bool:
-    """Enhanced company-headline matching with better tokenization."""
-    if not c or not headline:
-        return False
-    
-    name = str(c.get("name") or "").lower()
-    ticker = str(c.get("ticker") or c.get("symbol") or "").lower()
-    
-    base_tokens = set()
-    if name:
-        tokens = re.split(r"[\s&,\.-]+", name)
-        for tok in tokens:
-            if len(tok) > 2 and tok not in ("inc", "ltd", "corp", "llc", "the", "and"):
-                base_tokens.add(tok)
-    
-    if ticker and len(ticker) > 1:
-        base_tokens.add(ticker)
-    
-    # Special handling for crypto
-    if ticker.endswith("-usd"):
-        base_name = ticker.replace("-usd", "")
-        if len(base_name) > 2:
-            base_tokens.add(base_name)
-    
-    h_lower = headline.lower()
-    
-    # Check for exact matches with word boundaries
-    for token in base_tokens:
-        if token and re.search(rf'\b{re.escape(token)}\b', h_lower):
-            return True
-    
-    return False
-
-
-# ---------- Enhanced hero content parsing ----------
-
-def _strip_tags(html: str) -> str:
-    """Enhanced HTML tag stripping with better whitespace handling."""
-    if not html:
+def _mask_local(local: str):
+    if not local:
         return ""
-    
-    # Remove HTML tags
-    text = re.sub(r'<[^>]+>', ' ', html)
-    # Clean up whitespace
-    text = re.sub(r'\s+', ' ', text)
-    # Remove common HTML entities
-    text = text.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-    
-    return text.strip()
+    if len(local) <= 3:
+        return "*" * len(local)
+    return local[:2] + "***" + local[-1:]
 
+def _mask_email(addr: str):
+    if not addr or "@" not in addr:
+        return "***"
+    local, domain = addr.split("@", 1)
+    return f"{_mask_local(local)}@{domain}"
 
-def _first_paragraph(hero: dict, title: str = "") -> str:
-    """Enhanced paragraph extraction with better content prioritization."""
-    if not hero:
-        return ""
+def _clean_subject(s: str) -> str:
+    """Enhanced subject line cleaning with better character handling."""
+    s = (s or "").replace("\r", " ").replace("\n", " ")
+    s = " ".join(s.split())
+    s = _SURROGATE_RE.sub("", s)
+    # Remove problematic characters that might trigger spam filters
+    s = re.sub(r'[^\w\s\-\.\(\)\[\]!?,&$€£¥₹•→←↑↓★☆⭐🔥⚡📊📈💡🎯🌅☀️🌆🌙]+', ' ', s)
+    return s.strip()
+
+def _generate_enhanced_subject() -> str:
+    """Generate sophisticated, engagement-optimized subject lines."""
+    now = datetime.now()
+    current_hour = now.hour
+    day_of_week = now.strftime("%A")
+    date_formatted = now.strftime("%m/%d")
     
-    title_words = set(re.findall(r'\w+', (title or "").lower()))
+    # Time-aware context
+    if 5 <= current_hour < 12:
+        time_emoji = "🌅"
+        time_context = "Morning"
+        urgency_level = "medium"
+    elif 12 <= current_hour < 17:
+        time_emoji = "📊"
+        time_context = "Midday"
+        urgency_level = "high"
+    elif 17 <= current_hour < 21:
+        time_emoji = "🌆"
+        time_context = "Evening"
+        urgency_level = "medium"
+    else:
+        time_emoji = "🌙"
+        time_context = "Late"
+        urgency_level = "low"
     
-    # Priority order of fields to check
-    content_fields = [
-        # HTML content fields (highest priority)
-        ("body_html", "content_html", "article_html", "summary_html"),
-        # Structured content
-        ("paragraphs", "content_paragraphs", "sections"),
-        # Text fields
-        ("first_paragraph", "lede", "lead", "dek", "abstract"),
-        ("description", "summary", "excerpt", "content", "body"),
-        ("snippet", "preview", "preview_text", "text")
+    # Enhanced subject templates with psychological triggers
+    subject_templates = [
+        # Action-oriented
+        f"{time_emoji} Intelligence Alert • {date_formatted} Market Signals",
+        f"⚡ Breaking: {day_of_week} Portfolio Intelligence • {date_formatted}",
+        f"🔥 {time_context} Brief • Critical Updates & Market Pulse",
+        
+        # Value-focused  
+        f"💡 Strategic Intelligence • {date_formatted} Investment Insights",
+        f"🎯 Portfolio Digest • {day_of_week} Performance & News",
+        f"📈 Market Intelligence • {time_context} Edition {date_formatted}",
+        
+        # Urgency-driven
+        f"⚡ LIVE: {time_context} Market Pulse • Key Movements & Signals",
+        f"🚀 Intelligence Update • {date_formatted} Strategic Opportunities",
+        
+        # Professional
+        f"📊 Executive Brief • {day_of_week} {time_context} Intelligence",
+        f"💼 Strategic Update • {date_formatted} Portfolio & Market Analysis"
     ]
     
-    for field_group in content_fields:
-        for field in field_group:
-            content = hero.get(field)
-            if not content:
-                continue
-            
-            # Handle different content types
-            if isinstance(content, (list, tuple)):
-                for item in content:
-                    text = _strip_tags(str(item))
-                    if text and len(text) > 20:
-                        # Check for title overlap
-                        text_words = set(re.findall(r'\w+', text.lower()))
-                        overlap = len(title_words.intersection(text_words))
-                        if overlap < len(title_words) * 0.7:  # Less than 70% overlap
-                            return text
+    # Select based on day and urgency
+    base_index = now.timetuple().tm_yday % len(subject_templates)
+    
+    # Adjust for urgency level
+    if urgency_level == "high":
+        # Prefer action-oriented subjects during peak hours
+        urgent_subjects = [s for s in subject_templates if any(word in s for word in ["Alert", "Breaking", "LIVE", "Critical"])]
+        if urgent_subjects:
+            return urgent_subjects[base_index % len(urgent_subjects)]
+    
+    return subject_templates[base_index]
+
+def _extract_hero_content(html: str) -> dict:
+    """Enhanced hero content extraction with multiple fallback strategies."""
+    if not html:
+        return {"title": "", "description": "", "source": ""}
+    
+    hero_content = {"title": "", "description": "", "source": ""}
+    
+    # Strategy 1: Look for hero container patterns from render_email.py
+    hero_patterns = [
+        # Main hero container
+        r'<table[^>]*background[^>]*linear-gradient[^>]*>.*?<td[^>]*padding[^>]*>.*?<div[^>]*font-weight:700[^>]*font-size:24px[^>]*>(.*?)</div>(.*?)</td>.*?</table>',
+        
+        # Alternative hero patterns
+        r'<div[^>]*class="hero[^"]*"[^>]*>(.*?)</div>',
+        r'<div[^>]*background[^>]*#111827[^>]*>.*?<div[^>]*font-size:2[24]px[^>]*>(.*?)</div>(.*?)</div>',
+    ]
+    
+    for pattern in hero_patterns:
+        matches = re.finditer(pattern, html, re.S | re.I)
+        for match in matches:
+            # Extract title
+            title_html = match.group(1)
+            title_link_match = re.search(r'<a[^>]*>(.*?)</a>', title_html, re.S | re.I)
+            if title_link_match:
+                hero_content["title"] = re.sub(r'<[^>]+>', '', title_link_match.group(1)).strip()
             else:
-                # HTML content
-                if field.endswith('_html'):
-                    # Extract paragraphs from HTML
-                    paras = re.findall(r'<p[^>]*>(.*?)</p>', str(content), re.I | re.S)
-                    for para in paras:
-                        text = _strip_tags(para)
-                        if text and len(text) > 15:
-                            text_words = set(re.findall(r'\w+', text.lower()))
-                            overlap = len(title_words.intersection(text_words))
-                            if overlap < len(title_words) * 0.7:
-                                return text
+                hero_content["title"] = re.sub(r'<[^>]+>', '', title_html).strip()
+            
+            # Extract description from remaining content
+            if len(match.groups()) > 1:
+                remaining_content = match.group(2)
+                # Look for description in div tags
+                desc_match = re.search(r'<div[^>]*color[^>]*#d1d5db[^>]*>(.*?)</div>', remaining_content, re.S | re.I)
+                if desc_match:
+                    hero_content["description"] = re.sub(r'<[^>]+>', '', desc_match.group(1)).strip()
                 
-                # Plain text content
-                text = _strip_tags(str(content))
-                if not text or len(text) < 15:
-                    continue
-                
-                # Split into sentences/paragraphs
-                segments = re.split(r'[.!?]\s+|\n\n+', text)
-                for segment in segments:
-                    segment = segment.strip()
-                    if len(segment) > 20:
-                        segment_words = set(re.findall(r'\w+', segment.lower()))
-                        overlap = len(title_words.intersection(segment_words))
-                        if overlap < len(title_words) * 0.7:
-                            return segment
+                # Look for source information
+                source_match = re.search(r'<span[^>]*font-weight:500[^>]*>(.*?)</span>', remaining_content, re.S | re.I)
+                if source_match:
+                    hero_content["source"] = re.sub(r'<[^>]+>', '', source_match.group(1)).strip()
+            
+            if hero_content["title"] and len(hero_content["title"]) > 10:
+                break
     
-    return ""
-
-
-def _select_hero(summary: dict, companies: list, cryptos: list):
-    """Legacy single hero selection - wrapper for compatibility."""
-    heroes = _select_heroes(summary, companies, cryptos, max_heroes=1)
-    return heroes[0] if heroes else None
-
-
-def _select_heroes(summary: dict, companies: list, cryptos: list, max_heroes: int = 3):
-    """Select up to 3 breaking news articles for hero section."""
-    heroes = []
-    
-    # Check for explicit hero in summary first
-    if isinstance(summary, dict):
-        hero_candidates = [
-            summary.get("hero"),
-            summary.get("market_hero"),
-            summary.get("market"),
-            summary.get("lead_story")
+    # Strategy 2: Look for any prominent headlines in the content
+    if not hero_content["title"]:
+        headline_patterns = [
+            r'<h[12][^>]*>(.*?)</h[12]>',
+            r'<div[^>]*font-size:2[0-9]px[^>]*font-weight:[67]00[^>]*>(.*?)</div>',
+            r'<a[^>]*style="[^"]*font-size:[2-9][0-9]px[^"]*"[^>]*>(.*?)</a>',
         ]
         
-        for cand in hero_candidates:
-            if isinstance(cand, dict) and cand.get("title"):
-                # Validate hero has meaningful content
-                if (cand.get("description") or cand.get("body") or 
-                    cand.get("content") or cand.get("first_paragraph")):
-                    heroes.append(cand)
-                    if len(heroes) >= max_heroes:
-                        return heroes
-    
-    
-    # Enhanced fallback: gather multiple breaking news articles
-    all_entities = (companies or []) + (cryptos or [])
-    
-    breaking_candidates = []  # For breaking news
-    general_candidates = []   # For backup articles
-    
-    # Breaking news keywords (higher priority)
-    breaking_keywords = {
-        "urgent": ["breaking", "just in", "alert", "exclusive", "developing"],
-        "major_event": ["announces", "launches", "unveils", "reveals", "reports", "surges", "plunges", "crashes", "soars"],
-        "earnings": ["earnings", "revenue", "profit", "beat", "miss", "guidance"],
-        "deals": ["acquisition", "merger", "buyout", "partnership", "deal"],
-        "regulatory": ["sec", "fda", "approval", "investigation", "lawsuit", "ruling"]
-    }
-    
-    # General interest keywords for backup
-    general_keywords = {
-        "analysis": ["analysis", "outlook", "forecast", "prediction", "expects"],
-        "market": ["market", "stocks", "trading", "investors", "wall street"],
-        "sector": ["tech", "technology", "ai", "crypto", "energy", "healthcare"],
-        "guidance": ["strategy", "plans", "future", "roadmap", "vision"]
-    }
-    
-    # Lower priority commentary keywords
-    commentary_keywords = ["could", "might", "may", "what to expect", "preview", "review"]
-    
-    for entity in all_entities:
-        headline = entity.get("headline", "")
-        if not headline:
-            continue
-        
-        breaking_score = 0
-        general_score = 0
-        headline_lower = headline.lower()
-        
-        # Score for breaking news
-        for category, keywords in breaking_keywords.items():
-            for keyword in keywords:
-                if keyword in headline_lower:
-                    if category == "urgent":
-                        breaking_score += 25
-                    elif category == "major_event":
-                        breaking_score += 20
-                    elif category == "earnings":
-                        breaking_score += 18
-                    elif category == "deals":
-                        breaking_score += 18
-                    else:
-                        breaking_score += 15
-        
-        # Score for general interest (backup)
-        for category, keywords in general_keywords.items():
-            for keyword in keywords:
-                if keyword in headline_lower:
-                    if category == "analysis":
-                        general_score += 8
-                    elif category == "market":
-                        general_score += 10
-                    elif category == "sector":
-                        general_score += 9
-                    else:
-                        general_score += 7
-        
-        # Penalize pure commentary for breaking news
-        for keyword in commentary_keywords:
-            if keyword in headline_lower:
-                breaking_score -= 10
-                general_score -= 3
-        
-        # Boost for recency (applies to both)
-        recency_boost = 0
-        if entity.get("when"):
-            try:
-                pub_date = _parse_to_dt(entity.get("when"))
-                if pub_date:
-                    hours_ago = (datetime.now(timezone.utc) - pub_date).total_seconds() / 3600
-                    if hours_ago < 2:
-                        recency_boost = 20  # Very recent
-                    elif hours_ago < 6:
-                        recency_boost = 15
-                    elif hours_ago < 12:
-                        recency_boost = 10
-                    elif hours_ago < 24:
-                        recency_boost = 5
-            except:
-                pass
-        
-        breaking_score += recency_boost
-        general_score += recency_boost
-        
-        # Boost for quality content
-        description = entity.get("description", "")
-        if description and len(description) > 50:
-            breaking_score += 5
-            general_score += 5
-        
-        # Include company name for context
-        entity["company_name"] = entity.get("name", "")
-        
-        # Add to appropriate candidate list
-        if breaking_score > 15:  # Higher threshold for breaking news
-            breaking_candidates.append((breaking_score, entity))
-        
-        if general_score > 5:  # Lower threshold for general articles
-            general_candidates.append((general_score, entity))
-    
-    # Sort candidates by score
-    breaking_candidates.sort(reverse=True, key=lambda x: x[0])
-    general_candidates.sort(reverse=True, key=lambda x: x[0])
-    
-    # Collect up to max_heroes articles
-    for score, article in breaking_candidates:
-        if len(heroes) >= max_heroes:
-            break
-        
-        # Avoid duplicate companies in heroes
-        company_name = article.get("company_name", "")
-        if not any(h.get("company_name") == company_name for h in heroes if company_name):
-            heroes.append({
-                "title": article.get("headline"),
-                "url": article.get("news_url", ""),
-                "source": article.get("source", ""),
-                "when": article.get("when"),
-                "body": article.get("description", ""),
-                "description": article.get("description", ""),
-                "company_name": company_name,
-                "is_breaking": True
-            })
-    
-    # Fill remaining slots with general articles if needed
-    for score, article in general_candidates:
-        if len(heroes) >= max_heroes:
-            break
-        
-        company_name = article.get("company_name", "")
-        if not any(h.get("company_name") == company_name for h in heroes if company_name):
-            heroes.append({
-                "title": article.get("headline"),
-                "url": article.get("news_url", ""),
-                "source": article.get("source", ""),
-                "when": article.get("when"),
-                "body": article.get("description", ""),
-                "description": article.get("description", ""),
-                "company_name": company_name,
-                "is_breaking": False
-            })
-    
-    return heroes
-
-
-def _select_mover_story(companies: list, cryptos: list):
-    """Legacy single mover selection - wrapper for compatibility."""
-    movers = _select_mover_stories(companies, cryptos, max_movers=1)
-    return movers[0] if movers else None
-
-
-def _select_mover_stories(companies: list, cryptos: list, max_movers: int = 2):
-    """Select the top 2 biggest movers for the mover stories section."""
-    all_entities = (companies or []) + (cryptos or [])
-    
-    # Find all movers with headlines
-    movers = []
-    
-    for entity in all_entities:
-        # Get 1-day percentage change
-        pct_1d = entity.get("pct_1d")
-        if pct_1d is None:
-            continue
-            
-        abs_move = abs(pct_1d)
-        
-        # Must have a headline to be a story
-        headline = entity.get("headline", "")
-        if not headline:
-            continue
-            
-        # Track all movers
-        if abs_move > 0.5:  # At least 0.5% move
-            movers.append({
-                "entity": entity,
-                "abs_move": abs_move,
-                "pct": pct_1d
-            })
-    
-    # Sort by absolute movement
-    movers.sort(reverse=True, key=lambda x: x["abs_move"])
-    
-    # Return up to max_movers stories
-    mover_stories = []
-    for mover in movers[:max_movers]:
-        entity = mover["entity"]
-        name = entity.get("name", "")
-        ticker = entity.get("ticker", "")
-        pct = mover["pct"]
-        direction = "up" if pct > 0 else "down"
-        arrow = "📈" if pct > 0 else "📉"
-        
-        mover_stories.append({
-            "title": f"{arrow} {name} {direction} {abs(pct):.1f}% - {entity.get('headline', '')}",
-            "url": entity.get("news_url", ""),
-            "source": entity.get("source", ""),
-            "when": entity.get("when"),
-            "description": entity.get("description", ""),
-            "ticker": ticker,
-            "pct_change": pct,
-            "price": entity.get("price")
-        })
-    
-    return mover_stories
-
-
-def _render_hero(hero: dict) -> str:
-    """Legacy single hero rendering - wrapper for compatibility."""
-    if hero:
-        return _render_heroes([hero])
-    return ""
-
-
-def _render_heroes(heroes: list) -> str:
-    """Render up to 3 hero articles in a clean layout."""
-    if not heroes:
-        return ""
-    
-    heroes_html = ""
-    
-    for i, hero in enumerate(heroes):
-        if not hero or not hero.get("title"):
-            continue
-        
-        title = (hero.get("title") or "").strip()
-        url = hero.get("url") or "#"
-        source = hero.get("source") or ""
-        when = _fmt_ct(hero.get("when"), force_time=False, tz_suffix_policy="never") if hero.get("when") else ""
-        company_name = hero.get("company_name", "")
-        is_breaking = hero.get("is_breaking", False)
-        
-        # Label based on article type and position
-        if i == 0:
-            if is_breaking:
-                label_html = '''<span style="color:#DC2626;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">● BREAKING NEWS</span><br>'''
-            else:
-                label_html = '''<span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">TOP STORY</span><br>'''
-        else:
-            if is_breaking:
-                label_html = '''<span style="color:#DC2626;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">● ALSO BREAKING</span><br>'''
-            else:
-                label_html = '''<span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">MORE NEWS</span><br>'''
-        
-        # Description
-        description = (hero.get("description") or hero.get("body") or "").strip()
-        if not description and i == 0:  # Only try to extract for first article
-            description = _first_paragraph(hero, title=title)
-        
-        if description and len(description) > 180:
-            sentences = re.split(r'[.!?]\s+', description)
-            truncated = ""
-            for sentence in sentences:
-                if len(truncated + sentence) <= 160:
-                    truncated += sentence + ". "
-                else:
+        for pattern in headline_patterns:
+            matches = re.finditer(pattern, html, re.S | re.I)
+            for match in matches:
+                title_candidate = re.sub(r'<[^>]+>', '', match.group(1)).strip()
+                # Skip generic titles
+                if (title_candidate and 
+                    len(title_candidate) > 15 and 
+                    len(title_candidate) < 200 and
+                    'intelligence digest' not in title_candidate.lower() and
+                    not title_candidate.isdigit()):
+                    hero_content["title"] = title_candidate
                     break
-            description = truncated.strip() if truncated else description[:177] + "..."
-        
-        # Body HTML
-        body_html = ""
-        if description:
-            body_html = f'''
-            <tr><td style="padding-top:12px;font-size:14px;line-height:1.5;
-                         color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-                {escape(description)}
-            </td></tr>'''
-        
-        # Metadata
-        meta_parts = []
-        if company_name:
-            meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(company_name)}</span>')
-        if source:
-            meta_parts.append(f'<span style="color:#6B7280;">{escape(source)}</span>')
-        if when:
-            meta_parts.append(f'<span style="color:#6B7280;">{escape(when)}</span>')
-        
-        meta_html = ""
-        if meta_parts:
-            meta_html = f'''
-            <tr><td style="padding-top:12px;font-size:12px;color:#6B7280;">
-                {" • ".join(meta_parts)}
-            </td></tr>'''
-        
-        # Determine font size based on position
-        title_size = "20px" if i == 0 else "18px"
-        
-        # Add to heroes HTML
-        heroes_html += f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;
-              background:#FFFFFF;
-              border:1px solid #E5E7EB;
-              border-radius:16px;margin:20px 0;
-              box-shadow:0 4px 12px rgba(0,0,0,0.08);">
-  <tr>
-    <td style="padding:18px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="font-weight:700;font-size:{title_size};line-height:1.3;color:#111827;
-                     font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-          <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
-            {label_html}
-            {escape(title)}
-          </a>
-        </td></tr>
-        {body_html}
-        {meta_html}
-      </table>
-    </td>
-  </tr>
-</table>
-"""
+            if hero_content["title"]:
+                break
     
-    return heroes_html
-
-
-def _render_mover_story(mover: dict) -> str:
-    """Legacy single mover rendering - wrapper for compatibility."""
-    if mover:
-        return _render_mover_stories([mover])
-    return ""
-
-
-def _render_mover_stories(movers: list) -> str:
-    """Render up to 2 mover stories."""
-    if not movers:
-        return ""
+    # Strategy 3: Extract description from content near the title
+    if hero_content["title"] and not hero_content["description"]:
+        # Look for content after the title
+        title_escaped = re.escape(hero_content["title"])
+        content_after_title = re.search(
+            rf'{title_escaped}.*?<div[^>]*>(.*?)</div>',
+            html, re.S | re.I
+        )
+        if content_after_title:
+            desc_candidate = re.sub(r'<[^>]+>', '', content_after_title.group(1)).strip()
+            if desc_candidate and len(desc_candidate) > 20:
+                hero_content["description"] = desc_candidate[:300]  # Limit length
     
-    movers_html = ""
+    # Clean up extracted content
+    for key in hero_content:
+        if hero_content[key]:
+            # Clean HTML entities
+            hero_content[key] = (hero_content[key]
+                                .replace('&amp;', '&')
+                                .replace('&lt;', '<')
+                                .replace('&gt;', '>')
+                                .replace('&nbsp;', ' ')
+                                .strip())
     
-    for i, mover in enumerate(movers):
-        if not mover or not mover.get("title"):
-            continue
-        
-        title = (mover.get("title") or "").strip()
-        url = mover.get("url") or "#"
-        source = mover.get("source") or ""
-        when = _fmt_ct(mover.get("when"), force_time=False, tz_suffix_policy="never") if mover.get("when") else ""
-        ticker = mover.get("ticker", "")
-        pct_change = mover.get("pct_change", 0)
-        price = mover.get("price")
-        
-        # Label based on position
-        if i == 0:
-            label_text = "TOP MOVER"
-        else:
-            label_text = "ALSO MOVING"
-        
-        # Description
-        description = (mover.get("description") or "").strip()
-        if description and len(description) > 180:
-            sentences = re.split(r'[.!?]\s+', description)
-            truncated = ""
-            for sentence in sentences:
-                if len(truncated + sentence) <= 160:
-                    truncated += sentence + ". "
-                else:
-                    break
-            description = truncated.strip() if truncated else description[:177] + "..."
-        
-        # Price and change display
-        price_display = ""
-        if price:
-            color = "#10B981" if pct_change > 0 else "#EF4444"
-            arrow = "▲" if pct_change > 0 else "▼"
-            price_display = f'''
-            <span style="font-size:18px;font-weight:700;color:{color};margin-left:12px;">
-                {arrow} ${price:.2f} ({pct_change:+.1f}%)
-            </span>'''
-        
-        # Body HTML
-        body_html = ""
-        if description:
-            body_html = f'''
-            <tr><td style="padding-top:12px;font-size:14px;line-height:1.5;
-                         color:#374151;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-                {escape(description)}
-            </td></tr>'''
-        
-        # Metadata
-        meta_parts = []
-        if ticker:
-            meta_parts.append(f'<span style="font-weight:600;color:#7C3AED;">{escape(ticker)}</span>')
-        if source:
-            meta_parts.append(f'<span style="color:#6B7280;">{escape(source)}</span>')
-        if when:
-            meta_parts.append(f'<span style="color:#6B7280;">{escape(when)}</span>')
-        
-        meta_html = ""
-        if meta_parts:
-            meta_html = f'''
-            <tr><td style="padding-top:12px;font-size:12px;color:#6B7280;">
-                {" • ".join(meta_parts)}
-            </td></tr>'''
-        
-        # Font size based on position
-        title_size = "20px" if i == 0 else "18px"
-        
-        # Mover story container
-        movers_html += f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;
-              background:#FFFFFF;
-              border:1px solid #E5E7EB;
-              border-radius:16px;margin:20px 0;
-              box-shadow:0 4px 12px rgba(0,0,0,0.08);">
-  <tr>
-    <td style="padding:18px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="font-weight:700;font-size:{title_size};line-height:1.3;color:#111827;
-                     font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">
-          <a href="{escape(url)}" style="color:#111827;text-decoration:none;">
-            <span style="color:#6B7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">{label_text}</span><br>
-            {escape(title.replace("📈 ", "").replace("📉 ", ""))}
-            {price_display}
-          </a>
-        </td></tr>
-        {body_html}
-        {meta_html}
-      </table>
-    </td>
-  </tr>
-</table>
-"""
-    
-    return movers_html
+    return hero_content
 
-
-# ---------- Enhanced card system ----------
-
-def _build_card(c):
-    """Enhanced card building with momentum indicators and volume analysis."""
-    name = c.get("name") or c.get("ticker") or c.get("symbol") or "Unknown"
-    ticker = str(c.get("ticker") or c.get("symbol") or "")
-    is_crypto = ticker.endswith("-USD") or (str(c.get("asset_class") or "").lower() == "crypto")
-
-    # For crypto, use enhanced crypto card builder
-    if is_crypto:
-        return _build_crypto_card(c)
-
-    # Price formatting for stocks
-    price_v = _safe_float(c.get("price"), None)
-    if price_v is None:
-        price_fmt = '<span style="color:#9CA3AF;">--</span>'
-    else:
-        price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
-
-    # Performance chips
-    chips_line1 = _chip("1D", c.get("pct_1d")) + _chip("1W", c.get("pct_1w"))
-    chips_line2 = _chip("1M", c.get("pct_1m")) + _chip("YTD", c.get("pct_ytd"))
-    
-    chips = f'''
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;">
-        <tr><td style="line-height:1.6;padding-bottom:6px;">{chips_line1}</td></tr>
-        <tr><td style="line-height:1.6;">{chips_line2}</td></tr>
-    </table>'''
-
-    # Momentum indicator
-    momentum_text, momentum_color = calculate_momentum_score(
-        c.get("pct_1d"), c.get("pct_1w"), c.get("pct_1m")
-    )
-    momentum_html = f'''
-    <tr><td style="padding-bottom:8px;">
-        <span style="color:{momentum_color};font-size:13px;font-weight:600;">
-            {momentum_text}
-        </span>
-    </td></tr>'''
-
-    # Volume indicator
-    volume_html = ""
-    vol_multiplier = _safe_float(c.get("vol_x_avg"), None)
-    if vol_multiplier is not None:
-        if vol_multiplier > 2.0:
-            volume_html = f'''
-            <tr><td style="padding-bottom:8px;">
-                <span style="color:#F59E0B;font-size:13px;font-weight:600;">
-                    🔥 Volume: {vol_multiplier:.1f}× average
-                </span>
-            </td></tr>'''
-        elif vol_multiplier > 1.5:
-            volume_html = f'''
-            <tr><td style="padding-bottom:8px;">
-                <span style="color:#3B82F6;font-size:13px;font-weight:600;">
-                    📊 Volume: {vol_multiplier:.1f}× average
-                </span>
-            </td></tr>'''
-
-    # News bullet
-    bullets = []
-    headline = c.get("headline")
-    source = c.get("source")
-    when_fmt = _fmt_ct(c.get("when"), force_time=False, tz_suffix_policy="never") if c.get("when") else None
-
-    if headline and _belongs_to_company(c, headline):
-        # Truncate long headlines
-        display_headline = headline[:100] + "..." if len(headline) > 100 else headline
-        
-        if source and when_fmt:
-            bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({source}, {when_fmt})</span>')
-        elif source:
-            bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({source})</span>')
-        elif when_fmt:
-            bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({when_fmt})</span>')
-        else:
-            bullets.append(f"★ {display_headline}")
-    else:
-        company_name = name.replace(" Inc.", "").replace(" Corporation", "").strip()
-        bullets.append(f'★ <span style="color:#6B7280;">Latest {company_name} coverage — see News</span>')
-
-    # Additional context bullets
-    next_event = c.get("next_event")
-    if next_event:
-        event_date = _fmt_ct(next_event, force_time=False, tz_suffix_policy="never")
-        if event_date:
-            bullets.append(f'<span style="color:#7C3AED;">📅 Next: {event_date}</span>')
-
-    # Earnings date if available
-    earnings_date = c.get("earnings_date")
-    if earnings_date:
-        earnings_fmt = _fmt_ct(earnings_date, force_time=False, tz_suffix_policy="never")
-        if earnings_fmt:
-            bullets.append(f'<span style="color:#10B981;">📈 Earnings: {earnings_fmt}</span>')
-
-    # Bullets HTML
-    bullets_html = ""
-    for i, bullet in enumerate(bullets):
-        if i == 0:  # Main news item
-            bullets_html += f'''
-            <tr><td class="bullet-main" style="padding-bottom:10px;
-                          display:-webkit-box;-webkit-box-orient:vertical;
-                          -webkit-line-clamp:3;overflow:hidden;text-overflow:ellipsis;
-                          line-height:1.5;color:#374151;font-size:14px;font-weight:500;">
-                {bullet}
-            </td></tr>'''
-        else:  # Secondary items
-            bullets_html += f'''
-            <tr><td class="bullet-secondary" style="padding-bottom:6px;font-size:12px;line-height:1.4;color:#6B7280;">
-                {bullet}
-            </td></tr>'''
-
-    # Range bar
-    range_html = _range_bar(
-        _safe_float(c.get("range_pct"), 50.0),
-        _safe_float(c.get("low_52w"), 0.0),
-        _safe_float(c.get("high_52w"), 0.0)
-    )
-
-    # Action buttons
-    news_url = c.get("news_url") or f"https://finance.yahoo.com/quote/{escape(ticker)}/news"
-    pr_url = c.get("pr_url") or f"https://finance.yahoo.com/quote/{escape(ticker)}/press-releases"
-    
-    ctas = f'''
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="border-top:1px solid #E5E7EB;padding-top:14px;">
-            {_button("News", news_url, "primary")}
-            {_button("Press", pr_url, "secondary")}
-        </td></tr>
-    </table>'''
-
-    # Card with light background and blue left border for stocks
-    return f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;margin:0 0 12px;
-              background:#FFFFFF;
-              border:1px solid #E5E7EB;
-              border-left:3px solid #93C5FD;
-              border-radius:14px;
-              box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
-  <tr>
-    <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <!-- Header -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;
-                         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
-                         padding-bottom:4px;">{escape(str(name))}</td></tr>
-            <tr><td>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td class="ticker-text" style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
-                  <td class="price-cell" style="text-align:right;font-size:16px;">{price_fmt}</td>
-                </tr>
-              </table>
-            </td></tr>
-          </table>
-        </td></tr>
-        
-        <!-- Performance chips -->
-        <tr><td>{chips}</td></tr>
-        
-        <!-- Momentum and Volume indicators -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            {momentum_html}
-            {volume_html}
-          </table>
-        </td></tr>
-        
-        <!-- 52-week range -->  
-        <tr><td>{range_html}</td></tr>
-        
-        <!-- News and events -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
-            {bullets_html}
-          </table>
-        </td></tr>
-        
-        <!-- Action buttons -->
-        <tr><td>{ctas}</td></tr>
-      </table>
-    </td>
-  </tr>
-</table>
-"""
-
-
-def _build_crypto_card(c):
-    """Enhanced crypto card with specific metrics."""
-    name = c.get("name") or c.get("ticker") or c.get("symbol") or "Unknown"
-    ticker = str(c.get("ticker") or c.get("symbol") or "")
-    
-    # Crypto-specific price formatting
-    price_v = _safe_float(c.get("price"), None)
-    if price_v is None:
-        price_fmt = '<span style="color:#9CA3AF;">--</span>'
-    else:
-        if price_v >= 1000:
-            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.0f}</span>'
-        elif price_v >= 1:
-            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:,.2f}</span>'
-        elif price_v >= 0.01:
-            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:.4f}</span>'
-        else:
-            price_fmt = f'<span class="price-text" style="color:#111827;font-weight:700;">${price_v:.8f}</span>'
-
-    # Performance chips
-    chips_line1 = _chip("1D", c.get("pct_1d")) + _chip("1W", c.get("pct_1w"))
-    chips_line2 = _chip("1M", c.get("pct_1m")) + _chip("YTD", c.get("pct_ytd"))
-    
-    chips = f'''
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;">
-        <tr><td style="line-height:1.6;padding-bottom:6px;">{chips_line1}</td></tr>
-        <tr><td style="line-height:1.6;">{chips_line2}</td></tr>
-    </table>'''
-
-    # Momentum indicator
-    momentum_text, momentum_color = calculate_momentum_score(
-        c.get("pct_1d"), c.get("pct_1w"), c.get("pct_1m")
-    )
-    momentum_html = f'''
-    <tr><td style="padding-bottom:8px;">
-        <span style="color:{momentum_color};font-size:13px;font-weight:600;">
-            {momentum_text}
-        </span>
-    </td></tr>'''
-
-    # Market cap and volume indicators
-    market_cap = c.get("market_cap")
-    volume_24h = c.get("volume_24h")
-    
-    market_dominance_html = ""
-    if ticker == "BTC-USD":
-        market_dominance_html = '''
-        <tr><td style="padding-bottom:8px;">
-            <span style="color:#F59E0B;font-size:13px;font-weight:600;">
-                👑 Market Leader
-            </span>
-        </td></tr>'''
-    elif ticker == "ETH-USD":
-        market_dominance_html = '''
-        <tr><td style="padding-bottom:8px;">
-            <span style="color:#3B82F6;font-size:13px;font-weight:600;">
-                ⚡ Smart Contract Leader
-            </span>
-        </td></tr>'''
-    
-    # Volume indicator
-    volume_html = ""
-    if volume_24h:
-        if volume_24h > 1_000_000_000:
-            volume_html = f'''
-            <tr><td style="padding-bottom:8px;">
-                <span style="color:#3B82F6;font-size:13px;font-weight:600;">
-                    💎 ${volume_24h/1_000_000_000:.1f}B daily volume
-                </span>
-            </td></tr>'''
-        elif volume_24h > 1_000_000:
-            volume_html = f'''
-            <tr><td style="padding-bottom:8px;">
-                <span style="color:#6B7280;font-size:13px;font-weight:600;">
-                    💰 ${volume_24h/1_000_000:.1f}M daily volume
-                </span>
-            </td></tr>'''
-    
-    # ATH distance indicator
-    ath_change = c.get("ath_change")
-    ath_html = ""
-    if ath_change:
-        if ath_change > -10:
-            ath_html = f'''
-            <tr><td style="padding-bottom:8px;">
-                <span style="color:#10B981;font-size:13px;font-weight:600;">
-                    🎯 Near ATH ({ath_change:.1f}%)
-                </span>
-            </td></tr>'''
-        elif ath_change < -50:
-            ath_html = f'''
-            <tr><td style="padding-bottom:8px;">
-                <span style="color:#EF4444;font-size:13px;font-weight:600;">
-                    📉 {abs(ath_change):.0f}% from ATH
-                </span>
-            </td></tr>'''
-
-    # News bullet
-    bullets = []
-    headline = c.get("headline")
-    source = c.get("source")
-    when_fmt = _fmt_ct(c.get("when"), force_time=False, tz_suffix_policy="never") if c.get("when") else None
-
-    if headline and _belongs_to_company(c, headline):
-        # Truncate long headlines
-        display_headline = headline[:100] + "..." if len(headline) > 100 else headline
-        
-        if source and when_fmt:
-            bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({source}, {when_fmt})</span>')
-        elif source:
-            bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({source})</span>')
-        elif when_fmt:
-            bullets.append(f'★ {display_headline} <span style="color:#6B7280;">({when_fmt})</span>')
-        else:
-            bullets.append(f"★ {display_headline}")
-    else:
-        crypto_name = name.replace(" (Crypto)", "").strip()
-        bullets.append(f'★ <span style="color:#6B7280;">Latest {crypto_name} updates — see News</span>')
-
-    # Bullets HTML
-    bullets_html = ""
-    for i, bullet in enumerate(bullets):
-        if i == 0:  # Main news item
-            bullets_html += f'''
-            <tr><td class="bullet-main" style="padding-bottom:10px;
-                          display:-webkit-box;-webkit-box-orient:vertical;
-                          -webkit-line-clamp:3;overflow:hidden;text-overflow:ellipsis;
-                          line-height:1.5;color:#374151;font-size:14px;font-weight:500;">
-                {bullet}
-            </td></tr>'''
-
-    # Range bar
-    range_html = _range_bar(
-        _safe_float(c.get("range_pct"), 50.0),
-        _safe_float(c.get("low_52w"), 0.0),
-        _safe_float(c.get("high_52w"), 0.0)
-    )
-
-    # Action buttons
-    news_url = c.get("news_url") or f"https://finance.yahoo.com/quote/{escape(ticker)}/news"
-    
-    # Crypto-specific URLs
-    if ticker == "BTC-USD":
-        pr_url = "https://bitcoin.org/en/news"
-    elif ticker == "ETH-USD":
-        pr_url = "https://blog.ethereum.org"
-    elif ticker == "XRP-USD":
-        pr_url = "https://ripple.com/insights"
-    else:
-        pr_url = c.get("pr_url") or news_url
-    
-    ctas = f'''
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="border-top:1px solid #E5E7EB;padding-top:14px;">
-            {_button("News", news_url, "primary")}
-            {_button("Press", pr_url, "secondary")}
-        </td></tr>
-    </table>'''
-
-    # Card with same styling as company cards but with purple left border for crypto
-    return f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;margin:0 0 12px;
-              background:#FFFFFF;
-              border:1px solid #E5E7EB;
-              border-left:3px solid #C4B5FD;
-              border-radius:14px;
-              box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
-  <tr>
-    <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <!-- Header -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            <tr><td class="card-title" style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;
-                         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
-                         padding-bottom:4px;">{escape(str(name))}
-            </td></tr>
-            <tr><td>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td class="ticker-text" style="font-size:13px;color:#6B7280;font-weight:600;">({escape(ticker)})</td>
-                  <td class="price-cell" style="text-align:right;font-size:16px;">{price_fmt}</td>
-                </tr>
-              </table>
-            </td></tr>
-          </table>
-        </td></tr>
-        
-        <!-- Performance chips -->
-        <tr><td>{chips}</td></tr>
-        
-        <!-- Crypto-specific indicators -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            {momentum_html}
-            {market_dominance_html}
-            {volume_html}
-            {ath_html}
-          </table>
-        </td></tr>
-        
-        <!-- 52-week range -->  
-        <tr><td>{range_html}</td></tr>
-        
-        <!-- News -->
-        <tr><td>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
-            {bullets_html}
-          </table>
-        </td></tr>
-        
-        <!-- Action buttons -->
-        <tr><td>{ctas}</td></tr>
-      </table>
-    </td>
-  </tr>
-</table>
-"""
-
-
-def _grid(cards):
-    """Two-column grid that becomes single column on mobile."""
-    if not cards:
-        return ""
-    
-    rows = []
-    for i in range(0, len(cards), 2):
-        left = cards[i]
-        right = cards[i + 1] if i + 1 < len(cards) else ""
-        
-        if right:
-            row = f'''
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:8px;">
-  <tr>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-right:8px;">{left}</td>
-    <td class="stack-col" width="50%" style="vertical-align:top;padding-left:8px;">{right}</td>
-  </tr>
-</table>'''
-        else:
-            row = f'''
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:8px;">
-  <tr>
-    <td class="stack-col" style="vertical-align:top;margin:0 auto;">{left}</td>
-  </tr>
-</table>'''
-        
-        rows.append(row)
-    
-    return "".join(rows)
-
-
-def _section_container(title: str, inner_html: str, section_type: str = "default"):
-    """Section container with colored accents and subtle tints for distinction."""
-    safe_title = escape(title)
-    
-    # Different accent colors and backgrounds for different sections
-    if section_type == "stocks":
-        border_color = "#3B82F6"  # Blue for stocks
-        bg_color = "#F8FAFC"      # Very subtle blue-gray tint
-        shadow_color = "rgba(59,130,246,0.08)"  # Blue-tinted shadow
-    elif section_type == "crypto":
-        border_color = "#8B5CF6"  # Purple for crypto
-        bg_color = "#FAF9FB"      # Very subtle purple-gray tint
-        shadow_color = "rgba(139,92,246,0.08)"  # Purple-tinted shadow
-    else:
-        border_color = "#E5E7EB"  # Default gray
-        bg_color = "#F9FAFB"
-        shadow_color = "rgba(0,0,0,0.04)"
-    
-    return f"""
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;background:{bg_color};
-              border-left:4px solid {border_color};
-              border-radius:16px;margin:24px 0;
-              box-shadow:0 2px 8px {shadow_color};">
-  <tr>
-    <td style="padding:28px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        <tr><td class="section-title" style="font-weight:700;font-size:28px;color:#111827;
-                     font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;
-                     margin:0 0 20px 0;padding-bottom:16px;">
-          {safe_title}
-        </td></tr>
-        <tr><td>{inner_html}</td></tr>
-      </table>
-    </td>
-  </tr>
-</table>
-"""
-
-
-def _generate_enhanced_preview(heroes=None, market_summary=None) -> str:
-    """Generate compelling preview text from hero articles or market summary."""
-    
-    # First, try to use market summary if available
-    if market_summary:
-        up_count = market_summary.get("up_count", 0)
-        down_count = market_summary.get("down_count", 0)
-        
-        if up_count or down_count:
-            total = up_count + down_count
-            up_pct = (up_count / total * 100) if total > 0 else 0
-            
-            if up_pct >= 70:
-                return f"🟢 Strong Session • {up_count} up, {down_count} down"
-            elif up_pct >= 60:
-                return f"🟡 Positive Session • {up_count} up, {down_count} down"
-            elif up_pct >= 40:
-                return f"⚪ Mixed Session • {up_count} up, {down_count} down"
-            else:
-                return f"🔴 Weak Session • {up_count} up, {down_count} down"
-    
-    # If we have hero articles with description, use that as fallback
-    if heroes and len(heroes) > 0:
-        hero_obj = heroes[0]  # Use first hero
-        description = hero_obj.get("description") or hero_obj.get("body") or ""
-        if description:
-            # Clean and truncate for preview
-            preview = description.strip()
-            # Remove any HTML if present
-            preview = re.sub(r'<[^>]+>', '', preview)
-            # Clean up whitespace
-            preview = re.sub(r'\s+', ' ', preview)
-            
-            # Truncate intelligently for inbox preview (usually shows ~90-110 chars)
-            if len(preview) > 100:
-                # Try to cut at sentence boundary
-                sentences = re.split(r'[.!?]\s+', preview)
-                if sentences and len(sentences[0]) <= 100:
-                    return sentences[0] + "."
-                # Otherwise cut at word boundary
-                preview = preview[:97].rsplit(' ', 1)[0] + "..."
-            
-            return preview
-    
-    # Final fallback to market-focused previews
+def _generate_smart_preview(html: str) -> str:
+    """Generate intelligent preview text that maximizes email opens."""
     now = datetime.now()
     current_time = now.strftime("%H:%M")
-    day_name = now.strftime("%A")
     
-    preview_options = [
-        f"Top movers, breaking news & strategic signals across your portfolio at {current_time}",
-        f"Live performance data, sentiment analysis & key developments in your holdings", 
-        f"Real-time insights, news synthesis & momentum indicators for {day_name}",
-        f"Market movements, sector analysis & breaking news from your investments",
-        f"Performance metrics, news highlights & market opportunities • {current_time} update"
+    # Extract hero content using enhanced extraction
+    hero = _extract_hero_content(html)
+    
+    # Strategy 1: Use hero description if available and compelling
+    if hero["description"] and len(hero["description"]) > 30:
+        preview_base = hero["description"]
+        # Add context for engagement
+        if hero["source"]:
+            preview = f"{preview_base} • Source: {hero['source']} • Live at {current_time}"
+        else:
+            preview = f"{preview_base} • Intelligence update at {current_time}"
+        
+        return preview[:150] + "..." if len(preview) > 150 else preview
+    
+    # Strategy 2: Use hero title with context
+    if hero["title"] and len(hero["title"]) > 15:
+        context_suffixes = [
+            f"• Breaking analysis & portfolio insights at {current_time}",
+            f"• Market intelligence & strategic signals • Live {current_time}",
+            f"• Real-time data, news synthesis & investment opportunities",
+            f"• Performance metrics, sentiment analysis & key developments"
+        ]
+        
+        suffix_index = now.timetuple().tm_yday % len(context_suffixes)
+        preview = f"{hero['title']} {context_suffixes[suffix_index]}"
+        
+        return preview[:150] + "..." if len(preview) > 150 else preview
+    
+    # Strategy 3: Scan for meaningful content in cards
+    card_content = []
+    
+    # Look for company performance information
+    perf_patterns = [
+        r'(\w+)\s*\([A-Z]{2,5}\)[^<]*?(\+?\-?\d+\.\d+%)',
+        r'<span[^>]*>([^<]+)</span>[^<]*?(\+?\-?\d+\.\d+%)',
     ]
     
-    # Rotate based on day of year for consistency with variety
-    index = now.timetuple().tm_yday % len(preview_options)
-    return preview_options[index]
-
-
-# ---------- Main renderer with Investment Edge branding ----------
-
-def render_email(summary, companies, cryptos=None):
-    """Investment Edge email rendering with enhanced cards."""
+    for pattern in perf_patterns:
+        matches = re.finditer(pattern, html, re.I)
+        for match in matches:
+            company = match.group(1).strip()
+            perf = match.group(2)
+            if company and not company.isdigit() and len(company) > 2:
+                card_content.append(f"{company} {perf}")
+                if len(card_content) >= 3:
+                    break
     
-    # Entity processing
-    company_cards = []
-    crypto_cards = []
-
-    # Process companies
-    for c in companies or []:
-        ticker = str(c.get("ticker") or c.get("symbol") or "")
-        is_crypto = ticker.endswith("-USD") or (str(c.get("asset_class") or "").lower() == "crypto")
-        
-        if is_crypto:
-            crypto_cards.append(_build_crypto_card(c))
-        else:
-            company_cards.append(_build_card(c))
-
-    # Process explicit crypto list
-    if cryptos:
-        for cx in cryptos:
-            crypto_cards.append(_build_crypto_card(cx))
-
-    # Header metadata
-    summary = summary or {}
-    as_of = _fmt_ct(summary.get("as_of_ct"), force_time=True, tz_suffix_policy="always")
+    if card_content:
+        preview = f"Portfolio pulse: {', '.join(card_content[:3])} • Full analysis & news at {current_time}"
+        return preview[:150] + "..." if len(preview) > 150 else preview
     
-    # Data quality indicators
-    data_quality = summary.get("data_quality", {})
-    total_entities = data_quality.get("total_entities", len((companies or [])) + len((cryptos or [])))
-    successful_entities = data_quality.get("successful_entities", total_entities)
+    # Strategy 4: Market sentiment analysis
+    up_matches = len(re.findall(r'▲[^<]*?\+\d+\.\d+%', html))
+    down_matches = len(re.findall(r'▼[^<]*?\-\d+\.\d+%', html))
+    total_positions = up_matches + down_matches
     
-    # Market summary stats
-    up_count = summary.get("up_count", 0)
-    down_count = summary.get("down_count", 0)
-    
-    market_summary = ""
-    if up_count or down_count:
-        total = up_count + down_count
-        up_pct = (up_count / total * 100) if total > 0 else 0
-        
+    if total_positions > 0:
+        up_pct = (up_matches / total_positions) * 100
         if up_pct >= 70:
-            market_emoji = "🟢"
-            market_sentiment = "Strong"
+            sentiment = "Strong gains"
         elif up_pct >= 60:
-            market_emoji = "🟡"
-            market_sentiment = "Positive"
+            sentiment = "Positive session"
         elif up_pct >= 40:
-            market_emoji = "⚪"
-            market_sentiment = "Mixed"
+            sentiment = "Mixed performance"
         else:
-            market_emoji = "🔴"
-            market_sentiment = "Weak"
+            sentiment = "Market pressure"
         
-        market_summary = f'''
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-               class="market-summary" style="border-collapse:collapse;background:#F3F4F6;
-                      border-radius:12px;margin:14px 0;
-                      box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-          <tr><td style="padding:16px 20px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td class="market-emoji" style="font-size:18px;">{market_emoji}</td>
-                <td class="market-primary" style="color:#111827;font-weight:700;padding-left:10px;font-size:16px;">{market_sentiment} Session</td>
-                <td class="market-secondary" style="color:#6B7280;font-size:14px;text-align:right;font-weight:500;">
-                  {up_count} up • {down_count} down
-                </td>
-              </tr>
-            </table>
-          </td></tr>
-        </table>'''
-
-    # Hero selection and rendering - now up to 3 articles
-    heroes = _select_heroes(summary, companies or [], cryptos or [], max_heroes=3)
-    heroes_html = _render_heroes(heroes) if heroes else ""
+        preview = f"{sentiment} across portfolio • {up_matches} up, {down_matches} down • Intelligence & analysis {current_time}"
+        return preview[:150] + "..." if len(preview) > 150 else preview
     
-    # Mover stories selection and rendering - now up to 2 movers
-    mover_stories = _select_mover_stories(companies or [], cryptos or [], max_movers=2)
-    movers_html = _render_mover_stories(mover_stories) if mover_stories else ""
+    # Strategy 5: Fallback to engaging default
+    fallback_options = [
+        f"🔥 Live market intelligence • Performance tracking, news analysis & strategic insights • {current_time}",
+        f"⚡ Portfolio digest • Real-time data, breaking news & investment signals across your holdings",
+        f"💡 Strategic briefing • Market movements, sentiment analysis & opportunities • Updated {current_time}",
+        f"📊 Intelligence summary • Live performance metrics, news synthesis & key developments",
+    ]
     
-    # Extract first hero headline for mobile header AND for subject line
-    hero_headline = ""
-    hero_headline_for_subject = ""
-    if heroes and len(heroes) > 0 and heroes[0].get("title"):
-        hero_headline = heroes[0].get("title", "").strip()
-        hero_headline_for_subject = hero_headline  # Keep full length for subject
-        # Truncate if too long for header display
-        if len(hero_headline) > 80:
-            hero_headline = hero_headline[:77] + "..."
+    fallback_index = now.timetuple().tm_yday % len(fallback_options)
+    return fallback_options[fallback_index]
 
-    # Sections with conditional rendering
-    sections = []
+def _generate_message_id(sender_email: str) -> str:
+    """Generate unique, properly formatted Message-ID."""
+    timestamp = datetime.now().isoformat()
+    unique_str = f"{timestamp}-{os.getpid()}-{socket.gethostname()}"
+    hash_part = hashlib.md5(unique_str.encode()).hexdigest()[:12]
     
-    if company_cards:
-        sections.append(_section_container("Stocks & ETFs", _grid(company_cards), "stocks"))
+    if "@" in sender_email:
+        domain = sender_email.split("@")[1]
+    else:
+        domain = "localhost"
     
-    if crypto_cards:
-        sections.append(_section_container("Digital Assets", _grid(crypto_cards), "crypto"))
+    return f"<{hash_part}-{int(datetime.now().timestamp())}@{domain}>"
+
+def validate_env():
+    """Enhanced environment validation with better error messages."""
+    sender = os.getenv("SENDER_EMAIL")
+    sender_name = os.getenv("SENDER_NAME", "").strip()
+    reply_to = os.getenv("REPLY_TO", "").strip()
+    pwd = os.getenv("SENDER_PASSWORD")
+    recipients = _split_recipients(os.getenv("RECIPIENT_EMAILS", ""))
+    admin_emails = _split_recipients(os.getenv("ADMIN_EMAILS", ""))
+    copy_sender = os.getenv("COPY_SENDER", "false").lower() == "true"
+    smtp_debug = os.getenv("SMTP_DEBUG", "false").lower() == "true"
+
+    missing = []
+    if not sender:
+        missing.append("SENDER_EMAIL")
+    elif "@" not in sender:
+        missing.append("SENDER_EMAIL (invalid format)")
     
-    # Data quality footer
-    quality_note = ""
-    if total_entities > successful_entities:
-        failed_count = total_entities - successful_entities
-        quality_note = f'''
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-               style="border-collapse:collapse;margin-top:14px;padding:12px 16px;
-                      background:#FEF2F2;border-radius:10px;
-                      box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-          <tr><td style="color:#DC2626;font-size:13px;font-weight:600;">
-            ⚠️ {failed_count} of {total_entities} assets had data issues
-          </td></tr>
-        </table>'''
-
-    # Email preview - use market summary first, then hero articles if available
-    email_preview = _generate_enhanced_preview(heroes, summary)
-
-    # Minimal CSS for mobile responsiveness only
-    css = """
-<style>
-/* Desktop/default view */
-.mobile-title {
-  display: none !important;
-}
-.desktop-title {
-  display: block !important;
-}
-
-/* Mobile responsiveness with MUCH larger text to match desktop feel */
-@media only screen and (max-width: 640px) {
-  /* Show/hide titles based on screen size */
-  .mobile-title {
-    display: block !important;
-    font-size: 32px !important;
-    line-height: 1.2 !important;
-    font-weight: 700;
-    color: #111827;
-    margin: 0 0 10px 0;
-    letter-spacing: -0.5px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  }
-  .desktop-title {
-    display: none !important;
-  }
-  
-  .stack-col { 
-    display: block !important; 
-    width: 100% !important; 
-    max-width: 100% !important; 
-    padding-left: 0 !important; 
-    padding-right: 0 !important;
-    padding-bottom: 16px !important;
-  }
-  
-  /* REDUCED PADDING for wider company modules */
-  .outer-padding {
-    padding: 8px 2px !important;  /* Much less horizontal padding */
-  }
-  
-  .main-container {
-    padding: 16px 8px !important;  /* Less horizontal padding */
-  }
-  
-  .hero-container td {
-    padding: 18px 16px !important;  /* Matching mover story padding */
-  }
-  
-  .hero-padding {
-    padding: 18px 16px !important;  /* Ensure consistency */
-  }
-  
-  /* Section containers get MUCH less padding for wider cards */
-  .section-container td {
-    padding: 20px 8px !important;  /* Much less horizontal padding */
-  }
-  
-  .card-inner {
-    padding: 18px 16px !important;  /* Slightly less horizontal padding */
-  }
-  
-  .header-subtitle {
-    font-size: 17px !important;
-  }
-  
-  .section-title {
-    font-size: 36px !important;
-    line-height: 1.2 !important;
-  }
-  
-  /* Scale up all text significantly */
-  td {
-    font-size: 18px !important;
-  }
-  
-  .hero-title {
-    font-size: 28px !important;  /* Reduced from 32px to match mover */
-    line-height: 1.2 !important;
-  }
-  
-  .hero-body {
-    font-size: 16px !important;  /* Reduced to match mover */
-    line-height: 1.5 !important;
-  }
-  
-  .card-title {
-    font-size: 22px !important;
-    line-height: 1.2 !important;
-  }
-  
-  .price-cell {
-    font-size: 20px !important;
-  }
-  
-  .price-text {
-    font-size: 20px !important;
-  }
-  
-  .ticker-text {
-    font-size: 16px !important;
-  }
-  
-  .chip {
-    font-size: 15px !important;
-    padding: 8px 16px !important;
-    margin: 3px 8px 5px 0 !important;
-  }
-  
-  .bullet-main {
-    font-size: 18px !important;
-    line-height: 1.5 !important;
-  }
-  
-  .bullet-secondary {
-    font-size: 16px !important;
-    line-height: 1.4 !important;
-  }
-  
-  .btn {
-    font-size: 17px !important;
-    padding: 14px 22px !important;
-  }
-  
-  /* Range bar text */
-  .range-title {
-    font-size: 15px !important;
-  }
-  
-  .range-label {
-    font-size: 14px !important;
-  }
-  
-  .range-current {
-    font-size: 16px !important;
-  }
-  
-  /* Market summary */
-  .market-emoji {
-    font-size: 22px !important;
-  }
-  
-  .market-primary {
-    font-size: 19px !important;
-  }
-  
-  .market-secondary {
-    font-size: 16px !important;
-  }
-  
-  /* Footer text */
-  .footer-text {
-    font-size: 15px !important;
-  }
-}
-
-@media only screen and (max-width: 480px) {
-  /* Mobile title adjustments for smaller screens */
-  .mobile-title {
-    font-size: 28px !important;
-  }
-  
-  /* Even less padding for smaller screens */
-  .outer-padding {
-    padding: 6px 0px !important;  /* Almost no horizontal padding */
-  }
-  
-  .main-container {
-    padding: 14px 6px !important;  /* Very little horizontal padding */
-  }
-  
-  .section-container td {
-    padding: 18px 6px !important;  /* Very little horizontal padding */
-  }
-  
-  .card-inner {
-    padding: 16px 14px !important;  /* Less horizontal padding */
-  }
-  
-  .header-subtitle {
-    font-size: 16px !important;
-  }
-  
-  .section-title {
-    font-size: 32px !important;
-  }
-  
-  .hero-title {
-    font-size: 24px !important;  /* Reduced from 28px */
-  }
-  
-  .card-title {
-    font-size: 20px !important;
-  }
-  
-  .chip {
-    font-size: 14px !important;
-    padding: 7px 14px !important;
-  }
-  
-  .btn {
-    font-size: 16px !important;
-    padding: 12px 20px !important;
-  }
-}
-
-@media only screen and (max-width: 375px) {
-  /* Mobile title for smallest screens */
-  .mobile-title {
-    font-size: 24px !important;
-  }
-  
-  /* iPhone SE and smaller - maximize width */
-  .outer-padding {
-    padding: 4px 0px !important;  /* No horizontal padding */
-  }
-  
-  .main-container {
-    padding: 12px 4px !important;  /* Minimal horizontal padding */
-  }
-  
-  .section-container td {
-    padding: 16px 4px !important;  /* Minimal horizontal padding */
-  }
-  
-  .card-inner {
-    padding: 14px 12px !important;  /* Less horizontal padding */
-  }
-  
-  .section-title {
-    font-size: 30px !important;
-  }
-  
-  .hero-title {
-    font-size: 22px !important;  /* Reduced from 26px */
-  }
-  
-  .card-title {
-    font-size: 19px !important;
-  }
-}
-</style>
-"""
-
-    # HTML structure with Investment Edge branding
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <meta name="description" content="{escape(email_preview)}">
-    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
-    <title>Investment Edge</title>
-    <!-- HERO_HEADLINE:{escape(hero_headline_for_subject) if hero_headline_for_subject else ''} -->
-    {css}
-  </head>
-  <body style="margin:0;padding:0;background:#F7F8FA;color:#111827;
-               font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
+    if not pwd:
+        missing.append("SENDER_PASSWORD")
+    elif len(pwd) < 8:
+        missing.append("SENDER_PASSWORD (too short)")
     
-    <!-- Hidden preview text -->
-    <div style="display:none;font-size:1px;color:#F7F8FA;line-height:1px;
-               max-height:0px;max-width:0px;opacity:0;overflow:hidden;mso-hide:all;">
-      {escape(email_preview)}
-    </div>
+    if not recipients:
+        missing.append("RECIPIENT_EMAILS")
+    else:
+        # Validate email formats
+        invalid_recipients = [r for r in recipients if "@" not in r or "." not in r.split("@")[1]]
+        if invalid_recipients:
+            missing.append(f"RECIPIENT_EMAILS (invalid: {', '.join(invalid_recipients)})")
+
+    return {
+        "sender": sender,
+        "sender_name": sender_name,
+        "reply_to": reply_to,
+        "pwd": pwd,
+        "recipients": recipients,
+        "admin_emails": admin_emails,
+        "copy_sender": copy_sender,
+        "smtp_debug": smtp_debug,
+        "missing": missing
+    }
+
+def send_html_email(html: str, subject: str = None, logger=None) -> None:
+    """Enhanced email sending with better deliverability and error handling."""
+    cfg = validate_env()
+    missing = cfg["missing"]
+    if missing:
+        error_msg = f"Email configuration errors: {', '.join(missing)}"
+        if logger:
+            logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+    dry_run = os.getenv("DRY_RUN", "").lower() == "true"
+
+    # Enhanced subject line generation
+    if subject is None:
+        subject = _generate_enhanced_subject()
+    subject = _clean_subject(subject)
+
+    # Enhanced sender display name - CHANGED TO INVESTMENT EDGE
+    sender_display_name = cfg["sender_name"] or "Investment Edge"
+    sender_disp = formataddr((sender_display_name, cfg["sender"]))
+
+    # Enhanced logging with better information
+    masked_to = [_mask_email(r) for r in cfg["recipients"]]
+    masked_admins = [_mask_email(a) for a in cfg["admin_emails"]]
     
-    <!-- Main container -->
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-      <tr>
-        <td align="center" class="outer-padding" style="padding:12px 8px;background:#F7F8FA;">
-          <table role="presentation" width="640" cellpadding="0" cellspacing="0" 
-                 style="border-collapse:collapse;width:640px;max-width:100%;">
-            <tr>
-              <td class="main-container" style="background:#FFFFFF;
-                         border-radius:16px;
-                         padding:20px;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+    if logger:
+        logger.info(f"Email config - Recipients: {len(cfg['recipients'])}, "
+                   f"Admins: {len(cfg['admin_emails'])}, "
+                   f"Copy sender: {cfg['copy_sender']}, "
+                   f"Dry run: {dry_run}")
+
+    # Enhanced MIME message construction
+    msg = MIMEMultipart("alternative")
+    msg["From"] = sender_disp
+    msg["To"] = ", ".join(cfg["recipients"][:3])  # Limit visible recipients
+    if len(cfg["recipients"]) > 3:
+        msg["To"] += f", ... ({len(cfg['recipients']) - 3} more)"
+    
+    # Enhanced subject with better encoding
+    try:
+        msg["Subject"] = str(Header(subject, "utf-8"))
+    except UnicodeEncodeError:
+        # Fallback with ASCII-safe subject
+        safe_subject = re.sub(r'[^\x00-\x7F]+', ' ', subject).strip()
+        safe_subject = safe_subject or "Intelligence Digest"
+        msg["Subject"] = str(Header(safe_subject, "utf-8"))
+
+    if cfg["reply_to"]:
+        msg["Reply-To"] = cfg["reply_to"]
+
+    # Enhanced email headers for better deliverability
+    msg["Message-ID"] = _generate_message_id(cfg["sender"])
+    msg["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z") or datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
+    msg["X-Mailer"] = "Intelligence Digest Engine v3.0"
+    msg["X-Priority"] = "3"
+    msg["Importance"] = "Normal"
+    
+    # Anti-spam headers
+    msg["List-Unsubscribe"] = "<mailto:unsubscribe@example.com>"
+    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    msg["X-Auto-Response-Suppress"] = "OOF, DR, RN, NRN, AutoReply"
+    
+    # Content classification
+    msg["X-Content-Type"] = "Investment Intelligence"
+    msg["X-Content-Category"] = "Financial Newsletter"
+
+    # GitHub Actions metadata (if available)
+    github_metadata = {
+        "X-GitHub-Run-ID": os.getenv("GITHUB_RUN_ID", ""),
+        "X-GitHub-Run-Number": os.getenv("GITHUB_RUN_NUMBER", ""),
+        "X-GitHub-SHA": os.getenv("GITHUB_SHA", "")[:12],
+        "X-GitHub-Repository": os.getenv("GITHUB_REPOSITORY", ""),
+    }
+    
+    for header, value in github_metadata.items():
+        if value:
+            msg[header] = value
+
+    # Enhanced preview text extraction and injection
+    preview_text = _generate_smart_preview(html)
+    
+    if logger:
+        preview_sample = preview_text[:80] + "..." if len(preview_text) > 80 else preview_text
+        logger.info(f"Generated preview: '{preview_sample}'")
+
+    # Enhanced plain text version
+    text_alt = re.sub(r'<[^>]+>', ' ', html or "")
+    text_alt = re.sub(r'\s+', ' ', text_alt).strip()
+    
+    if not text_alt or len(text_alt) < 100:
+        # Create meaningful plain text fallback
+        text_alt = f"""
+INTELLIGENCE DIGEST
+
+{preview_text}
+
+This email contains your personalized Intelligence Digest with:
+• Real-time portfolio performance metrics
+• Breaking news and market analysis  
+• Strategic insights and investment signals
+• 52-week range tracking and momentum indicators
+
+For the full interactive experience with charts and enhanced formatting, 
+please view this email in an HTML-capable client.
+
+---
+Intelligence Digest • Engineered with Precision
+        """.strip()
+
+    # Enhanced HTML preprocessing
+    if html:
+        # Inject preview text if not already present
+        if "display:none" not in html and preview_text:
+            preview_div = f'''
+            <div style="display:none;font-size:1px;color:#0b0c10;line-height:1px;
+                       max-height:0px;max-width:0px;opacity:0;overflow:hidden;
+                       mso-hide:all;" aria-hidden="true">
+                {preview_text}
+            </div>'''
+            
+            # Insert after <body> tag
+            html = html.replace("<body", preview_div + "<body", 1)
+    
+    # Attach content with proper encoding
+    msg.attach(MIMEText(text_alt, "plain", "utf-8"))
+    msg.attach(MIMEText(html or "", "html", "utf-8"))
+
+    # Dry run handling
+    if dry_run:
+        if logger:
+            logger.info(f"[DRY_RUN] Email ready to send:")
+            logger.info(f"  Subject: '{subject}'")
+            logger.info(f"  Preview: '{preview_text[:100]}...'")
+            logger.info(f"  Recipients: {masked_to}")
+            logger.info(f"  Admins: {masked_admins}")
+            logger.info(f"  HTML size: {len(html)} chars")
+            logger.info(f"  Text size: {len(text_alt)} chars")
+        return
+
+    # Enhanced recipient list building
+    to_addrs = list(dict.fromkeys(cfg["recipients"]))  # Dedupe while preserving order
+    
+    if cfg["copy_sender"] and cfg["sender"] not in to_addrs:
+        to_addrs.append(cfg["sender"])
+    
+    for admin in cfg["admin_emails"]:
+        if admin not in to_addrs:
+            to_addrs.append(admin)
+
+    # Enhanced SMTP sending with better error handling
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            if cfg["smtp_debug"]:
+                server.set_debuglevel(1)
+            
+            # Enhanced connection setup
+            server.ehlo()
+            server.starttls()
+            server.ehlo()  # EHLO again after STARTTLS
+            
+            # Authentication with better error handling
+            try:
+                server.login(cfg["sender"], cfg["pwd"])
+            except smtplib.SMTPAuthenticationError as e:
+                raise RuntimeError(f"SMTP authentication failed: {e}") from e
+            except smtplib.SMTPException as e:
+                raise RuntimeError(f"SMTP login error: {e}") from e
+            
+            # Send message with delivery tracking
+            refused = server.sendmail(cfg["sender"], to_addrs, msg.as_string())
+            
+            # Enhanced logging
+            if logger:
+                masked_env = [_mask_email(x) for x in to_addrs]
+                logger.info(f"Email sent successfully:")
+                logger.info(f"  Subject: '{subject}'")
+                logger.info(f"  Recipients: {len(to_addrs)} addresses")
+                logger.info(f"  Preview: '{preview_text[:60]}...'")
                 
-                <!-- Header -->
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                  <tr><td style="text-align:center;">
-                    <div class="responsive-title" style="font-weight:700;font-size:42px;color:#111827;
-                                                        margin:0 0 10px 0;letter-spacing:-0.5px;
-                                                        font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
-                      Investment Edge
-                    </div>
-                    {f'<div class="header-subtitle" style="color:#6B7280;margin-bottom:16px;font-size:14px;font-weight:500;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
-                    {market_summary}
-                    {quality_note}
-                  </td></tr>
-                </table>
-
-                <!-- Breaking News section (up to 3 articles) -->
-                {heroes_html}
+                if refused:
+                    logger.warning(f"Some recipients were refused: {refused}")
+                else:
+                    logger.info("All recipients accepted by server")
+            
+            # Handle partial failures
+            if refused:
+                refused_addrs = list(refused.keys())
+                raise RuntimeError(f"SMTP refused {len(refused_addrs)} recipients: {refused_addrs}")
                 
-                <!-- Top Movers section (up to 2 movers) -->
-                {movers_html}
-
-                <!-- Content sections -->
-                {''.join(sections)}
-
-                <!-- Footer -->
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-                       style="border-top:1px solid #E5E7EB;margin-top:28px;">
-                  <tr><td class="footer-text" style="text-align:center;padding:24px 16px;color:#6B7280;font-size:13px;">
-                    <div style="margin-bottom:8px;font-weight:500;">
-                      You're receiving this because you subscribed to Investment Edge
-                    </div>
-                    <div style="color:#9CA3AF;font-weight:400;">
-                      Engineered with precision • Delivered with speed ⚡
-                    </div>
-                  </td></tr>
-                </table>
-
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>"""
-
-    return html
+    except smtplib.SMTPRecipientsRefused as e:
+        raise RuntimeError(f"All recipients were refused: {e}") from e
+    except smtplib.SMTPServerDisconnected as e:
+        raise RuntimeError(f"SMTP server disconnected: {e}") from e
+    except smtplib.SMTPException as e:
+        raise RuntimeError(f"SMTP error: {e}") from e
+    except Exception as e:
+        raise RuntimeError(f"Unexpected email error: {e}") from e
