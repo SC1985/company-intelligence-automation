@@ -1166,7 +1166,7 @@ def _build_crypto_card(c):
         </td></tr>
     </table>'''
 
-    # Card with same styling as company cards but with purple left border for crypto
+    # Card with light purple left border for crypto
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 12px;
