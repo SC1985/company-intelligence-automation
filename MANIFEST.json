@@ -1,7 +1,7 @@
 {
   ".github/workflows/daily-digest.yml": {
     "bytes": 1566,
-    "sha1": "run_generate_manifest_py_to_calculate"
+    "sha1": "pending"
   },
   "src/chartgen.py": {
     "bytes": 1311,
@@ -9,7 +9,7 @@
   },
   "src/render_email.py": {
     "bytes": 85000,
-    "sha1": "run_generate_manifest_py_to_calculate"
+    "sha1": "pending"
   },
   "src/nextgen_digest.py": {
     "bytes": 6373,
@@ -17,10 +17,10 @@
   },
   "src/ci_entrypoint.py": {
     "bytes": 5500,
-    "sha1": "run_generate_manifest_py_to_calculate"
+    "sha1": "pending"
   },
   "README_NEXTGEN.md": {
     "bytes": 619,
-    "sha1": "run_generate_manifest_py_to_calculate"
+    "sha1": "pending"
   }
 }
