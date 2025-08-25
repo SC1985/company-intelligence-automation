@@ -861,25 +861,26 @@ def render_email(summary, companies, cryptos=None):
     padding-bottom: 16px !important;
   }
   
-  /* Reduce padding on mobile for more content width */
+  /* REDUCED PADDING for wider company modules */
   .outer-padding {
-    padding: 8px 4px !important;
+    padding: 8px 2px !important;  /* Much less horizontal padding */
   }
   
   .main-container {
-    padding: 16px !important;
+    padding: 16px 8px !important;  /* Less horizontal padding */
   }
   
   .hero-container td {
-    padding: 20px !important;
+    padding: 20px 16px !important;  /* Slightly less horizontal padding */
   }
   
+  /* Section containers get MUCH less padding for wider cards */
   .section-container td {
-    padding: 20px !important;
+    padding: 20px 8px !important;  /* Much less horizontal padding */
   }
   
   .card-inner {
-    padding: 18px !important;
+    padding: 18px 16px !important;  /* Slightly less horizontal padding */
   }
   
   /* MUCH larger text sizes for desktop-like feel */
@@ -983,13 +984,21 @@ def render_email(summary, companies, cryptos=None):
 }
 
 @media only screen and (max-width: 480px) {
-  /* Keep large sizes even on very small screens */
+  /* Even less padding for smaller screens */
   .outer-padding {
-    padding: 6px 4px !important;
+    padding: 6px 0px !important;  /* Almost no horizontal padding */
   }
   
   .main-container {
-    padding: 14px !important;
+    padding: 14px 6px !important;  /* Very little horizontal padding */
+  }
+  
+  .section-container td {
+    padding: 18px 6px !important;  /* Very little horizontal padding */
+  }
+  
+  .card-inner {
+    padding: 16px 14px !important;  /* Less horizontal padding */
   }
   
   .responsive-title {
@@ -1024,7 +1033,23 @@ def render_email(summary, companies, cryptos=None):
 }
 
 @media only screen and (max-width: 375px) {
-  /* iPhone SE and smaller - still keep it large */
+  /* iPhone SE and smaller - maximize width */
+  .outer-padding {
+    padding: 4px 0px !important;  /* No horizontal padding */
+  }
+  
+  .main-container {
+    padding: 12px 4px !important;  /* Minimal horizontal padding */
+  }
+  
+  .section-container td {
+    padding: 16px 4px !important;  /* Minimal horizontal padding */
+  }
+  
+  .card-inner {
+    padding: 14px 12px !important;  /* Less horizontal padding */
+  }
+  
   .responsive-title {
     font-size: 40px !important;
   }
