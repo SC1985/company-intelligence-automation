@@ -1378,15 +1378,10 @@ def render_email(summary, companies, cryptos=None):
                 <!-- Header -->
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr><td style="text-align:center;">
-                    <!-- Desktop title (Intelligence Digest) -->
-                    <div class="desktop-title" style="font-weight:700;font-size:42px;color:#111827;
+                    <div class="responsive-title" style="font-weight:700;font-size:42px;color:#111827;
                                                         margin:0 0 10px 0;letter-spacing:-0.5px;
                                                         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
                       Intelligence Digest
-                    </div>
-                    <!-- Mobile title (Hero headline or fallback to Intelligence Digest) -->
-                    <div class="mobile-title" style="display:none;">
-                      {escape(hero_headline) if hero_headline else "Intelligence Digest"}
                     </div>
                     {f'<div class="header-subtitle" style="color:#6B7280;margin-bottom:16px;font-size:14px;font-weight:500;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
                     {market_summary}
