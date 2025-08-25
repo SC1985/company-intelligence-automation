@@ -1,26 +1,26 @@
 {
-  ".github/workflows/weekly-report.yml": {
-    "bytes": 3586,
-    "sha1": "c28cd326f697aa651603785906296f7f0c10ab24"
+  ".github/workflows/daily-digest.yml": {
+    "bytes": 1566,
+    "sha1": "run_generate_manifest_py_to_calculate"
   },
   "src/chartgen.py": {
     "bytes": 1311,
     "sha1": "edd75214b936240630328ff0d2c5285983fe6158"
   },
   "src/render_email.py": {
-    "bytes": 6488,
-    "sha1": "ab6ee8572aef7962c9b269cd1a7272f07e2de873"
+    "bytes": 85000,
+    "sha1": "run_generate_manifest_py_to_calculate"
   },
   "src/nextgen_digest.py": {
     "bytes": 6373,
     "sha1": "7e9657fad9b5c3b4091927317f3b941f6d1afd12"
   },
   "src/ci_entrypoint.py": {
-    "bytes": 4122,
-    "sha1": "49e8be07fcc5ce255b0e77aac73639ded43ba4fa"
+    "bytes": 5500,
+    "sha1": "run_generate_manifest_py_to_calculate"
   },
   "README_NEXTGEN.md": {
-    "bytes": 562,
-    "sha1": "2eab271ee2b10e5110d0f146e9ccc137bbb79e25"
+    "bytes": 619,
+    "sha1": "run_generate_manifest_py_to_calculate"
   }
 }
