@@ -1171,7 +1171,9 @@ def _build_crypto_card(c):
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 12px;
               background:#FFFFFF;
-              border:1px solid #E5E7EB;
+              border-top:1px solid #E5E7EB;
+              border-right:1px solid #E5E7EB;
+              border-bottom:1px solid #E5E7EB;
               border-left:3px solid #C4B5FD;
               border-radius:14px;
               box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
