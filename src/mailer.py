@@ -348,8 +348,8 @@ def send_html_email(html: str, subject: str = None, logger=None) -> None:
         subject = _generate_enhanced_subject()
     subject = _clean_subject(subject)
 
-    # Enhanced sender display name
-    sender_display_name = cfg["sender_name"] or "Intelligence Digest"
+    # Enhanced sender display name - CHANGED TO INVESTMENT EDGE
+    sender_display_name = cfg["sender_name"] or "Investment Edge"
     sender_disp = formataddr((sender_display_name, cfg["sender"]))
 
     # Enhanced logging with better information
