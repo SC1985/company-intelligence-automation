@@ -1,18 +1,24 @@
-placeholder
-# Next‑Gen Digest Patch (FULL)
+# Next‑Gen Daily Digest
 
-Investor-first layout:
-- Heat strip (1D) + top movers
-- Company cards with 1D/1W/1M/YTD chips (red/green), sparkline (inline PNG), 52-week range, 1 headline
+Daily investor intelligence with enhanced mobile experience:
+- Breaking news prioritization with fallback to market analysis
+- Top mover highlighting with live price changes
+- Company cards with 1D/1W/1M/YTD chips (red/green), 52-week range
+- Mobile-optimized with wider cards and premium typography
+- Smart subject lines using hero headlines
 
 ## Install
-Unzip at the repo root to create/overwrite:
-- `.github/workflows/weekly-report.yml`
+Place these files at the repo root:
+- `.github/workflows/daily-digest.yml` (renamed from weekly-report.yml)
 - `src/ci_entrypoint.py`
 - `src/nextgen_digest.py`
 - `src/render_email.py`
 - `src/chartgen.py`
 
-## Run
-Actions → “Executive Intelligence Brief (NextGen Dynamic)” → Run workflow.
+## Schedule
+Runs daily at 8am Central Time (CDT/CST adjusted)
+
+## Manual Run
+Actions → "Daily Intelligence Digest" → Run workflow
+
 The workflow sets `NEXTGEN_DIGEST=true`. If anything fails, it falls back automatically.
