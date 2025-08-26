@@ -6,7 +6,7 @@ on:
     # 8am CST = 2pm UTC (14:00) 
     # 8am CDT = 1pm UTC (13:00) during daylight saving
     # Using 13:00 UTC to account for CDT (most of the year)
-    - cron: "0 13 * * *"
+    - cron: "45 11 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
