@@ -6,6 +6,7 @@ def _select_hero(summary: dict, companies: list, cryptos: list):
 # Fixed: Using hybrid color scheme that works in both dark and light modes
 # Fixed: Increased width of company modules on mobile only
 # Enhanced: Added momentum indicators, volume analysis, and crypto-specific metrics
+# Updated: Added colored borders to cards for better visual distinction
 
 from datetime import datetime, timezone
 from html import escape
@@ -948,13 +949,12 @@ def _build_card(c):
         </td></tr>
     </table>'''
 
-    # Card with light background and blue left border for stocks
+    # Card with light blue border for stocks
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 12px;
               background:#FFFFFF;
-              border:1px solid #E5E7EB;
-              border-left:3px solid #93C5FD;
+              border:1px solid #93C5FD;
               border-radius:14px;
               box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
   <tr>
@@ -1166,15 +1166,12 @@ def _build_crypto_card(c):
         </td></tr>
     </table>'''
 
-    # Card with light purple left border for crypto
+    # Card with light purple border for crypto
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:0 0 12px;
               background:#FFFFFF;
-              border-top:1px solid #E5E7EB;
-              border-right:1px solid #E5E7EB;
-              border-bottom:1px solid #E5E7EB;
-              border-left:3px solid #C4B5FD;
+              border:1px solid #C4B5FD;
               border-radius:14px;
               box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
   <tr>
