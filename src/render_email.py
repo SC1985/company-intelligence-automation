@@ -951,8 +951,8 @@ def _build_card(c):
 
     # Card with blue border for stocks - using wrapper div for better email compatibility
     return f"""
-<div style="border:2px solid #60A5FA;border-radius:14px;margin:0 0 12px;
-           box-shadow:0 3px 10px rgba(96,165,250,0.25);background:#60A5FA;">
+<div style="border:2px solid #93C5FD;border-radius:14px;margin:0 0 12px;
+           box-shadow:0 2px 8px rgba(147,197,253,0.2);background:#93C5FD;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:separate;margin:0;
               background:#FFFFFF;
@@ -1169,8 +1169,8 @@ def _build_crypto_card(c):
 
     # Card with purple border for crypto - using wrapper div for better email compatibility
     return f"""
-<div style="border:2px solid #A78BFA;border-radius:14px;margin:0 0 12px;
-           box-shadow:0 3px 10px rgba(167,139,250,0.25);background:#A78BFA;">
+<div style="border:2px solid #C4B5FD;border-radius:14px;margin:0 0 12px;
+           box-shadow:0 2px 8px rgba(196,181,253,0.2);background:#C4B5FD;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:separate;margin:0;
               background:#FFFFFF;
