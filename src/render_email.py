@@ -949,14 +949,14 @@ def _build_card(c):
         </td></tr>
     </table>'''
 
-    # Card with light blue border for stocks
+    # Card with blue border for stocks - using wrapper div for better email compatibility
     return f"""
+<div style="border:2px solid #60A5FA;border-radius:14px;margin:0 0 12px;
+           box-shadow:0 3px 10px rgba(96,165,250,0.25);background:#60A5FA;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;margin:0 0 12px;
+       style="border-collapse:separate;margin:0;
               background:#FFFFFF;
-              border:1px solid #93C5FD;
-              border-radius:14px;
-              box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
+              border-radius:12px;overflow:hidden;">
   <tr>
     <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -1004,6 +1004,7 @@ def _build_card(c):
     </td>
   </tr>
 </table>
+</div>
 """
 
 
@@ -1166,14 +1167,14 @@ def _build_crypto_card(c):
         </td></tr>
     </table>'''
 
-    # Card with light purple border for crypto
+    # Card with purple border for crypto - using wrapper div for better email compatibility
     return f"""
+<div style="border:2px solid #A78BFA;border-radius:14px;margin:0 0 12px;
+           box-shadow:0 3px 10px rgba(167,139,250,0.25);background:#A78BFA;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="border-collapse:collapse;margin:0 0 12px;
+       style="border-collapse:separate;margin:0;
               background:#FFFFFF;
-              border:1px solid #C4B5FD;
-              border-radius:14px;
-              box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
+              border-radius:12px;overflow:hidden;">
   <tr>
     <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -1224,6 +1225,7 @@ def _build_crypto_card(c):
     </td>
   </tr>
 </table>
+</div>
 """
 
 
