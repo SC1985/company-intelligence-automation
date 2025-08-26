@@ -192,8 +192,8 @@ def _range_bar(pos: float, low: float, high: float):
         marker_color = "#3B82F6"  # Blue
         marker_label = "Mid"
     
-    # Neutral gray track that works in both modes
-    track_bg = "#E5E7EB"
+    # Neutral light gray track that works with white background
+    track_bg = "#F3F4F6"
     
     # Track
     track = (
@@ -681,10 +681,10 @@ def _render_heroes(heroes: list) -> str:
         heroes_html += f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;
-              background:#FFFFFF;
+              background:#FAFAFA;
               border:1px solid #E5E7EB;
               border-radius:16px;margin:20px 0;
-              box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+              box-shadow:0 2px 8px rgba(0,0,0,0.04);">
   <tr>
     <td style="padding:18px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -792,10 +792,10 @@ def _render_mover_stories(movers: list) -> str:
         movers_html += f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;
-              background:#FFFFFF;
+              background:#FAFAFA;
               border:1px solid #E5E7EB;
               border-radius:16px;margin:20px 0;
-              box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+              box-shadow:0 2px 8px rgba(0,0,0,0.04);">
   <tr>
     <td style="padding:18px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -951,12 +951,12 @@ def _build_card(c):
 
     # Card with blue border for stocks - using wrapper div for better email compatibility
     return f"""
-<div style="border:2px solid #93C5FD;border-radius:14px;margin:0 0 12px;
-           box-shadow:0 2px 8px rgba(147,197,253,0.2);background:#93C5FD;">
+<div style="border:1px solid #93C5FD;border-radius:14px;margin:0 0 12px;
+           box-shadow:0 2px 8px rgba(147,197,253,0.15);background:#93C5FD;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:separate;margin:0;
               background:#FFFFFF;
-              border-radius:12px;overflow:hidden;">
+              border-radius:13px;overflow:hidden;">
   <tr>
     <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -1169,12 +1169,12 @@ def _build_crypto_card(c):
 
     # Card with purple border for crypto - using wrapper div for better email compatibility
     return f"""
-<div style="border:2px solid #C4B5FD;border-radius:14px;margin:0 0 12px;
-           box-shadow:0 2px 8px rgba(196,181,253,0.2);background:#C4B5FD;">
+<div style="border:1px solid #C4B5FD;border-radius:14px;margin:0 0 12px;
+           box-shadow:0 2px 8px rgba(196,181,253,0.15);background:#C4B5FD;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:separate;margin:0;
               background:#FFFFFF;
-              border-radius:12px;overflow:hidden;">
+              border-radius:13px;overflow:hidden;">
   <tr>
     <td class="card-inner" style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -1264,26 +1264,26 @@ def _section_container(title: str, inner_html: str, section_type: str = "default
     """Section container with colored accents and subtle tints for distinction."""
     safe_title = escape(title)
     
-    # Different accent colors and backgrounds for different sections
+    # Different accent colors for different sections
     if section_type == "stocks":
         border_color = "#3B82F6"  # Blue for stocks
-        bg_color = "#F8FAFC"      # Very subtle blue-gray tint
-        shadow_color = "rgba(59,130,246,0.08)"  # Blue-tinted shadow
+        bg_color = "#FAFBFC"      # Very subtle blue-white tint
+        shadow_color = "rgba(59,130,246,0.06)"  # Blue-tinted shadow
     elif section_type == "crypto":
         border_color = "#8B5CF6"  # Purple for crypto
-        bg_color = "#FAF9FB"      # Very subtle purple-gray tint
-        shadow_color = "rgba(139,92,246,0.08)"  # Purple-tinted shadow
+        bg_color = "#FAFAFC"      # Very subtle purple-white tint
+        shadow_color = "rgba(139,92,246,0.06)"  # Purple-tinted shadow
     else:
         border_color = "#E5E7EB"  # Default gray
-        bg_color = "#F9FAFB"
-        shadow_color = "rgba(0,0,0,0.04)"
+        bg_color = "#FAFAFA"
+        shadow_color = "rgba(0,0,0,0.03)"
     
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;background:{bg_color};
               border-left:4px solid {border_color};
               border-radius:16px;margin:24px 0;
-              box-shadow:0 2px 8px {shadow_color};">
+              box-shadow:0 1px 6px {shadow_color};">
   <tr>
     <td style="padding:28px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -1419,9 +1419,9 @@ def render_email(summary, companies, cryptos=None):
         
         market_summary = f'''
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-               class="market-summary" style="border-collapse:collapse;background:#F3F4F6;
+               class="market-summary" style="border-collapse:collapse;background:#FAFAFA;
                       border-radius:12px;margin:14px 0;
-                      box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+                      box-shadow:0 1px 4px rgba(0,0,0,0.04);">
           <tr><td style="padding:16px 20px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
@@ -1469,8 +1469,8 @@ def render_email(summary, companies, cryptos=None):
         quality_note = f'''
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
                style="border-collapse:collapse;margin-top:14px;padding:12px 16px;
-                      background:#FEF2F2;border-radius:10px;
-                      box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                      background:#FEF8F8;border-radius:10px;
+                      box-shadow:0 1px 3px rgba(0,0,0,0.03);">
           <tr><td style="color:#DC2626;font-size:13px;font-weight:600;">
             ⚠️ {failed_count} of {total_entities} assets had data issues
           </td></tr>
@@ -1523,6 +1523,7 @@ def render_email(summary, companies, cryptos=None):
   
   .main-container {
     padding: 16px 8px !important;  /* Less horizontal padding */
+    background: #FFFFFF !important;
   }
   
   .hero-container td {
@@ -1645,10 +1646,12 @@ def render_email(summary, companies, cryptos=None):
   /* Even less padding for smaller screens */
   .outer-padding {
     padding: 6px 0px !important;  /* Almost no horizontal padding */
+    background: #FFFFFF !important;
   }
   
   .main-container {
     padding: 14px 6px !important;  /* Very little horizontal padding */
+    background: #FFFFFF !important;
   }
   
   .section-container td {
@@ -1695,10 +1698,12 @@ def render_email(summary, companies, cryptos=None):
   /* iPhone SE and smaller - maximize width */
   .outer-padding {
     padding: 4px 0px !important;  /* No horizontal padding */
+    background: #FFFFFF !important;
   }
   
   .main-container {
     padding: 12px 4px !important;  /* Minimal horizontal padding */
+    background: #FFFFFF !important;
   }
   
   .section-container td {
@@ -1738,65 +1743,68 @@ def render_email(summary, companies, cryptos=None):
     <!-- HERO_HEADLINE:{escape(hero_headline_for_subject) if hero_headline_for_subject else ''} -->
     {css}
   </head>
-  <body style="margin:0;padding:0;background:#F7F8FA;color:#111827;
+  <body style="margin:0;padding:0;background:#FFFFFF;color:#111827;
                font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
     
     <!-- Hidden preview text -->
-    <div style="display:none;font-size:1px;color:#F7F8FA;line-height:1px;
+    <div style="display:none;font-size:1px;color:#FFFFFF;line-height:1px;
                max-height:0px;max-width:0px;opacity:0;overflow:hidden;mso-hide:all;">
       {escape(email_preview)}
     </div>
     
-    <!-- Main container -->
+    <!-- Main container with border -->
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
       <tr>
-        <td align="center" class="outer-padding" style="padding:12px 8px;background:#F7F8FA;">
-          <table role="presentation" width="640" cellpadding="0" cellspacing="0" 
-                 style="border-collapse:collapse;width:640px;max-width:100%;">
-            <tr>
-              <td class="main-container" style="background:#FFFFFF;
-                         border-radius:16px;
-                         padding:20px;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
-                
-                <!-- Header -->
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                  <tr><td style="text-align:center;">
-                    <div class="responsive-title" style="font-weight:700;font-size:42px;color:#111827;
-                                                        margin:0 0 10px 0;letter-spacing:-0.5px;
-                                                        font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
-                      Investment Edge
-                    </div>
-                    {f'<div class="header-subtitle" style="color:#6B7280;margin-bottom:16px;font-size:14px;font-weight:500;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
-                    {market_summary}
-                    {quality_note}
-                  </td></tr>
-                </table>
+        <td align="center" class="outer-padding" style="padding:12px 8px;background:#FFFFFF;">
+          <div style="border:1px solid #E5E7EB;border-radius:20px;max-width:640px;
+                     box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+            <table role="presentation" width="640" cellpadding="0" cellspacing="0" 
+                   style="border-collapse:collapse;width:640px;max-width:100%;">
+              <tr>
+                <td class="main-container" style="background:#FFFFFF;
+                           border-radius:20px;
+                           padding:20px;">
+                  
+                  <!-- Header -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr><td style="text-align:center;">
+                      <div class="responsive-title" style="font-weight:700;font-size:42px;color:#111827;
+                                                          margin:0 0 10px 0;letter-spacing:-0.5px;
+                                                          font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
+                        Investment Edge
+                      </div>
+                      {f'<div class="header-subtitle" style="color:#6B7280;margin-bottom:16px;font-size:14px;font-weight:500;">📊 Data as of {escape(as_of)}</div>' if as_of else ''}
+                      {market_summary}
+                      {quality_note}
+                    </td></tr>
+                  </table>
 
-                <!-- Breaking News section (up to 3 articles) -->
-                {heroes_html}
-                
-                <!-- Top Movers section (up to 2 movers) -->
-                {movers_html}
+                  <!-- Breaking News section (up to 3 articles) -->
+                  {heroes_html}
+                  
+                  <!-- Top Movers section (up to 2 movers) -->
+                  {movers_html}
 
-                <!-- Content sections -->
-                {''.join(sections)}
+                  <!-- Content sections -->
+                  {''.join(sections)}
 
-                <!-- Footer -->
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-                       style="border-top:1px solid #E5E7EB;margin-top:28px;">
-                  <tr><td class="footer-text" style="text-align:center;padding:24px 16px;color:#6B7280;font-size:13px;">
-                    <div style="margin-bottom:8px;font-weight:500;">
-                      You're receiving this because you subscribed to Investment Edge
-                    </div>
-                    <div style="color:#9CA3AF;font-weight:400;">
-                      Engineered with precision • Delivered with speed ⚡
-                    </div>
-                  </td></tr>
-                </table>
+                  <!-- Footer -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                         style="border-top:1px solid #E5E7EB;margin-top:28px;">
+                    <tr><td class="footer-text" style="text-align:center;padding:24px 16px;color:#6B7280;font-size:13px;">
+                      <div style="margin-bottom:8px;font-weight:500;">
+                        You're receiving this because you subscribed to Investment Edge
+                      </div>
+                      <div style="color:#9CA3AF;font-weight:400;">
+                        Engineered with precision • Delivered with speed ⚡
+                      </div>
+                    </td></tr>
+                  </table>
 
-              </td>
-            </tr>
-          </table>
+                </td>
+              </tr>
+            </table>
+          </div>
         </td>
       </tr>
     </table>
