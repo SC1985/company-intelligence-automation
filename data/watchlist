@@ -1,0 +1,210 @@
+[
+  {
+    "comment": "=== ETFs & INDICES ===",
+    "symbol": "IWM",
+    "name": "iShares Russell 2000 ETF",
+    "asset_class": "etf",
+    "priority": "high",
+    "etf_type": "small_cap",
+    "investment_thesis": "Small-cap exposure for domestic growth opportunities",
+    "alert_thresholds": {
+      "price_change_percent": 3.0,
+      "volume_spike_multiplier": 2.0
+    }
+  },
+  {
+    "symbol": "QQQ",
+    "name": "Invesco QQQ Trust",
+    "asset_class": "etf",
+    "priority": "critical",
+    "etf_type": "tech_focused",
+    "investment_thesis": "Nasdaq-100 exposure for tech sector performance",
+    "alert_thresholds": {
+      "price_change_percent": 2.5,
+      "volume_spike_multiplier": 1.5
+    }
+  },
+  {
+    "symbol": "SPY",
+    "name": "SPDR S&P 500 ETF",
+    "asset_class": "etf",
+    "priority": "critical",
+    "etf_type": "broad_market",
+    "investment_thesis": "Core market exposure tracking largest US companies",
+    "alert_thresholds": {
+      "price_change_percent": 2.0,
+      "volume_spike_multiplier": 1.5
+    }
+  },
+
+  {
+    "comment": "=== EQUITIES ===",
+    "symbol": "SKYQ",
+    "name": "Sky Quarry Inc.",
+    "asset_class": "equity",
+    "industry": "Industrial Tech",
+    "priority": "speculative",
+    "investment_thesis": "Specialized industrial innovation with transformation potential",
+    "alert_thresholds": {
+      "price_change_percent": 12.0,
+      "volume_spike_multiplier": 5.0
+    }
+  },
+  {
+    "symbol": "KOPN",
+    "name": "Kopin Corporation",
+    "asset_class": "equity",
+    "industry": "AR/VR Display",
+    "priority": "speculative",
+    "investment_thesis": "Micro-display pioneer for AR/VR mainstream adoption",
+    "alert_thresholds": {
+      "price_change_percent": 8.0,
+      "volume_spike_multiplier": 3.0
+    }
+  },
+  {
+    "symbol": "OKLO",
+    "name": "Oklo Inc.",
+    "asset_class": "equity",
+    "industry": "Nuclear Technology",
+    "priority": "high",
+    "investment_thesis": "Advanced fission technology for distributed clean energy",
+    "alert_thresholds": {
+      "price_change_percent": 10.0,
+      "volume_spike_multiplier": 3.5
+    }
+  },
+  {
+    "symbol": "SMR",
+    "name": "NuScale Power Corporation",
+    "asset_class": "equity",
+    "industry": "Nuclear Energy",
+    "priority": "high",
+    "investment_thesis": "Small modular reactor pioneer for clean baseload power generation",
+    "alert_thresholds": {
+      "price_change_percent": 8.0,
+      "volume_spike_multiplier": 3.0
+    }
+  },
+  {
+    "symbol": "AMD",
+    "name": "Advanced Micro Devices Inc.",
+    "asset_class": "equity",
+    "industry": "Semiconductors",
+    "priority": "high",
+    "investment_thesis": "CPU/GPU innovation leader challenging Intel/NVIDIA with AI capabilities",
+    "alert_thresholds": {
+      "price_change_percent": 5.0,
+      "volume_spike_multiplier": 2.0
+    }
+  },
+  {
+    "symbol": "NVDA",
+    "name": "NVIDIA Corporation",
+    "asset_class": "equity",
+    "industry": "AI Semiconductors",
+    "priority": "critical",
+    "investment_thesis": "AI computing infrastructure backbone with data center GPU dominance",
+    "alert_thresholds": {
+      "price_change_percent": 4.0,
+      "volume_spike_multiplier": 1.75
+    }
+  },
+
+  {
+    "comment": "=== COMMODITIES ===",
+    "symbol": "CPER",
+    "name": "US Copper Index Fund",
+    "asset_class": "commodity",
+    "priority": "medium",
+    "commodity_type": "industrial_metal",
+    "investment_thesis": "Electrification and renewable energy infrastructure demand",
+    "alert_thresholds": {
+      "price_change_percent": 3.5,
+      "volume_spike_multiplier": 2.5
+    }
+  },
+  {
+    "symbol": "UNG",
+    "name": "US Natural Gas Fund",
+    "asset_class": "commodity",
+    "priority": "medium",
+    "commodity_type": "energy",
+    "investment_thesis": "Natural gas exposure for energy transition plays",
+    "alert_thresholds": {
+      "price_change_percent": 4.0,
+      "volume_spike_multiplier": 2.5
+    }
+  },
+  {
+    "symbol": "SLV",
+    "name": "iShares Silver Trust",
+    "asset_class": "commodity",
+    "priority": "medium",
+    "commodity_type": "precious_metal",
+    "investment_thesis": "Industrial metal with monetary properties and EV demand",
+    "alert_thresholds": {
+      "price_change_percent": 3.0,
+      "volume_spike_multiplier": 2.5
+    }
+  },
+  {
+    "symbol": "USO",
+    "name": "US Oil Fund",
+    "asset_class": "commodity",
+    "priority": "high",
+    "commodity_type": "energy",
+    "investment_thesis": "Energy sector exposure and inflation indicator",
+    "alert_thresholds": {
+      "price_change_percent": 3.0,
+      "volume_spike_multiplier": 2.0
+    }
+  },
+  {
+    "symbol": "GLD",
+    "name": "SPDR Gold Trust",
+    "asset_class": "commodity",
+    "priority": "high",
+    "commodity_type": "precious_metal",
+    "investment_thesis": "Inflation hedge and safe haven during market uncertainty",
+    "alert_thresholds": {
+      "price_change_percent": 2.0,
+      "volume_spike_multiplier": 2.0
+    }
+  },
+
+  {
+    "comment": "=== DIGITAL ASSETS ===",
+    "symbol": "XRP-USD",
+    "name": "XRP",
+    "asset_class": "crypto",
+    "priority": "high",
+    "coingecko_id": "ripple",
+    "investment_thesis": "Cross-border payment solution with banking partnerships",
+    "alert_thresholds": {
+      "price_change_percent": 7.0
+    }
+  },
+  {
+    "symbol": "ETH-USD",
+    "name": "Ethereum",
+    "asset_class": "crypto",
+    "priority": "critical",
+    "coingecko_id": "ethereum",
+    "investment_thesis": "Smart contract platform powering DeFi and Web3",
+    "alert_thresholds": {
+      "price_change_percent": 5.0
+    }
+  },
+  {
+    "symbol": "BTC-USD",
+    "name": "Bitcoin",
+    "asset_class": "crypto",
+    "priority": "critical",
+    "coingecko_id": "bitcoin",
+    "investment_thesis": "Digital gold and store of value with institutional adoption",
+    "alert_thresholds": {
+      "price_change_percent": 5.0
+    }
+  }
+]
