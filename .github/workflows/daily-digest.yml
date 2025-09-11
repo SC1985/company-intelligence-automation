@@ -1,58 +1,68 @@
-name: Daily Investment Edge
+name: Daily Investment Edge Digest
 
 on:
   schedule:
-    # Daily at 8am Central Time
-    # 8am CST = 2pm UTC (14:00) 
-    # 8am CDT = 1pm UTC (13:00) during daylight saving
-    # Using 13:00 UTC to account for CDT (most of the year)
-    - cron: "45 11 * * *"
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Do not send email; log only"
-        required: false
-        default: "false"
-      copy_sender:
-        description: "Also send a copy to SENDER_EMAIL and ADMIN_EMAILS"
-        required: false
-        default: "false"
-      smtp_debug:
-        description: "Log SMTP wire conversation (no secrets)"
-        required: false
-        default: "false"
+    - cron: '0 13 * * *'  # 8am CT (1pm UTC)
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
-  investment-edge-execution:
+  generate-and-send:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
+    
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install matplotlib pillow yfinance pandas requests
-
-      - name: Run Investment Edge Engine (NextGen digest)
-        env:
-          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
-          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-          RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
-          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
-          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
-          COPY_SENDER: ${{ github.event.inputs.copy_sender || 'false' }}
-          SMTP_DEBUG: ${{ github.event.inputs.smtp_debug || 'false' }}
-          NEXTGEN_DIGEST: "true"
-        run: python src/ci_entrypoint.py
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Check watchlist exists
+      run: |
+        if [ ! -f watchlist.json ]; then
+          echo "Error: watchlist.json not found"
+          exit 1
+        fi
+        echo "Watchlist loaded successfully"
+    
+    - name: Generate digest
+      env:
+        POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+        ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+        FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        MARKETAUX_API_KEY: ${{ secrets.MARKETAUX_API_KEY }}
+        COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+      run: |
+        python src/nextgen_digest.py
+        echo "Digest generated successfully"
+    
+    - name: Render email
+      run: |
+        python src/render_email.py
+        echo "Email rendered successfully"
+    
+    - name: Send email
+      env:
+        GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+        GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+      run: |
+        python src/send_email.py
+        echo "Email sent successfully"
+    
+    - name: Upload artifacts (for debugging)
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: digest-artifacts
+        path: |
+          digest.json
+          daily_digest.json
+          email_output.html
+        retention-days: 7
