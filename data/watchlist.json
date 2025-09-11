@@ -1,15 +1,17 @@
 [
   {
-    "comment": "=== ETFs & INDICES ===",
+    "comment": "=== ETFs & INDICES ==="
+  },
+  {
     "symbol": "IWM",
     "name": "iShares Russell 2000 ETF",
     "asset_class": "etf",
     "priority": "high",
     "etf_type": "small_cap",
-    "investment_thesis": "Small-cap exposure for domestic growth opportunities",
+    "investment_thesis": "Small-cap US companies exposure for growth opportunities",
     "alert_thresholds": {
-      "price_change_percent": 3.0,
-      "volume_spike_multiplier": 2.0
+      "price_change_percent": 2.5,
+      "volume_spike_multiplier": 1.5
     }
   },
   {
@@ -17,10 +19,10 @@
     "name": "Invesco QQQ Trust",
     "asset_class": "etf",
     "priority": "critical",
-    "etf_type": "tech_focused",
-    "investment_thesis": "Nasdaq-100 exposure for tech sector performance",
+    "etf_type": "tech_index",
+    "investment_thesis": "Nasdaq-100 technology sector leadership exposure",
     "alert_thresholds": {
-      "price_change_percent": 2.5,
+      "price_change_percent": 2.0,
       "volume_spike_multiplier": 1.5
     }
   },
@@ -30,15 +32,16 @@
     "asset_class": "etf",
     "priority": "critical",
     "etf_type": "broad_market",
-    "investment_thesis": "Core market exposure tracking largest US companies",
+    "investment_thesis": "Core S&P 500 market benchmark and sentiment indicator",
     "alert_thresholds": {
-      "price_change_percent": 2.0,
+      "price_change_percent": 1.5,
       "volume_spike_multiplier": 1.5
     }
   },
-
   {
-    "comment": "=== EQUITIES ===",
+    "comment": "=== EQUITIES ==="
+  },
+  {
     "symbol": "SKYQ",
     "name": "Sky Quarry Inc.",
     "asset_class": "equity",
@@ -110,15 +113,16 @@
       "volume_spike_multiplier": 1.75
     }
   },
-
   {
-    "comment": "=== COMMODITIES ===",
+    "comment": "=== COMMODITIES ==="
+  },
+  {
     "symbol": "CPER",
-    "name": "US Copper Index Fund",
+    "name": "United States Copper Index Fund",
     "asset_class": "commodity",
     "priority": "medium",
     "commodity_type": "industrial_metal",
-    "investment_thesis": "Electrification and renewable energy infrastructure demand",
+    "investment_thesis": "Industrial demand indicator and green energy transition play",
     "alert_thresholds": {
       "price_change_percent": 3.5,
       "volume_spike_multiplier": 2.5
@@ -126,11 +130,11 @@
   },
   {
     "symbol": "UNG",
-    "name": "US Natural Gas Fund",
+    "name": "United States Natural Gas Fund",
     "asset_class": "commodity",
     "priority": "medium",
     "commodity_type": "energy",
-    "investment_thesis": "Natural gas exposure for energy transition plays",
+    "investment_thesis": "Natural gas exposure for energy sector and seasonal plays",
     "alert_thresholds": {
       "price_change_percent": 4.0,
       "volume_spike_multiplier": 2.5
@@ -142,15 +146,15 @@
     "asset_class": "commodity",
     "priority": "medium",
     "commodity_type": "precious_metal",
-    "investment_thesis": "Industrial metal with monetary properties and EV demand",
+    "investment_thesis": "Industrial and monetary metal with higher volatility than gold",
     "alert_thresholds": {
       "price_change_percent": 3.0,
-      "volume_spike_multiplier": 2.5
+      "volume_spike_multiplier": 2.0
     }
   },
   {
     "symbol": "USO",
-    "name": "US Oil Fund",
+    "name": "United States Oil Fund",
     "asset_class": "commodity",
     "priority": "high",
     "commodity_type": "energy",
@@ -172,9 +176,10 @@
       "volume_spike_multiplier": 2.0
     }
   },
-
   {
-    "comment": "=== DIGITAL ASSETS ===",
+    "comment": "=== DIGITAL ASSETS ==="
+  },
+  {
     "symbol": "XRP-USD",
     "name": "XRP",
     "asset_class": "crypto",
