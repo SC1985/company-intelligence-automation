@@ -349,51 +349,74 @@ def _section_container(title: str, inner_html: str, section_type: str) -> str:
 
 def _normalize_inputs(*args: Any, **kwargs: Any) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
-    Normalize render_email input to support both new and legacy call signatures.
+    Normalize inputs for ``render_email`` to support both current and legacy call signatures.
 
-    This helper accepts variable arguments and keyword arguments and returns a
-    `(summary, assets)` tuple. It handles the following cases:
+    The newsletter renderer has historically accepted a variety of parameter
+    permutations. This helper inspects the positional and keyword arguments and
+    produces a canonical ``(summary, assets)`` tuple where ``summary`` is a
+    dictionary (empty by default) and ``assets`` is a list of asset
+    dictionaries. It aims to be tolerant of misordered or missing inputs so
+    that callers using older patterns do not cause attribute errors in the
+    renderer.
 
-    - New signature: `render_email(summary: dict, assets: list)`.
-      In this case, the first argument is a dictionary representing the summary
-      and the second argument is the list of assets.
-    - Legacy signature: `render_email(summary: dict, companies: list, cryptos: list = None)`.
-      Here, the first argument is the summary, the second positional argument
-      contains the companies list, and an optional `cryptos` keyword argument
-      contains the list of crypto assets. The helper concatenates the two lists
-      into a single assets list.
-    - Oldest signature: `render_email(companies: list, cryptos: list)` or
-      `render_email(companies: list, cryptos: list, summary: dict)`.
-      In this case, the first two positional arguments are treated as asset
-      lists and combined. A `summary` keyword argument is used if provided.
+    The following call patterns are supported:
 
-    The function returns a tuple `(summary, assets)` where `summary` is a
-    dictionary (empty if none is provided) and `assets` is a list of asset
-    dictionaries.
+    1. ``render_email(summary, assets)`` – the modern signature where ``summary``
+       is a dict containing metadata (e.g., heroes) and ``assets`` is a list of
+       asset dictionaries. Both positional arguments are required.
+    2. ``render_email(summary, companies, cryptos=cryptos)`` – an intermediate
+       form where ``companies`` and ``cryptos`` are separate lists. These lists
+       are concatenated to form the unified ``assets`` list.
+    3. ``render_email(companies, cryptos)`` – the oldest signature where the
+       first two positional arguments are asset lists and no summary is
+       provided. An optional ``summary`` keyword argument can supply the
+       summary dict.
+    4. ``render_email(companies)`` – an abbreviated form with a single asset
+       list and no summary.
+
+    Any additional positional arguments that are lists will be appended to the
+    assets collection. The ``summary`` keyword argument, if provided and a
+    dictionary, overrides any summary detected from positional arguments.
+
+    Args:
+        *args: Positional arguments which may include a summary dict and/or
+            one or more lists of asset dictionaries.
+        **kwargs: Keyword arguments which may include ``cryptos`` (a list of
+            asset dictionaries) and/or ``summary`` (a dict).
+
+    Returns:
+        A tuple ``(summary, assets)`` where ``summary`` is a dict and
+        ``assets`` is a list.
     """
     summary: Dict[str, Any] = {}
     assets: List[Dict[str, Any]] = []
-    # If first arg is a dict, treat it as summary
-    if args and isinstance(args[0], dict):
-        summary = args[0] or {}
-        # If second arg is a list, treat it as assets
-        if len(args) >= 2 and isinstance(args[1], list):
-            assets = list(args[1] or [])
-        # If there is a 'cryptos' keyword, append to assets
-        if 'cryptos' in kwargs and isinstance(kwargs['cryptos'], list):
-            assets += list(kwargs['cryptos'] or [])
-    else:
-        # Otherwise treat positional args as legacy lists
-        companies = list(args[0] or []) if args and isinstance(args[0], list) else []
-        cryptos = []
-        if len(args) >= 2 and isinstance(args[1], list):
-            cryptos = list(args[1] or [])
-        # 'cryptos' keyword overrides positional
-        cryptos = list(kwargs.get('cryptos') or cryptos or [])
-        summary_kw = kwargs.get('summary') or {}
-        if isinstance(summary_kw, dict):
-            summary = summary_kw
-        assets = companies + cryptos
+
+    # First, check if a summary is supplied via kwargs. If present and valid,
+    # this takes precedence over positional detection for summary.
+    summary_kw = kwargs.get('summary')
+    if isinstance(summary_kw, dict):
+        summary = summary_kw
+
+    # Iterate over positional arguments. If an argument is a dict and we
+    # haven't already set a summary from kwargs, treat it as the summary. If
+    # it's a list, extend the assets list. Other types are ignored.
+    for arg in args:
+        if isinstance(arg, dict) and not summary:
+            summary = arg
+        elif isinstance(arg, list):
+            assets.extend(list(arg))
+
+    # If a ``cryptos`` keyword is present and is a list, append its contents
+    # to the assets list. This supports legacy calls where companies and
+    # cryptos were passed separately.
+    cryptos_kw = kwargs.get('cryptos')
+    if isinstance(cryptos_kw, list):
+        assets.extend(list(cryptos_kw))
+
+    # Ensure summary is at least an empty dict
+    if not isinstance(summary, dict):
+        summary = {}
+
     return summary, assets
 
 
