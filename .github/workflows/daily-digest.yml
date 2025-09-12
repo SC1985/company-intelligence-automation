@@ -44,10 +44,10 @@ jobs:
         MARKETAUX_API_KEY: ${{ secrets.MARKETAUX_API_KEY }}
         COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
         
-        # Email configuration - YOUR ACTUAL SECRET NAMES
-        SENDER_EMAIL: ${{ secrets.GMAIL_ADDRESS }}
-        SENDER_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAIL }}
+        # Email configuration - UPDATED TO MATCH YOUR SECRET NAMES
+        SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+        SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+        RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
         SENDER_NAME: "Investment Edge"
         
         # Enable NextGen digest
