@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Investment Edge - Enhanced Entry Point with Dynamic Subject Lines
+# Investment Edge - Enhanced Entry Point with Flexible Credential Detection
 import asyncio
 import importlib
 import inspect
@@ -9,6 +9,83 @@ import sys
 import re
 from datetime import datetime
 from pathlib import Path
+
+# FIX: Set environment variables from any available alternatives
+def fix_email_environment():
+    """Map any available email credentials to what mailer.py expects"""
+    
+    # Check for sender email under various names
+    sender_candidates = [
+        'GMAIL_ADDRESS',
+        'EMAIL_ADDRESS', 
+        'EMAIL',
+        'SENDER',
+        'FROM_EMAIL',
+        'SEND_FROM'
+    ]
+    
+    if not os.getenv('SENDER_EMAIL'):
+        for candidate in sender_candidates:
+            value = os.getenv(candidate)
+            if value:
+                os.environ['SENDER_EMAIL'] = value
+                print(f"Mapped {candidate} to SENDER_EMAIL")
+                break
+    
+    # Check for password under various names
+    password_candidates = [
+        'GMAIL_APP_PASSWORD',
+        'GMAIL_PASSWORD',
+        'APP_PASSWORD',
+        'EMAIL_PASSWORD',
+        'PASSWORD',
+        'PASS',
+        'PWD'
+    ]
+    
+    if not os.getenv('SENDER_PASSWORD'):
+        for candidate in password_candidates:
+            value = os.getenv(candidate)
+            if value:
+                os.environ['SENDER_PASSWORD'] = value
+                print(f"Mapped {candidate} to SENDER_PASSWORD")
+                break
+    
+    # Check for recipients under various names
+    recipient_candidates = [
+        'RECIPIENT_EMAIL',
+        'RECIPIENT',
+        'TO_EMAIL',
+        'RECIPIENTS',
+        'TO',
+        'SEND_TO'
+    ]
+    
+    if not os.getenv('RECIPIENT_EMAILS'):
+        for candidate in recipient_candidates:
+            value = os.getenv(candidate)
+            if value:
+                os.environ['RECIPIENT_EMAILS'] = value
+                print(f"Mapped {candidate} to RECIPIENT_EMAILS")
+                break
+    
+    # Final check and debug output
+    has_sender = bool(os.getenv('SENDER_EMAIL'))
+    has_password = bool(os.getenv('SENDER_PASSWORD'))
+    has_recipients = bool(os.getenv('RECIPIENT_EMAILS'))
+    
+    print(f"Email config status: sender={has_sender}, password={has_password}, recipients={has_recipients}")
+    
+    # If still missing, try to use any email-like environment variable
+    if not has_sender or not has_password or not has_recipients:
+        print("\nAll environment variables:")
+        for key, value in os.environ.items():
+            if 'SECRET' not in key.upper() and 'TOKEN' not in key.upper():
+                if any(word in key.upper() for word in ['MAIL', 'EMAIL', 'SENDER', 'RECIPIENT', 'GMAIL']):
+                    print(f"  {key}: {'*' * min(len(value), 10)}")
+
+# Apply the fix at module level
+fix_email_environment()
 
 from mailer import send_html_email
 
@@ -91,6 +168,9 @@ def generate_hero_based_subject(hero_headline=None):
 async def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger = logging.getLogger("ci-entrypoint")
+    
+    # Apply email environment fix again right before execution
+    fix_email_environment()
 
     html = None
     if os.getenv("NEXTGEN_DIGEST", "false").lower() == "true":
