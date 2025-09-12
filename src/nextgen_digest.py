@@ -42,7 +42,13 @@ def _load_entities() -> List[Dict[str, Any]]:
 
 # -------------------- HTTP helpers with retry --------------------
 
-def _http_get_with_retry(url: str, timeout: float = 25.0, headers: Optional[Dict[str,str]] = None, max_retries: int = 3) -> Optional[bytes]:
+def _http_get_with_retry(
+    
+    url: str,
+    timeout: float = 25.0,
+    headers: Optional[Dict[str, str]] = None,
+    max_retries: int = 3,
+) -> Optional[bytes]:
     """HTTP GET with exponential backoff retry logic."""
     for attempt in range(max_retries):
         try:
