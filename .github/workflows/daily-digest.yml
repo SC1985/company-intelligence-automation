@@ -100,12 +100,38 @@ async def fetch_stock_data(asset: Dict, session: aiohttp.ClientSession, logger) 
                         data['low'] = float(quote.get('04. low', 0))
                         data['volume'] = int(quote.get('06. volume', 0))
                         data['change'] = float(quote.get('09. change', 0))
-                        data['change_percent'] = float(quote.get('10. change percent', '0').replace('%', ''))
+                        change_pct_str = quote.get('10. change percent', '0%')
+                        data['change_percent'] = float(change_pct_str.replace('%', ''))
                         
                         logger.info(f"Fetched {symbol} from Alpha Vantage: ${data['price']:.2f}")
                         return data
         except Exception as e:
             logger.debug(f"Alpha Vantage fetch failed for {symbol}: {e}")
+    
+    # Source 3: Polygon.io (if API key available)
+    polygon_key = os.getenv('POLYGON_API_KEY')
+    if polygon_key:
+        try:
+            url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev?apiKey={polygon_key}"
+            async with session.get(url, timeout=10) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    if result.get('status') == 'OK' and result.get('results'):
+                        r = result['results'][0]
+                        data['price'] = r.get('c', 0)
+                        data['open'] = r.get('o', 0)
+                        data['high'] = r.get('h', 0)
+                        data['low'] = r.get('l', 0)
+                        data['volume'] = r.get('v', 0)
+                        
+                        if data['open'] > 0:
+                            data['change'] = data['price'] - data['open']
+                            data['change_percent'] = (data['change'] / data['open']) * 100
+                        
+                        logger.info(f"Fetched {symbol} from Polygon: ${data['price']:.2f}")
+                        return data
+        except Exception as e:
+            logger.debug(f"Polygon fetch failed for {symbol}: {e}")
     
     # Fallback with simulated data for testing
     logger.warning(f"Using simulated data for {symbol}")
@@ -117,6 +143,8 @@ async def fetch_stock_data(asset: Dict, session: aiohttp.ClientSession, logger) 
     data['volume'] = random.randint(1000000, 50000000)
     data['high'] = round(base_price * random.uniform(1.01, 1.05), 2)
     data['low'] = round(base_price * random.uniform(0.95, 0.99), 2)
+    data['week_52_high'] = round(base_price * random.uniform(1.2, 1.5), 2)
+    data['week_52_low'] = round(base_price * random.uniform(0.5, 0.8), 2)
     
     return data
 
@@ -152,7 +180,12 @@ async def fetch_crypto_data(asset: Dict, session: aiohttp.ClientSession, logger)
             'developer_data': 'false'
         }
         
-        async with session.get(url, params=params, timeout=10) as resp:
+        api_key = os.getenv('COINGECKO_API_KEY')
+        headers = {}
+        if api_key:
+            headers['x-cg-demo-api-key'] = api_key
+        
+        async with session.get(url, params=params, headers=headers, timeout=10) as resp:
             if resp.status == 200:
                 result = await resp.json()
                 market_data = result.get('market_data', {})
@@ -174,12 +207,22 @@ async def fetch_crypto_data(asset: Dict, session: aiohttp.ClientSession, logger)
     
     # Fallback with simulated crypto data
     logger.warning(f"Using simulated crypto data for {symbol}")
-    base_price = random.uniform(0.01, 50000) if 'BTC' in symbol else random.uniform(0.01, 5000)
+    if 'BTC' in symbol:
+        base_price = random.uniform(40000, 70000)
+    elif 'ETH' in symbol:
+        base_price = random.uniform(2000, 4000)
+    else:
+        base_price = random.uniform(0.01, 100)
+    
     data['price'] = round(base_price, 2)
     data['change_percent'] = round(random.uniform(-10, 10), 2)
     data['change'] = round(base_price * (data['change_percent'] / 100), 2)
     data['volume'] = random.randint(10000000, 1000000000)
     data['market_cap'] = random.randint(100000000, 500000000000)
+    data['high_24h'] = round(base_price * 1.05, 2)
+    data['low_24h'] = round(base_price * 0.95, 2)
+    data['ath'] = round(base_price * random.uniform(1.5, 3), 2)
+    data['ath_change_percent'] = round(random.uniform(-50, -10), 2)
     
     return data
 
@@ -187,48 +230,76 @@ async def fetch_news_for_symbol(symbol: str, session: aiohttp.ClientSession, log
     """Fetch news for a specific symbol from multiple sources"""
     news_items = []
     
-    # Try NewsAPI if available
-    newsapi_key = os.getenv('NEWSAPI_API_KEY')
-    if newsapi_key:
+    # Try MarketAux if available
+    marketaux_key = os.getenv('MARKETAUX_API_KEY')
+    if marketaux_key:
         try:
-            url = f"https://newsapi.org/v2/everything"
+            url = "https://api.marketaux.com/v1/news/all"
             params = {
-                'q': symbol,
-                'apiKey': newsapi_key,
-                'sortBy': 'publishedAt',
-                'pageSize': 5
+                'symbols': symbol,
+                'filter_entities': 'true',
+                'limit': 3,
+                'api_token': marketaux_key
             }
             async with session.get(url, params=params, timeout=5) as resp:
                 if resp.status == 200:
                     result = await resp.json()
-                    articles = result.get('articles', [])
-                    for article in articles[:3]:
+                    for article in result.get('data', [])[:3]:
                         news_items.append({
                             'title': article.get('title', ''),
                             'description': article.get('description', ''),
                             'url': article.get('url', ''),
-                            'source': article.get('source', {}).get('name', ''),
-                            'publishedAt': article.get('publishedAt', ''),
+                            'source': article.get('source', ''),
+                            'publishedAt': article.get('published_at', ''),
                             'symbol': symbol
                         })
         except Exception as e:
-            logger.debug(f"NewsAPI fetch failed for {symbol}: {e}")
+            logger.debug(f"MarketAux fetch failed for {symbol}: {e}")
+    
+    # Try NewsAPI if no results yet
+    if not news_items:
+        newsapi_key = os.getenv('NEWSAPI_API_KEY')
+        if newsapi_key:
+            try:
+                url = "https://newsapi.org/v2/everything"
+                params = {
+                    'q': symbol,
+                    'apiKey': newsapi_key,
+                    'sortBy': 'publishedAt',
+                    'pageSize': 3,
+                    'language': 'en'
+                }
+                async with session.get(url, params=params, timeout=5) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        for article in result.get('articles', [])[:3]:
+                            news_items.append({
+                                'title': article.get('title', ''),
+                                'description': article.get('description', ''),
+                                'url': article.get('url', ''),
+                                'source': article.get('source', {}).get('name', ''),
+                                'publishedAt': article.get('publishedAt', ''),
+                                'symbol': symbol
+                            })
+            except Exception as e:
+                logger.debug(f"NewsAPI fetch failed for {symbol}: {e}")
     
     # Fallback: Generate sample news
     if not news_items:
+        current_time = datetime.now()
         sample_titles = [
-            f"{symbol} Shows Strong Momentum in Today's Trading",
-            f"Analysts Update {symbol} Price Targets Following Recent Developments",
+            f"{symbol} Shows Strong Momentum in Today's Trading Session",
+            f"Analysts Update {symbol} Price Targets Following Recent Earnings",
             f"{symbol} Announces Strategic Partnership to Drive Growth"
         ]
         
         for i, title in enumerate(sample_titles[:2]):
             news_items.append({
                 'title': title,
-                'description': f"Latest developments for {symbol} showing market interest.",
+                'description': f"Latest market developments for {symbol} showing increased investor interest and volatility.",
                 'url': '#',
                 'source': 'Market Wire',
-                'publishedAt': (datetime.now() - timedelta(hours=i*4)).isoformat(),
+                'publishedAt': (current_time - timedelta(hours=i*4)).isoformat(),
                 'symbol': symbol
             })
     
@@ -257,15 +328,28 @@ async def fetch_all_data(watchlist: List[Dict], logger) -> List[Dict]:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Process results and fetch news
+        news_tasks = []
+        valid_results = []
+        
         for result in results:
             if isinstance(result, Exception):
                 logger.error(f"Error fetching data: {result}")
                 continue
             if result:
-                # Fetch news for this asset
-                news = await fetch_news_for_symbol(result['symbol'], session, logger)
-                result['news'] = news
-                all_data.append(result)
+                valid_results.append(result)
+                news_tasks.append(fetch_news_for_symbol(result['symbol'], session, logger))
+        
+        # Fetch all news concurrently
+        news_results = await asyncio.gather(*news_tasks, return_exceptions=True)
+        
+        # Combine data with news
+        for data, news in zip(valid_results, news_results):
+            if isinstance(news, Exception):
+                logger.error(f"Error fetching news for {data['symbol']}: {news}")
+                data['news'] = []
+            else:
+                data['news'] = news
+            all_data.append(data)
     
     return all_data
 
@@ -285,12 +369,23 @@ def filter_recent_articles(articles: List[Dict], days: int = 7) -> List[Dict]:
             
             if date_str:
                 # Parse ISO format date
-                pub_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                if 'T' in date_str:
+                    pub_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                else:
+                    pub_date = datetime.strptime(date_str, '%Y-%m-%d')
+                
+                if pub_date.tzinfo is None:
+                    pub_date = pub_date.replace(tzinfo=None)
+                    cutoff_date = cutoff_date.replace(tzinfo=None)
                 
                 if pub_date > cutoff_date:
                     filtered.append(article)
-        except Exception:
+            else:
+                # If no date, include the article
+                filtered.append(article)
+        except Exception as e:
             # If we can't parse the date, include the article
+            logger.debug(f"Date parse error: {e}")
             filtered.append(article)
     
     return filtered
@@ -318,9 +413,15 @@ def categorize_heroes(hero_articles: List[Dict], watchlist: List[Dict]) -> Dict[
             continue
         asset_class = asset.get('asset_class', 'equity').lower()
         if asset_class in symbols_by_class:
-            symbols_by_class[asset_class].append(asset['symbol'].upper())
+            symbol = asset['symbol'].upper()
+            # Clean symbol for matching (remove -USD suffix for cryptos)
+            clean_symbol = symbol.replace('-USD', '')
+            symbols_by_class[asset_class].append(clean_symbol)
+            
+            # Also add name for matching
             if 'name' in asset:
-                symbols_by_class[asset_class].append(asset['name'].upper())
+                name = asset['name'].upper()
+                symbols_by_class[asset_class].append(name)
     
     # Categorize each hero article
     for article in hero_articles:
@@ -333,8 +434,8 @@ def categorize_heroes(hero_articles: List[Dict], watchlist: List[Dict]) -> Dict[
         
         matched = False
         
-        # Check ETFs
-        etf_keywords = symbols_by_class['etf'] + ['INDEX', 'ETF', 'S&P', 'NASDAQ', 'RUSSELL']
+        # Check ETFs first
+        etf_keywords = symbols_by_class['etf'] + ['INDEX', 'INDICES', 'ETF', 'S&P 500', 'NASDAQ', 'RUSSELL', 'DOW JONES']
         for keyword in etf_keywords:
             if keyword in content:
                 categorized['etf'].append(article)
@@ -343,7 +444,7 @@ def categorize_heroes(hero_articles: List[Dict], watchlist: List[Dict]) -> Dict[
         
         # Check commodities
         if not matched:
-            commodity_keywords = symbols_by_class['commodity'] + ['GOLD', 'SILVER', 'OIL', 'CRUDE', 'COMMODITY']
+            commodity_keywords = symbols_by_class['commodity'] + ['GOLD', 'SILVER', 'OIL', 'CRUDE', 'NATURAL GAS', 'COPPER', 'COMMODITY', 'PRECIOUS METAL']
             for keyword in commodity_keywords:
                 if keyword in content:
                     categorized['commodity'].append(article)
@@ -352,7 +453,7 @@ def categorize_heroes(hero_articles: List[Dict], watchlist: List[Dict]) -> Dict[
         
         # Check crypto
         if not matched:
-            crypto_keywords = symbols_by_class['crypto'] + ['BITCOIN', 'ETHEREUM', 'CRYPTO', 'BLOCKCHAIN']
+            crypto_keywords = symbols_by_class['crypto'] + ['BITCOIN', 'ETHEREUM', 'CRYPTO', 'BLOCKCHAIN', 'DEFI', 'ALTCOIN', 'DIGITAL ASSET']
             for keyword in crypto_keywords:
                 if keyword in content:
                     categorized['crypto'].append(article)
@@ -372,24 +473,38 @@ def categorize_heroes(hero_articles: List[Dict], watchlist: List[Dict]) -> Dict[
             categorized['breaking'].append(article)
     
     # Apply limits
-    categorized['breaking'] = categorized['breaking'][:2]
+    categorized['breaking'] = categorized['breaking'][:2]  # Max 2 breaking news
     for key in ['etf', 'equity', 'commodity', 'crypto']:
-        categorized[key] = categorized[key][:3]
+        categorized[key] = categorized[key][:3]  # Max 3 per section
     
     return categorized
 
 def get_top_hero_articles(all_data: List[Dict], logger) -> List[Dict]:
     """Extract and score top news articles from all data"""
     all_articles = []
+    seen_titles = set()
     
-    # Collect all news articles
+    # Collect all unique news articles
     for asset in all_data:
         for article in asset.get('news', []):
             if article and article.get('title'):
-                all_articles.append(article)
+                title = article['title'].lower().strip()
+                # Avoid duplicates
+                if title not in seen_titles:
+                    seen_titles.add(title)
+                    all_articles.append(article)
     
     # Sort by date (most recent first)
-    all_articles.sort(key=lambda x: x.get('publishedAt', ''), reverse=True)
+    def get_date(article):
+        date_str = article.get('publishedAt') or article.get('published_at', '')
+        if date_str:
+            try:
+                return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            except:
+                pass
+        return datetime.now()
+    
+    all_articles.sort(key=get_date, reverse=True)
     
     # Return top 10 articles
     return all_articles[:10]
@@ -399,13 +514,14 @@ def calculate_top_movers(all_data: List[Dict], logger) -> List[Dict]:
     movers = []
     
     for asset in all_data:
-        if asset.get('change_percent', 0) != 0:
+        change_pct = asset.get('change_percent', 0)
+        if change_pct != 0 and asset.get('price', 0) > 0:
             movers.append({
                 'symbol': asset['symbol'],
-                'name': asset['name'],
+                'name': asset.get('name', asset['symbol']),
                 'price': asset['price'],
-                'change': asset['change'],
-                'change_percent': asset['change_percent'],
+                'change': asset.get('change', 0),
+                'change_percent': change_pct,
                 'asset_class': asset.get('asset_class', 'equity')
             })
     
@@ -438,10 +554,14 @@ async def build_nextgen_html(logger):
         hero_articles = filter_recent_articles(hero_articles, days=7)
         categorized_heroes = categorize_heroes(hero_articles, watchlist)
         
-        logger.info(f"Categorized heroes: {', '.join(f'{k}={len(v)}' for k, v in categorized_heroes.items())}")
+        # Log categorization results
+        for category, articles in categorized_heroes.items():
+            if articles:
+                logger.info(f"{category}: {len(articles)} articles")
         
         # Calculate top movers
         top_movers = calculate_top_movers(all_data, logger)
+        logger.info(f"Found {len(top_movers)} top movers")
         
         # Prepare data for rendering
         digest_data = {
@@ -453,20 +573,26 @@ async def build_nextgen_html(logger):
         }
         
         # Save data for debugging
-        with open('digest_data.json', 'w') as f:
-            json.dump(digest_data, f, indent=2, default=str)
-        logger.info("Saved digest_data.json")
+        try:
+            with open('digest_data.json', 'w') as f:
+                json.dump(digest_data, f, indent=2, default=str)
+            logger.info("Saved digest_data.json for debugging")
+        except Exception as e:
+            logger.warning(f"Could not save digest_data.json: {e}")
         
         # Render the email
         from render_email import render_email
         html = render_email(digest_data)
         
         # Save HTML for debugging
-        with open('email_output.html', 'w') as f:
-            f.write(html)
-        logger.info("Saved email_output.html")
+        try:
+            with open('email_output.html', 'w') as f:
+                f.write(html)
+            logger.info("Saved email_output.html for debugging")
+        except Exception as e:
+            logger.warning(f"Could not save email_output.html: {e}")
         
-        logger.info("Investment Edge HTML generation complete")
+        logger.info(f"Investment Edge HTML generation complete ({len(html)} characters)")
         return html
         
     except Exception as e:
@@ -475,5 +601,7 @@ async def build_nextgen_html(logger):
 
 # For testing
 if __name__ == "__main__":
-    html = asyncio.run(build_nextgen_html(logging.getLogger()))
+    logger = logging.getLogger(__name__)
+    html = asyncio.run(build_nextgen_html(logger))
     print(f"Generated HTML: {len(html)} characters")
+    print("Check email_output.html and digest_data.json for results")
