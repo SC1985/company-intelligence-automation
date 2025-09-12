@@ -347,8 +347,74 @@ def _section_container(title: str, inner_html: str, section_type: str) -> str:
 # Main renderer
 # ---------------------------------------------------------------------------
 
-def render_email(summary: Dict[str, Any], assets: List[Dict[str, Any]]) -> str:
-    """Render the full email HTML given a summary and list of assets."""
+def _normalize_inputs(*args: Any, **kwargs: Any) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """
+    Normalize render_email input to support both new and legacy call signatures.
+
+    This helper accepts variable arguments and keyword arguments and returns a
+    `(summary, assets)` tuple. It handles the following cases:
+
+    - New signature: `render_email(summary: dict, assets: list)`.
+      In this case, the first argument is a dictionary representing the summary
+      and the second argument is the list of assets.
+    - Legacy signature: `render_email(summary: dict, companies: list, cryptos: list = None)`.
+      Here, the first argument is the summary, the second positional argument
+      contains the companies list, and an optional `cryptos` keyword argument
+      contains the list of crypto assets. The helper concatenates the two lists
+      into a single assets list.
+    - Oldest signature: `render_email(companies: list, cryptos: list)` or
+      `render_email(companies: list, cryptos: list, summary: dict)`.
+      In this case, the first two positional arguments are treated as asset
+      lists and combined. A `summary` keyword argument is used if provided.
+
+    The function returns a tuple `(summary, assets)` where `summary` is a
+    dictionary (empty if none is provided) and `assets` is a list of asset
+    dictionaries.
+    """
+    summary: Dict[str, Any] = {}
+    assets: List[Dict[str, Any]] = []
+    # If first arg is a dict, treat it as summary
+    if args and isinstance(args[0], dict):
+        summary = args[0] or {}
+        # If second arg is a list, treat it as assets
+        if len(args) >= 2 and isinstance(args[1], list):
+            assets = list(args[1] or [])
+        # If there is a 'cryptos' keyword, append to assets
+        if 'cryptos' in kwargs and isinstance(kwargs['cryptos'], list):
+            assets += list(kwargs['cryptos'] or [])
+    else:
+        # Otherwise treat positional args as legacy lists
+        companies = list(args[0] or []) if args and isinstance(args[0], list) else []
+        cryptos = []
+        if len(args) >= 2 and isinstance(args[1], list):
+            cryptos = list(args[1] or [])
+        # 'cryptos' keyword overrides positional
+        cryptos = list(kwargs.get('cryptos') or cryptos or [])
+        summary_kw = kwargs.get('summary') or {}
+        if isinstance(summary_kw, dict):
+            summary = summary_kw
+        assets = companies + cryptos
+    return summary, assets
+
+
+def render_email(*args: Any, **kwargs: Any) -> str:
+    """
+    Render the full email HTML.
+
+    This function supports both the new signature (`render_email(summary, assets)`) and
+    legacy signatures (`render_email(summary, companies, cryptos=cryptos)` and
+    `render_email(companies, cryptos, summary=summary)`). It normalizes the
+    inputs via `_normalize_inputs` to ensure compatibility across different
+    call patterns.
+
+    Arguments:
+        *args: Positional arguments for summary and asset lists.
+        **kwargs: Keyword arguments which may include `cryptos` or `summary`.
+
+    Returns:
+        A string containing the fully rendered HTML email.
+    """
+    summary, assets = _normalize_inputs(*args, **kwargs)
     # Group assets by category (preserving order)
     by_section: Dict[str, List[Dict[str, Any]]] = {'etf_index': [], 'equity': [], 'commodity': [], 'crypto': []}
     for a in assets:
