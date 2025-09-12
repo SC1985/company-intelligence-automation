@@ -59,11 +59,37 @@ def _http_get_with_retry(url: str, timeout: float = 25.0, headers: Optional[Dict
                 wait_time = (2 ** attempt) * 2  # 2, 4, 8 seconds
                 time.sleep(wait_time)
                 continue
-            elif e.code >= 500:  # Server error, retry
+            if e.code >= 500:  # Server error, retry
                 wait_time = (2 ** attempt) * 1
                 time.sleep(wait_time)
                 continue
-            else:  # Client error, don't retry
+            # Client error, don't retry
+            break
+        except (URLError, Exception) as e:
+            if attempt < max_retries - 1:
+                wait_time = (2 ** attempt) * 1
+                time.sleep(wait_time)
+                continue
+            break
+    return None
+
+def _http_get(url: str, timeout: float = 25.0, headers: Optional[Dict[str,str]] = None) -> Optional[bytes]:
+    return _http_get_with_retry(url, timeout, headers)
+
+def _http_get_json(url: str, timeout: float = 25.0, headers: Optional[Dict[str,str]] = None) -> Optional[Dict[str, Any]]:
+    raw = _http_get(url, timeout=timeout, headers=headers)
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw.decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+
+# -------------------- Data validation helpers --------------------
+
+def _validate_price_data(dt: List[datetime], cl: List[float]) -> Tuple[List[datetime], List[float]]:
+    """Validate and clean price data, removing invalid entries."""
+    if not dt or not cl or len(dt) != len(cl):
 @@ -400,51 +404,51 @@ def _enhanced_score_article(ticker: str, article: Dict[str, Any]) -> int:
     """Enhanced article scoring with better company matching."""
     t = ticker.upper()
