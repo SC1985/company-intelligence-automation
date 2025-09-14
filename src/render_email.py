@@ -96,7 +96,7 @@ def _safe_float(x: Any, default: Optional[float] = None) -> Optional[float]:
 
 
 def _chip(label: str, value: Any) -> str:
-    """Render a colored chip for a change percentage or value - COMPACT VERSION."""
+    """Render a colored chip for a change percentage or value - MODERATE PADDING."""
     v = _safe_float(value, None)
     if v is None:
         bg, color, sign, txt = '#6B7280', '#FFFFFF', '', '--'
@@ -106,14 +106,20 @@ def _chip(label: str, value: Any) -> str:
         else:
             bg, color, sign = '#EF4444', '#FFFFFF', '▼'
         txt = f'{abs(v):.1f}%'
-    # Reduced padding and margin for compact display
+    # Moderate padding for good readability
     return (
-        '<span style="background:' + bg + ';color:' + color + ';padding:3px 6px;'
-        'border-radius:10px;font-size:11px;font-weight:700;display:inline-block;'
-        'margin:1px 2px;white-space:nowrap;'
+        '<span style="background:' + bg + ';color:' + color + ';padding:4px 8px;'
+        'border-radius:10px;font-size:12px;font-weight:700;display:inline-block;'
+        'margin:2px 3px;white-space:nowrap;width:70px;text-align:center;'
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
         + escape(label) + ' ' + sign + txt + '</span>'
     )
+
+
+def _chip_row(chip1: str, chip2: str) -> str:
+    """Create a row with two chips side by side."""
+    return '<div style="margin:2px 0;">' + chip1 + chip2 + '</div>'
+
 
 # Mapping of category codes to human-readable names
 SECTION_NAMES: Dict[str, str] = {
@@ -155,20 +161,20 @@ def _range_bar(pos: float, low: float, high: float) -> str:
     except Exception:
         p = 50.0
     return (
-        '<div style="height:5px;border-radius:3px;background:#E5E7EB;position:relative;margin:6px 0;">'
-        + f'<div style="width:{p:.1f}%;height:5px;border-radius:3px;background:#10B981;"></div></div>'
+        '<div style="height:6px;border-radius:3px;background:#E5E7EB;position:relative;margin:8px 0;">'
+        + f'<div style="width:{p:.1f}%;height:6px;border-radius:3px;background:#10B981;"></div></div>'
     )
 
 
 def _button(label: str, url: str, secondary: bool = False) -> str:
-    """Render a call-to-action button - COMPACT VERSION."""
+    """Render a call-to-action button - MODERATE SIZE."""
     bg = '#4B5563' if not secondary else '#9CA3AF'
     color = '#FFFFFF'
     return (
         '<table role="presentation" cellpadding="0" cellspacing="0" '
-        'style="display:inline-block;margin-right:4px;margin-bottom:2px;">'
-        '<tr><td style="background:' + bg + ';color:' + color + ';border-radius:8px;'
-        'font-size:12px;font-weight:600;padding:6px 10px;'
+        'style="display:inline-block;margin-right:6px;margin-bottom:3px;">'
+        '<tr><td style="background:' + bg + ';color:' + color + ';border-radius:9px;'
+        'font-size:12px;font-weight:600;padding:8px 12px;'
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
         '<a href="' + escape(url or '#') + '" target="_blank" rel="noopener noreferrer" '
         'style="color:' + color + ';text-decoration:none;display:block;">'
@@ -181,7 +187,7 @@ def _button(label: str, url: str, secondary: bool = False) -> str:
 # ---------------------------------------------------------------------------
 
 def _render_heroes(heroes: Iterable[Dict[str, Any]]) -> str:
-    """Render hero cards for breaking and section news - MINIMAL PADDING."""
+    """Render hero cards for breaking and section news - MODERATE PADDING."""
     out_parts: List[str] = []
     for i, h in enumerate(heroes):
         title = (h.get('title') or '').strip()
@@ -205,18 +211,18 @@ def _render_heroes(heroes: Iterable[Dict[str, Any]]) -> str:
             desc = truncated.strip() if truncated else (desc[:177] + '…')
         meta_bits = [b for b in [src, when] if b]
         meta = ' • '.join(meta_bits)
-        # Build card HTML with reduced padding
+        # Build card HTML with moderate padding
         card = (
             '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-            'style="border-collapse:separate;margin:0 0 8px;">'
-            '<tr><td style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;">'
+            'style="border-collapse:separate;margin:0 0 10px;">'
+            '<tr><td style="border:1px solid #E5E7EB;border-radius:11px;overflow:hidden;">'
             '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFFFFF;">'
-            '<tr><td style="padding:12px 10px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
-            '<div style="font-size:11px;color:#6B7280;font-weight:700;margin-bottom:4px;">' + label + '</div>'
+            '<tr><td style="padding:14px 12px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
+            '<div style="font-size:11px;color:#6B7280;font-weight:700;margin-bottom:5px;">' + label + '</div>'
             '<a href="' + escape(url) + '" style="text-decoration:none;color:#111827;">'
-            '<div style="font-size:18px;font-weight:800;line-height:1.2;margin-bottom:6px;">'
+            '<div style="font-size:19px;font-weight:800;line-height:1.2;margin-bottom:7px;">'
             + escape(title) + '</div></a>'
-            + ('<div style="font-size:13px;color:#374151;margin-bottom:6px;line-height:1.4;">' + escape(desc) + '</div>' if desc else '')
+            + ('<div style="font-size:13px;color:#374151;margin-bottom:7px;line-height:1.45;">' + escape(desc) + '</div>' if desc else '')
             + ('<div style="font-size:11px;color:#6B7280;">' + escape(meta) + '</div>' if meta else '')
             + '</td></tr></table></td></tr></table>'
         )
@@ -228,73 +234,80 @@ def _render_heroes(heroes: Iterable[Dict[str, Any]]) -> str:
 # Card rendering
 # ---------------------------------------------------------------------------
 
-def _industry_pill(text: Optional[str], section: str) -> str:
-    """Render a solid pill for the industry's name - COMPACT VERSION."""
-    if not text:
-        return ''
-    style = SECTION_STYLES.get(section, SECTION_STYLES['equity'])
-    return (
-        '<span style="background:' + style['tag_bg'] + ';color:' + style['tag_color'] + ';'
-        'border-radius:999px;padding:2px 8px;font-size:10px;font-weight:700;'
-        'margin-right:4px;display:inline-block;">' + escape(text) + '</span>'
-    )
-
-
 def _card_shell(inner: str, section: str) -> str:
-    """Wrap the inner HTML in a card container with minimal margins."""
+    """Wrap the inner HTML in a card container with moderate margins."""
     style = SECTION_STYLES.get(section, SECTION_STYLES['equity'])
     return (
-        '<div style="border:1px solid ' + style['card_border'] + ';border-radius:12px;margin:0 0 8px;'
-        'box-shadow:0 2px 6px ' + style['card_shadow'] + ';background:' + style['card_bg'] + ';">'
+        '<div style="border:1px solid ' + style['card_border'] + ';border-radius:13px;margin:0 0 10px;'
+        'box-shadow:0 2px 7px ' + style['card_shadow'] + ';background:' + style['card_bg'] + ';">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="border-collapse:separate;margin:0;background:#FFFFFF;border-radius:11px;overflow:hidden;">'
+        'style="border-collapse:separate;margin:0;background:#FFFFFF;border-radius:12px;overflow:hidden;">'
         + inner + '</table></div>'
     )
 
 
 def _build_asset_card(c: Dict[str, Any]) -> str:
-    """Build a complete HTML card for a given asset - MINIMAL PADDING VERSION."""
+    """Build a complete HTML card for a given asset - MODERATE PADDING, 2x2 CHIPS."""
     section = (c.get('category') or 'equity').lower()
     ticker = str(c.get('ticker') or c.get('symbol') or '')
     name = c.get('name') or ticker or 'Unknown'
+    industry = c.get('industry') or ''
+    
     price_v = _safe_float(c.get('price'), None)
     if price_v is None:
         price_fmt = '<span style="color:#9CA3AF;">--</span>'
     else:
         price_fmt = '<span style="color:#111827;font-weight:700;">${:,.2f}</span>'.format(price_v)
     
-    # Compact chips in a row
-    chips = _chip('1D', c.get('pct_1d')) + _chip('1W', c.get('pct_1w')) + _chip('1M', c.get('pct_1m')) + _chip('YTD', c.get('pct_ytd'))
+    # Create 2x2 chip layout
+    chip_1d = _chip('1D', c.get('pct_1d'))
+    chip_1w = _chip('1W', c.get('pct_1w'))
+    chip_1m = _chip('1M', c.get('pct_1m'))
+    chip_ytd = _chip('YTD', c.get('pct_ytd'))
+    
+    chips_html = (
+        '<div style="margin:8px 0;">'
+        + _chip_row(chip_1d, chip_1w)
+        + _chip_row(chip_1m, chip_ytd)
+        + '</div>'
+    )
     
     range_html = _range_bar(c.get('range_pct') or 50.0, c.get('low_52w') or 0.0, c.get('high_52w') or 0.0)
     bullets_html = ''
     headline = c.get('headline')
     source = c.get('source')
     when_fmt = _fmt_ct(c.get('when'), force_time=False, tz_suffix_policy='never') if c.get('when') else None
+    
     if headline:
         display = headline if len(headline) <= 100 else (headline[:100] + '…')
         meta = ' • '.join([x for x in [source, when_fmt] if x])
         bullets_html = (
-            '<tr><td style="padding-bottom:6px;line-height:1.4;color:#374151;'
+            '<tr><td style="padding-bottom:8px;line-height:1.45;color:#374151;'
             'font-size:13px;font-weight:500;">★ ' + escape(display) +
             ((' (' + escape(meta) + ')') if meta else '') + '</td></tr>'
         )
-    pill = _industry_pill(c.get('industry'), section)
-    # Compose the inner structure with minimal padding
+    
+    # Build ticker display with industry for equity section
+    if section == 'equity' and industry:
+        ticker_display = '(' + escape(ticker) + ') ' + escape(industry)
+    else:
+        ticker_display = '(' + escape(ticker) + ')'
+    
+    # Compose the inner structure with moderate padding
     inner = (
-        '<tr><td style="padding:12px 10px;max-height:380px;overflow:hidden;vertical-align:top;">'
+        '<tr><td style="padding:16px 14px;max-height:400px;overflow:hidden;vertical-align:top;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
-        '<tr><td style="font-weight:700;font-size:15px;line-height:1.2;color:#111827;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding-bottom:3px;">'
-        + pill + escape(name) + '</td></tr>'
+        '<tr><td style="font-weight:700;font-size:16px;line-height:1.25;color:#111827;'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding-bottom:4px;">'
+        + escape(name) + '</td></tr>'
         '<tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-        '<td style="font-size:12px;color:#6B7280;font-weight:600;">(' + escape(ticker) + ')</td>'
+        '<td style="font-size:12px;color:#6B7280;font-weight:600;">' + ticker_display + '</td>'
         '<td style="text-align:right;font-size:15px;">' + price_fmt + '</td>'
         '</tr></table></td></tr>'
-        '<tr><td style="padding:6px 0 4px 0;">' + chips + '</td></tr>'
+        '<tr><td>' + chips_html + '</td></tr>'
         '<tr><td>' + range_html + '</td></tr>'
         + bullets_html +
-        '<tr><td style="border-top:1px solid #E5E7EB;padding-top:8px;">'
+        '<tr><td style="border-top:1px solid #E5E7EB;padding-top:10px;">'
         + _button('News', c.get('news_url') or f'https://finance.yahoo.com/quote/{escape(ticker)}/news')
         + _button('Press', c.get('pr_url') or f'https://finance.yahoo.com/quote/{escape(ticker)}/press-releases', secondary=True)
         + '</td></tr>'
@@ -308,7 +321,7 @@ def _build_asset_card(c: Dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 def _grid(cards: List[str]) -> str:
-    """Arrange cards into a responsive two-column grid - MINIMAL GAP."""
+    """Arrange cards into a responsive two-column grid - MODERATE GAP."""
     if not cards:
         return ''
     rows: List[str] = []
@@ -316,33 +329,33 @@ def _grid(cards: List[str]) -> str:
         left = cards[i]
         right = cards[i + 1] if i + 1 < len(cards) else ''
         if right:
-            # Reduced padding between columns
+            # Moderate padding between columns
             rows.append(
                 '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-                'style="border-collapse:collapse;margin-bottom:4px;">'
-                '<tr><td class="stack-col" width="50%" style="vertical-align:top;padding-right:3px;">' + left + '</td>'
-                '<td class="stack-col" width="50%" style="vertical-align:top;padding-left:3px;">' + right + '</td></tr></table>'
+                'style="border-collapse:collapse;margin-bottom:6px;">'
+                '<tr><td class="stack-col" width="50%" style="vertical-align:top;padding-right:5px;">' + left + '</td>'
+                '<td class="stack-col" width="50%" style="vertical-align:top;padding-left:5px;">' + right + '</td></tr></table>'
             )
         else:
             rows.append(
                 '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-                'style="border-collapse:collapse;margin-bottom:4px;">'
+                'style="border-collapse:collapse;margin-bottom:6px;">'
                 '<tr><td class="stack-col" style="vertical-align:top;margin:0 auto;">' + left + '</td></tr></table>'
             )
     return ''.join(rows)
 
 
 def _section_container(title: str, inner_html: str, section_type: str) -> str:
-    """Wrap section content in a container - MINIMAL PADDING VERSION."""
+    """Wrap section content in a container - MODERATE PADDING."""
     style = SECTION_STYLES.get(section_type, SECTION_STYLES['equity'])
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="border-collapse:collapse;background:' + style['bg'] + ';'
-        'border-left:3px solid ' + style['border'] + ';border-radius:12px;margin:12px 0;'
-        'box-shadow:0 1px 4px ' + style['shadow'] + ';"><tr><td style="padding:12px 8px;">'
+        'border-left:4px solid ' + style['border'] + ';border-radius:14px;margin:18px 0;'
+        'box-shadow:0 1px 5px ' + style['shadow'] + ';"><tr><td style="padding:20px 14px;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
-        '<tr><td class="section-title" style="font-weight:700;font-size:24px;color:#111827;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:0 0 10px 0;">'
+        '<tr><td class="section-title" style="font-weight:700;font-size:26px;color:#111827;'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:0 0 12px 0;">'
         + escape(title) + '</td></tr><tr><td>' + inner_html + '</td></tr></table>'
         '</td></tr></table>'
     )
@@ -427,7 +440,7 @@ def _normalize_inputs(*args: Any, **kwargs: Any) -> tuple[Dict[str, Any], List[D
 
 def render_email(*args: Any, **kwargs: Any) -> str:
     """
-    Render the full email HTML with minimal padding for maximum content space.
+    Render the full email HTML with moderate padding for balance.
 
     This function supports both the new signature (`render_email(summary, assets)`) and
     legacy signatures (`render_email(summary, companies, cryptos=cryptos)` and
@@ -462,33 +475,33 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         section_html_parts.append(_section_container(SECTION_NAMES.get(sec, sec.title()), sec_html, sec))
     # Compose final HTML
     as_of = _fmt_ct(summary.get('as_of_ct'), force_time=True, tz_suffix_policy='always')
-    # Minimal responsive CSS with reduced mobile padding
+    # Moderate responsive CSS
     css = (
         '<style>'
         '@media only screen and (max-width: 640px) {'
-        '.stack-col{display:block!important;width:100%!important;max-width:100%!important;padding:0!important;margin-bottom:8px}'
-        '.section-title{font-size:22px!important;line-height:1.1!important}'
-        '.chip{font-size:10px!important;padding:2px 4px!important;margin:1px!important}'
-        '.section-container td{padding:8px 4px!important}'
-        '.outer-padding{padding:4px!important}'
-        '.main-container{padding:8px 4px!important;background:#FFFFFF!important}'
+        '.stack-col{display:block!important;width:100%!important;max-width:100%!important;padding:0!important;margin-bottom:12px}'
+        '.section-title{font-size:24px!important;line-height:1.15!important}'
+        '.chip{font-size:11px!important;padding:3px 6px!important;margin:2px!important}'
+        '.section-container td{padding:14px 8px!important}'
+        '.outer-padding{padding:8px 4px!important}'
+        '.main-container{padding:12px 8px!important;background:#FFFFFF!important}'
         '}'
         '</style>'
     )
-    # Main email with minimal padding
+    # Main email with moderate padding
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         + css + '<title>Daily Intelligence Digest</title></head>'
         '<body style="margin:0;padding:0;background:#F9FAFB;"><center style="width:100%;background:#F9FAFB;">'
         '<table role="presentation" cellpadding="0" cellspacing="0" width="600" '
-        'style="margin:0 auto;background:#FFFFFF;border-radius:12px;overflow:hidden;">'
-        '<tr><td style="padding:12px 8px 8px 8px;text-align:left;">'
-        '<div style="font-size:26px;font-weight:700;color:#111827;'
+        'style="margin:0 auto;background:#FFFFFF;border-radius:14px;overflow:hidden;">'
+        '<tr><td style="padding:18px 14px 10px 14px;text-align:left;">'
+        '<div style="font-size:27px;font-weight:700;color:#111827;'
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">Daily Intelligence Digest</div>'
-        '<div style="font-size:13px;color:#6B7280;margin-top:2px;">As of ' + escape(as_of) + '</div>'
+        '<div style="font-size:13px;color:#6B7280;margin-top:3px;">As of ' + escape(as_of) + '</div>'
         '</td></tr>'
-        '<tr><td style="padding:0 8px;">' + breaking_html + '</td></tr>'
-        '<tr><td style="padding:0 8px;">' + ''.join(section_html_parts) + '</td></tr>'
-        '<tr><td style="padding:12px;color:#6B7280;font-size:11px;text-align:center;">You are receiving this digest based on your watchlist.</td></tr>'
+        '<tr><td style="padding:0 14px;">' + breaking_html + '</td></tr>'
+        '<tr><td style="padding:0 14px;">' + ''.join(section_html_parts) + '</td></tr>'
+        '<tr><td style="padding:16px;color:#6B7280;font-size:11px;text-align:center;">You are receiving this digest based on your watchlist.</td></tr>'
         '</table></center></body></html>'
     )
