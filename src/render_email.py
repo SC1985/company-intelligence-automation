@@ -129,25 +129,25 @@ SECTION_NAMES: Dict[str, str] = {
     'crypto':    'Digital Assets',
 }
 
-# Color and style definitions for each section and card
+# Color and style definitions for each section and card - UPDATED FOR CONSISTENT BACKGROUNDS
 SECTION_STYLES: Dict[str, Dict[str, str]] = {
     'equity': {
-        'border': '#3B82F6', 'bg': '#FAFBFC', 'shadow': 'rgba(59,130,246,0.06)',
+        'border': '#3B82F6', 'bg': '#FFFFFF', 'shadow': 'rgba(59,130,246,0.06)',
         'card_border': '#93C5FD', 'card_bg': '#93C5FD', 'card_shadow': 'rgba(147,197,253,0.15)',
         'tag_bg': '#111827', 'tag_color': '#FFFFFF',
     },
     'crypto': {
-        'border': '#8B5CF6', 'bg': '#FAFAFC', 'shadow': 'rgba(139,92,246,0.06)',
+        'border': '#8B5CF6', 'bg': '#FFFFFF', 'shadow': 'rgba(139,92,246,0.06)',
         'card_border': '#C4B5FD', 'card_bg': '#C4B5FD', 'card_shadow': 'rgba(196,181,253,0.15)',
         'tag_bg': '#111827', 'tag_color': '#FFFFFF',
     },
     'etf_index': {
-        'border': '#10B981', 'bg': '#F0FDF4', 'shadow': 'rgba(16,185,129,0.06)',
+        'border': '#10B981', 'bg': '#FFFFFF', 'shadow': 'rgba(16,185,129,0.06)',
         'card_border': '#70d5b3', 'card_bg': '#70d5b3', 'card_shadow': 'rgba(112,213,179,0.15)',
         'tag_bg': '#111827', 'tag_color': '#FFFFFF',
     },
     'commodity': {
-        'border': '#F59E0B', 'bg': '#FFFBEB', 'shadow': 'rgba(245,158,11,0.06)',
+        'border': '#F59E0B', 'bg': '#FFFFFF', 'shadow': 'rgba(245,158,11,0.06)',
         'card_border': '#f9c56d', 'card_bg': '#f9c56d', 'card_shadow': 'rgba(249,197,109,0.15)',
         'tag_bg': '#111827', 'tag_color': '#FFFFFF',
     },
@@ -180,6 +180,64 @@ def _button(label: str, url: str, secondary: bool = False) -> str:
         'style="color:' + color + ';text-decoration:none;display:block;">'
         + escape(label) + ' →</a></td></tr></table>'
     )
+
+
+def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any]]) -> str:
+    """Generate a dynamic header based on the day's content."""
+    up_count = summary.get('up_count', 0)
+    down_count = summary.get('down_count', 0)
+    total = up_count + down_count
+    
+    # Find the biggest mover
+    biggest_mover = None
+    biggest_change = 0
+    for asset in assets:
+        pct = _safe_float(asset.get('pct_1d'), 0)
+        if abs(pct) > abs(biggest_change):
+            biggest_change = pct
+            biggest_mover = asset
+    
+    # Check for breaking news
+    has_breaking = len(summary.get('heroes_breaking', [])) > 0
+    
+    # Generate dynamic title and subtitle based on market conditions
+    if total > 0:
+        up_pct = (up_count / total) * 100
+        
+        if has_breaking:
+            title = "📰 Breaking News & Market Update"
+            subtitle = f"Critical developments impacting your portfolio"
+        elif up_pct >= 70:
+            if biggest_change > 10:
+                title = "🚀 Portfolio Surge Alert"
+                subtitle = f"Strong gains across holdings • {up_count} advancing, {down_count} declining"
+            else:
+                title = "📈 Markets Trending Higher"
+                subtitle = f"Broad strength with {up_count} positions advancing"
+        elif up_pct <= 30:
+            if biggest_change < -10:
+                title = "⚠️ Market Pressure Alert"
+                subtitle = f"Significant declines detected • {down_count} falling, {up_count} rising"
+            else:
+                title = "📉 Risk-Off Session"
+                subtitle = f"Defensive positioning with {down_count} positions declining"
+        else:
+            title = "⚖️ Mixed Market Signals"
+            subtitle = f"Balanced movement • {up_count} up, {down_count} down"
+        
+        # Add biggest mover info if significant
+        if biggest_mover and abs(biggest_change) > 5:
+            name = biggest_mover.get('name', 'Unknown')
+            ticker = biggest_mover.get('ticker', '')
+            if biggest_change > 0:
+                subtitle += f" • {name} leads +{abs(biggest_change):.1f}%"
+            else:
+                subtitle += f" • {name} down {abs(biggest_change):.1f}%"
+    else:
+        title = "Intelligence Digest"
+        subtitle = "Your daily portfolio intelligence report"
+    
+    return title, subtitle
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +404,7 @@ def _grid(cards: List[str]) -> str:
 
 
 def _section_container(title: str, inner_html: str, section_type: str) -> str:
-    """Wrap section content in a container - MODERATE PADDING."""
+    """Wrap section content in a container - WHITE BACKGROUND WITH LEFT BORDER."""
     style = SECTION_STYLES.get(section_type, SECTION_STYLES['equity'])
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
@@ -355,7 +413,7 @@ def _section_container(title: str, inner_html: str, section_type: str) -> str:
         'box-shadow:0 1px 5px ' + style['shadow'] + ';"><tr><td style="padding:20px 14px;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
         '<tr><td class="section-title" style="font-weight:700;font-size:26px;color:#111827;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:0 0 12px 0;">'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:0 0 20px 0;padding-bottom:8px;">'
         + escape(title) + '</td></tr><tr><td>' + inner_html + '</td></tr></table>'
         '</td></tr></table>'
     )
@@ -440,7 +498,7 @@ def _normalize_inputs(*args: Any, **kwargs: Any) -> tuple[Dict[str, Any], List[D
 
 def render_email(*args: Any, **kwargs: Any) -> str:
     """
-    Render the full email HTML with moderate padding for balance.
+    Render the full email HTML with dynamic header and clean section styling.
 
     This function supports both the new signature (`render_email(summary, assets)`) and
     legacy signatures (`render_email(summary, companies, cryptos=cryptos)` and
@@ -463,6 +521,10 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         if sec not in by_section:
             by_section[sec] = []
         by_section[sec].append(a)
+    
+    # Generate dynamic header
+    header_title, header_subtitle = _generate_dynamic_header(summary, assets)
+    
     # Render breaking news heroes (up to 2)
     breaking_html = _render_heroes(summary.get('heroes_breaking', []) or [])
     # Render each section: heroes then cards
@@ -488,17 +550,18 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         '}'
         '</style>'
     )
-    # Main email with moderate padding
+    # Main email with dynamic header
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        + css + '<title>Daily Intelligence Digest</title></head>'
+        + css + '<title>' + escape(header_title) + '</title></head>'
         '<body style="margin:0;padding:0;background:#F9FAFB;"><center style="width:100%;background:#F9FAFB;">'
         '<table role="presentation" cellpadding="0" cellspacing="0" width="600" '
         'style="margin:0 auto;background:#FFFFFF;border-radius:14px;overflow:hidden;">'
         '<tr><td style="padding:18px 14px 10px 14px;text-align:left;">'
         '<div style="font-size:27px;font-weight:700;color:#111827;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">Daily Intelligence Digest</div>'
-        '<div style="font-size:13px;color:#6B7280;margin-top:3px;">As of ' + escape(as_of) + '</div>'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">' + escape(header_title) + '</div>'
+        '<div style="font-size:13px;color:#6B7280;margin-top:3px;">' + escape(header_subtitle) + '</div>'
+        '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">As of ' + escape(as_of) + '</div>'
         '</td></tr>'
         '<tr><td style="padding:0 14px;">' + breaking_html + '</td></tr>'
         '<tr><td style="padding:0 14px;">' + ''.join(section_html_parts) + '</td></tr>'
