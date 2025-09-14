@@ -182,7 +182,7 @@ def _button(label: str, url: str, secondary: bool = False) -> str:
     )
 
 
-def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any]]) -> str:
+def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any]]) -> tuple:
     """Generate a dynamic header based on the day's content."""
     up_count = summary.get('up_count', 0)
     down_count = summary.get('down_count', 0)
@@ -227,7 +227,11 @@ def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any
         
         # Add biggest mover info if significant
         if biggest_mover and abs(biggest_change) > 5:
-            name = biggest_mover.get('name', 'Unknown')
+            # Use commodity display name if available
+            if biggest_mover.get('commodity_display_name'):
+                name = biggest_mover.get('commodity_display_name')
+            else:
+                name = biggest_mover.get('name', 'Unknown')
             ticker = biggest_mover.get('ticker', '')
             if biggest_change > 0:
                 subtitle += f" • {name} leads +{abs(biggest_change):.1f}%"
@@ -312,10 +316,33 @@ def _build_asset_card(c: Dict[str, Any]) -> str:
     industry = c.get('industry') or ''
     
     price_v = _safe_float(c.get('price'), None)
-    if price_v is None:
-        price_fmt = '<span style="color:#9CA3AF;">--</span>'
+    
+    # Handle commodity-specific display
+    if section == 'commodity' and c.get('commodity_unit'):
+        unit = c.get('commodity_unit')
+        display_name = c.get('commodity_display_name') or name
+        
+        if price_v is None:
+            price_fmt = '<span style="color:#9CA3AF;">--</span>'
+        else:
+            # Format price with unit (e.g., "$1,850.50/oz" for gold)
+            price_fmt = f'<span style="color:#111827;font-weight:700;">${price_v:,.2f}/{unit}</span>'
+        
+        # Use commodity name instead of ETF name
+        name = display_name
+        ticker_display = f'({ticker})'  # Just show ETF ticker for reference
     else:
-        price_fmt = '<span style="color:#111827;font-weight:700;">${:,.2f}</span>'.format(price_v)
+        # Standard price display for stocks/ETFs/crypto
+        if price_v is None:
+            price_fmt = '<span style="color:#9CA3AF;">--</span>'
+        else:
+            price_fmt = '<span style="color:#111827;font-weight:700;">${:,.2f}</span>'.format(price_v)
+        
+        # Build ticker display with industry for equity section
+        if section == 'equity' and industry:
+            ticker_display = '(' + escape(ticker) + ') ' + escape(industry)
+        else:
+            ticker_display = '(' + escape(ticker) + ')'
     
     # Create 2x2 chip layout
     chip_1d = _chip('1D', c.get('pct_1d'))
@@ -344,12 +371,6 @@ def _build_asset_card(c: Dict[str, Any]) -> str:
             'font-size:13px;font-weight:500;">★ ' + escape(display) +
             ((' (' + escape(meta) + ')') if meta else '') + '</td></tr>'
         )
-    
-    # Build ticker display with industry for equity section
-    if section == 'equity' and industry:
-        ticker_display = '(' + escape(ticker) + ') ' + escape(industry)
-    else:
-        ticker_display = '(' + escape(ticker) + ')'
     
     # Compose the inner structure with moderate padding
     inner = (
