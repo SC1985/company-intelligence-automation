@@ -384,7 +384,7 @@ def _section_container(title: str, inner_html: str, section_type: str) -> str:
 # Main renderer
 # ---------------------------------------------------------------------------
 
-def _normalize_inputs(*args: Any, **kwargs: Any) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+def _normalize_inputs(*args: Any, **kwargs: Any) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
     Normalize inputs for ``render_email`` to support both current and legacy call signatures.
 
