@@ -96,7 +96,7 @@ def _safe_float(x: Any, default: Optional[float] = None) -> Optional[float]:
 
 
 def _chip(label: str, value: Any) -> str:
-    """Render a colored chip for a change percentage or value."""
+    """Render a colored chip for a change percentage or value - COMPACT VERSION."""
     v = _safe_float(value, None)
     if v is None:
         bg, color, sign, txt = '#6B7280', '#FFFFFF', '', '--'
@@ -106,12 +106,13 @@ def _chip(label: str, value: Any) -> str:
         else:
             bg, color, sign = '#EF4444', '#FFFFFF', '▼'
         txt = f'{abs(v):.1f}%'
+    # Reduced padding and margin for compact display
     return (
-        '<span style="background:' + bg + ';color:' + color + ';padding:5px 12px;'
-        'border-radius:12px;font-size:12px;font-weight:700;display:inline-block;'
-        'margin:2px 6px 4px 0;white-space:nowrap;'
+        '<span style="background:' + bg + ';color:' + color + ';padding:3px 6px;'
+        'border-radius:10px;font-size:11px;font-weight:700;display:inline-block;'
+        'margin:1px 2px;white-space:nowrap;'
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
-        + escape(label) + ' ' + sign + ' ' + txt + '</span>'
+        + escape(label) + ' ' + sign + txt + '</span>'
     )
 
 # Mapping of category codes to human-readable names
@@ -154,20 +155,20 @@ def _range_bar(pos: float, low: float, high: float) -> str:
     except Exception:
         p = 50.0
     return (
-        '<div style="height:6px;border-radius:3px;background:#E5E7EB;position:relative;margin:10px 0;">'
-        + f'<div style="width:{p:.1f}%;height:6px;border-radius:3px;background:#10B981;"></div></div>'
+        '<div style="height:5px;border-radius:3px;background:#E5E7EB;position:relative;margin:6px 0;">'
+        + f'<div style="width:{p:.1f}%;height:5px;border-radius:3px;background:#10B981;"></div></div>'
     )
 
 
 def _button(label: str, url: str, secondary: bool = False) -> str:
-    """Render a call-to-action button."""
+    """Render a call-to-action button - COMPACT VERSION."""
     bg = '#4B5563' if not secondary else '#9CA3AF'
     color = '#FFFFFF'
     return (
         '<table role="presentation" cellpadding="0" cellspacing="0" '
-        'style="display:inline-block;margin-right:8px;margin-bottom:4px;">'
-        '<tr><td style="background:' + bg + ';color:' + color + ';border-radius:10px;'
-        'font-size:13px;font-weight:600;padding:10px 16px;'
+        'style="display:inline-block;margin-right:4px;margin-bottom:2px;">'
+        '<tr><td style="background:' + bg + ';color:' + color + ';border-radius:8px;'
+        'font-size:12px;font-weight:600;padding:6px 10px;'
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
         '<a href="' + escape(url or '#') + '" target="_blank" rel="noopener noreferrer" '
         'style="color:' + color + ';text-decoration:none;display:block;">'
@@ -180,7 +181,7 @@ def _button(label: str, url: str, secondary: bool = False) -> str:
 # ---------------------------------------------------------------------------
 
 def _render_heroes(heroes: Iterable[Dict[str, Any]]) -> str:
-    """Render hero cards for breaking and section news."""
+    """Render hero cards for breaking and section news - MINIMAL PADDING."""
     out_parts: List[str] = []
     for i, h in enumerate(heroes):
         title = (h.get('title') or '').strip()
@@ -204,19 +205,19 @@ def _render_heroes(heroes: Iterable[Dict[str, Any]]) -> str:
             desc = truncated.strip() if truncated else (desc[:177] + '…')
         meta_bits = [b for b in [src, when] if b]
         meta = ' • '.join(meta_bits)
-        # Build card HTML using concatenation to avoid nested f-strings
+        # Build card HTML with reduced padding
         card = (
             '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-            'style="border-collapse:separate;margin:0 0 12px;">'
-            '<tr><td style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
+            'style="border-collapse:separate;margin:0 0 8px;">'
+            '<tr><td style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;">'
             '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFFFFF;">'
-            '<tr><td style="padding:18px 16px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
-            '<div style="font-size:12px;color:#6B7280;font-weight:700;margin-bottom:6px;">' + label + '</div>'
+            '<tr><td style="padding:12px 10px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
+            '<div style="font-size:11px;color:#6B7280;font-weight:700;margin-bottom:4px;">' + label + '</div>'
             '<a href="' + escape(url) + '" style="text-decoration:none;color:#111827;">'
-            '<div style="font-size:20px;font-weight:800;line-height:1.2;margin-bottom:8px;">'
+            '<div style="font-size:18px;font-weight:800;line-height:1.2;margin-bottom:6px;">'
             + escape(title) + '</div></a>'
-            + ('<div style="font-size:14px;color:#374151;margin-bottom:8px;line-height:1.5;">' + escape(desc) + '</div>' if desc else '')
-            + ('<div style="font-size:12px;color:#6B7280;">' + escape(meta) + '</div>' if meta else '')
+            + ('<div style="font-size:13px;color:#374151;margin-bottom:6px;line-height:1.4;">' + escape(desc) + '</div>' if desc else '')
+            + ('<div style="font-size:11px;color:#6B7280;">' + escape(meta) + '</div>' if meta else '')
             + '</td></tr></table></td></tr></table>'
         )
         out_parts.append(card)
@@ -228,31 +229,31 @@ def _render_heroes(heroes: Iterable[Dict[str, Any]]) -> str:
 # ---------------------------------------------------------------------------
 
 def _industry_pill(text: Optional[str], section: str) -> str:
-    """Render a solid pill for the industry's name."""
+    """Render a solid pill for the industry's name - COMPACT VERSION."""
     if not text:
         return ''
     style = SECTION_STYLES.get(section, SECTION_STYLES['equity'])
     return (
         '<span style="background:' + style['tag_bg'] + ';color:' + style['tag_color'] + ';'
-        'border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;'
-        'margin-right:8px;display:inline-block;">' + escape(text) + '</span>'
+        'border-radius:999px;padding:2px 8px;font-size:10px;font-weight:700;'
+        'margin-right:4px;display:inline-block;">' + escape(text) + '</span>'
     )
 
 
 def _card_shell(inner: str, section: str) -> str:
-    """Wrap the inner HTML in a card container with a coloured border and shadow."""
+    """Wrap the inner HTML in a card container with minimal margins."""
     style = SECTION_STYLES.get(section, SECTION_STYLES['equity'])
     return (
-        '<div style="border:1px solid ' + style['card_border'] + ';border-radius:14px;margin:0 0 12px;'
-        'box-shadow:0 2px 8px ' + style['card_shadow'] + ';background:' + style['card_bg'] + ';">'
+        '<div style="border:1px solid ' + style['card_border'] + ';border-radius:12px;margin:0 0 8px;'
+        'box-shadow:0 2px 6px ' + style['card_shadow'] + ';background:' + style['card_bg'] + ';">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="border-collapse:separate;margin:0;background:#FFFFFF;border-radius:13px;overflow:hidden;">'
+        'style="border-collapse:separate;margin:0;background:#FFFFFF;border-radius:11px;overflow:hidden;">'
         + inner + '</table></div>'
     )
 
 
 def _build_asset_card(c: Dict[str, Any]) -> str:
-    """Build a complete HTML card for a given asset."""
+    """Build a complete HTML card for a given asset - MINIMAL PADDING VERSION."""
     section = (c.get('category') or 'equity').lower()
     ticker = str(c.get('ticker') or c.get('symbol') or '')
     name = c.get('name') or ticker or 'Unknown'
@@ -261,7 +262,10 @@ def _build_asset_card(c: Dict[str, Any]) -> str:
         price_fmt = '<span style="color:#9CA3AF;">--</span>'
     else:
         price_fmt = '<span style="color:#111827;font-weight:700;">${:,.2f}</span>'.format(price_v)
+    
+    # Compact chips in a row
     chips = _chip('1D', c.get('pct_1d')) + _chip('1W', c.get('pct_1w')) + _chip('1M', c.get('pct_1m')) + _chip('YTD', c.get('pct_ytd'))
+    
     range_html = _range_bar(c.get('range_pct') or 50.0, c.get('low_52w') or 0.0, c.get('high_52w') or 0.0)
     bullets_html = ''
     headline = c.get('headline')
@@ -271,26 +275,26 @@ def _build_asset_card(c: Dict[str, Any]) -> str:
         display = headline if len(headline) <= 100 else (headline[:100] + '…')
         meta = ' • '.join([x for x in [source, when_fmt] if x])
         bullets_html = (
-            '<tr><td style="padding-bottom:10px;line-height:1.5;color:#374151;'
-            'font-size:14px;font-weight:500;">★ ' + escape(display) +
+            '<tr><td style="padding-bottom:6px;line-height:1.4;color:#374151;'
+            'font-size:13px;font-weight:500;">★ ' + escape(display) +
             ((' (' + escape(meta) + ')') if meta else '') + '</td></tr>'
         )
     pill = _industry_pill(c.get('industry'), section)
-    # Compose the inner structure of the card
+    # Compose the inner structure with minimal padding
     inner = (
-        '<tr><td style="padding:20px 22px;max-height:420px;overflow:hidden;vertical-align:top;">'
+        '<tr><td style="padding:12px 10px;max-height:380px;overflow:hidden;vertical-align:top;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
-        '<tr><td style="font-weight:700;font-size:17px;line-height:1.3;color:#111827;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding-bottom:4px;">'
+        '<tr><td style="font-weight:700;font-size:15px;line-height:1.2;color:#111827;'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding-bottom:3px;">'
         + pill + escape(name) + '</td></tr>'
         '<tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-        '<td style="font-size:13px;color:#6B7280;font-weight:600;">(' + escape(ticker) + ')</td>'
-        '<td style="text-align:right;font-size:16px;">' + price_fmt + '</td>'
+        '<td style="font-size:12px;color:#6B7280;font-weight:600;">(' + escape(ticker) + ')</td>'
+        '<td style="text-align:right;font-size:15px;">' + price_fmt + '</td>'
         '</tr></table></td></tr>'
-        '<tr><td style="margin:12px 0;">' + chips + '</td></tr>'
+        '<tr><td style="padding:6px 0 4px 0;">' + chips + '</td></tr>'
         '<tr><td>' + range_html + '</td></tr>'
         + bullets_html +
-        '<tr><td style="border-top:1px solid #E5E7EB;padding-top:14px;">'
+        '<tr><td style="border-top:1px solid #E5E7EB;padding-top:8px;">'
         + _button('News', c.get('news_url') or f'https://finance.yahoo.com/quote/{escape(ticker)}/news')
         + _button('Press', c.get('pr_url') or f'https://finance.yahoo.com/quote/{escape(ticker)}/press-releases', secondary=True)
         + '</td></tr>'
@@ -304,7 +308,7 @@ def _build_asset_card(c: Dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 def _grid(cards: List[str]) -> str:
-    """Arrange cards into a responsive two-column grid."""
+    """Arrange cards into a responsive two-column grid - MINIMAL GAP."""
     if not cards:
         return ''
     rows: List[str] = []
@@ -312,32 +316,33 @@ def _grid(cards: List[str]) -> str:
         left = cards[i]
         right = cards[i + 1] if i + 1 < len(cards) else ''
         if right:
+            # Reduced padding between columns
             rows.append(
                 '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-                'style="border-collapse:collapse;margin-bottom:8px;">'
-                '<tr><td class="stack-col" width="50%" style="vertical-align:top;padding-right:8px;">' + left + '</td>'
-                '<td class="stack-col" width="50%" style="vertical-align:top;padding-left:8px;">' + right + '</td></tr></table>'
+                'style="border-collapse:collapse;margin-bottom:4px;">'
+                '<tr><td class="stack-col" width="50%" style="vertical-align:top;padding-right:3px;">' + left + '</td>'
+                '<td class="stack-col" width="50%" style="vertical-align:top;padding-left:3px;">' + right + '</td></tr></table>'
             )
         else:
             rows.append(
                 '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-                'style="border-collapse:collapse;margin-bottom:8px;">'
+                'style="border-collapse:collapse;margin-bottom:4px;">'
                 '<tr><td class="stack-col" style="vertical-align:top;margin:0 auto;">' + left + '</td></tr></table>'
             )
     return ''.join(rows)
 
 
 def _section_container(title: str, inner_html: str, section_type: str) -> str:
-    """Wrap section content in a container with coloured border and background."""
+    """Wrap section content in a container - MINIMAL PADDING VERSION."""
     style = SECTION_STYLES.get(section_type, SECTION_STYLES['equity'])
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="border-collapse:collapse;background:' + style['bg'] + ';'
-        'border-left:4px solid ' + style['border'] + ';border-radius:16px;margin:24px 0;'
-        'box-shadow:0 1px 6px ' + style['shadow'] + ';"><tr><td style="padding:28px;">'
+        'border-left:3px solid ' + style['border'] + ';border-radius:12px;margin:12px 0;'
+        'box-shadow:0 1px 4px ' + style['shadow'] + ';"><tr><td style="padding:12px 8px;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
-        '<tr><td class="section-title" style="font-weight:700;font-size:28px;color:#111827;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:0 0 16px 0;">'
+        '<tr><td class="section-title" style="font-weight:700;font-size:24px;color:#111827;'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:0 0 10px 0;">'
         + escape(title) + '</td></tr><tr><td>' + inner_html + '</td></tr></table>'
         '</td></tr></table>'
     )
@@ -422,7 +427,7 @@ def _normalize_inputs(*args: Any, **kwargs: Any) -> tuple[Dict[str, Any], List[D
 
 def render_email(*args: Any, **kwargs: Any) -> str:
     """
-    Render the full email HTML.
+    Render the full email HTML with minimal padding for maximum content space.
 
     This function supports both the new signature (`render_email(summary, assets)`) and
     legacy signatures (`render_email(summary, companies, cryptos=cryptos)` and
@@ -457,32 +462,33 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         section_html_parts.append(_section_container(SECTION_NAMES.get(sec, sec.title()), sec_html, sec))
     # Compose final HTML
     as_of = _fmt_ct(summary.get('as_of_ct'), force_time=True, tz_suffix_policy='always')
-    # Minimal responsive CSS: do not increase mobile padding beyond spec
+    # Minimal responsive CSS with reduced mobile padding
     css = (
         '<style>'
         '@media only screen and (max-width: 640px) {'
-        '.stack-col{display:block!important;width:100%!important;max-width:100%!important;padding:0!important;margin-bottom:16px}'
-        '.section-title{font-size:36px!important;line-height:1.2!important}'
-        '.chip{font-size:15px!important;padding:8px 16px!important;margin:3px 8px 5px 0!important}'
-        '.section-container td{padding:20px 8px!important}'
-        '.outer-padding{padding:8px 2px!important}'
-        '.main-container{padding:16px 8px!important;background:#FFFFFF!important}'
+        '.stack-col{display:block!important;width:100%!important;max-width:100%!important;padding:0!important;margin-bottom:8px}'
+        '.section-title{font-size:22px!important;line-height:1.1!important}'
+        '.chip{font-size:10px!important;padding:2px 4px!important;margin:1px!important}'
+        '.section-container td{padding:8px 4px!important}'
+        '.outer-padding{padding:4px!important}'
+        '.main-container{padding:8px 4px!important;background:#FFFFFF!important}'
         '}'
         '</style>'
     )
+    # Main email with minimal padding
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         + css + '<title>Daily Intelligence Digest</title></head>'
         '<body style="margin:0;padding:0;background:#F9FAFB;"><center style="width:100%;background:#F9FAFB;">'
         '<table role="presentation" cellpadding="0" cellspacing="0" width="600" '
-        'style="margin:0 auto;background:#FFFFFF;border-radius:16px;overflow:hidden;">'
-        '<tr><td style="padding:24px 24px 12px 24px;text-align:left;">'
-        '<div style="font-size:28px;font-weight:700;color:#111827;'
+        'style="margin:0 auto;background:#FFFFFF;border-radius:12px;overflow:hidden;">'
+        '<tr><td style="padding:12px 8px 8px 8px;text-align:left;">'
+        '<div style="font-size:26px;font-weight:700;color:#111827;'
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">Daily Intelligence Digest</div>'
-        '<div style="font-size:14px;color:#6B7280;margin-top:4px;">As of ' + escape(as_of) + '</div>'
+        '<div style="font-size:13px;color:#6B7280;margin-top:2px;">As of ' + escape(as_of) + '</div>'
         '</td></tr>'
-        '<tr><td style="padding:0 24px;">' + breaking_html + '</td></tr>'
-        '<tr><td style="padding:0 24px;">' + ''.join(section_html_parts) + '</td></tr>'
-        '<tr><td style="padding:24px;color:#6B7280;font-size:12px;text-align:center;">You are receiving this digest based on your watchlist.</td></tr>'
+        '<tr><td style="padding:0 8px;">' + breaking_html + '</td></tr>'
+        '<tr><td style="padding:0 8px;">' + ''.join(section_html_parts) + '</td></tr>'
+        '<tr><td style="padding:12px;color:#6B7280;font-size:11px;text-align:center;">You are receiving this digest based on your watchlist.</td></tr>'
         '</table></center></body></html>'
     )
