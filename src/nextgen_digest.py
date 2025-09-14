@@ -75,14 +75,15 @@ COINGECKO_IDS = {
 def _load_watchlist() -> List[Dict[str, Any]]:
     """Load watchlist.json from ../data WITHOUT changing order."""
     here = os.path.dirname(os.path.abspath(__file__))
-    # Keep your approved watchlist name; do not touch its content.
-    # If your file lives at data/watchlist.json, we read it here.
     path_watch = os.path.normpath(os.path.join(here, "..", "data", "watchlist.json"))
+    
     with open(path_watch, "r", encoding="utf-8") as f:
         data = json.load(f)
-    # Expecting: { "sections": [ { "name": "...", "category": "...", "assets":[...] }, ... ] }
+    
+    # Now expecting: { "sections": [ { "name": "...", "category": "...", "assets":[...] }, ... ] }
     sections = data.get("sections") or []
     assets: List[Dict[str, Any]] = []
+    
     for sec in sections:
         cat = (sec.get("category") or "").strip()  # "etf_index" | "equity" | "commodity" | "crypto"
         sec_assets = sec.get("assets") or []
@@ -126,7 +127,7 @@ def _news_headline_via_newsapi(symbol: str, name: str) -> Optional[Dict[str, Any
 
 def _news_headline_via_yahoo(symbol: str) -> Optional[Dict[str, Any]]:
     # Quick RSS-ish JSON endpoint via Rapid-style; fallback stub for environments without keys.
-    # We’ll just return None if unavailable; your existing engine can still provide news.
+    # We'll just return None if unavailable; your existing engine can still provide news.
     return None
 
 def _coingecko_news(id_hint: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -263,7 +264,8 @@ async def build_nextgen_html(logger) -> str:
             }
         logger.info(f"Engine provided news for {len(engine_news)} symbols")
     except Exception as e:
-        logger.warning(f"Engine news unavailable: {e}")
+        logger.info(f"Engine news not available (this is okay): {e}")
+        # Continue without engine news - we'll use NewsAPI/other sources
 
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
@@ -306,7 +308,7 @@ async def build_nextgen_html(logger) -> str:
                 # crude YTD estimate (first trading day this year)
                 ytd_idx = max(0, len(cl)-1-130)  # fallback
                 pct_ytd = ((cl[-1]/cl[ytd_idx])-1.0)*100.0 if cl and ytd_idx < len(cl) else None
-                low_52w, high_52w = min(cl[-252:]), max(cl[-252:])
+                low_52w, high_52w = min(cl[-252:]), max(cl[-252:]) if len(cl) >= 252 else (min(cl), max(cl))
         elif cat == "crypto":
             cg = _coingecko_price(sym, a.get("coingecko_id"))
             if cg and cg.get("price") is not None:
@@ -317,11 +319,16 @@ async def build_nextgen_html(logger) -> str:
             if pct_1d >= 0: up += 1
             else: down += 1
 
+        # Calculate range percentage for the 52-week range bar
+        range_pct = 50.0  # default
+        if price and low_52w and high_52w and high_52w > low_52w:
+            range_pct = ((price - low_52w) / (high_52w - low_52w)) * 100.0
+
         enriched.append({
             **a,
             "price": price,
             "pct_1d": pct_1d, "pct_1w": pct_1w, "pct_1m": pct_1m, "pct_ytd": pct_ytd,
-            "low_52w": low_52w, "high_52w": high_52w,
+            "low_52w": low_52w, "high_52w": high_52w, "range_pct": range_pct,
             "headline": headline, "news_url": h_url, "source": h_source, "when": h_when, "description": desc,
         })
 
