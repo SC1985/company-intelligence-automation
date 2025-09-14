@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 import json, os, time, re
 import traceback
+import random
 
 try:
     from zoneinfo import ZoneInfo
@@ -47,7 +48,7 @@ def _http_get_json(url: str, timeout: float = 25.0, headers: Optional[Dict[str, 
     for attempt in range(3):
         try:
             from urllib.request import urlopen, Request
-            hdrs = {"User-Agent": "ci-digest/1.0"}
+            hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             if headers: hdrs.update(headers)
             req = Request(url, headers=hdrs)
             
@@ -117,24 +118,65 @@ def _load_watchlist() -> List[Dict[str, Any]]:
             assets.append(out)
     return assets
 
-# ----------------------- Fallback Data Source: Stooq -----------------------
+# ----------------------- YFinance Fallback -----------------------
+
+def _yfinance_daily(symbol: str, logger=None) -> Tuple[List[str], List[float]]:
+    """Get daily prices using yfinance (already in requirements.txt)."""
+    try:
+        import yfinance as yf
+        
+        if logger:
+            logger.info(f"Trying yfinance for {symbol}")
+        
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="6mo")  # Get 6 months of data
+        
+        if hist.empty:
+            if logger:
+                logger.warning(f"yfinance returned no data for {symbol}")
+            return [], []
+        
+        dates = []
+        closes = []
+        
+        for date, row in hist.iterrows():
+            dates.append(date.strftime("%Y-%m-%d"))
+            closes.append(float(row['Close']))
+        
+        if logger and len(closes) > 0:
+            logger.info(f"yfinance success for {symbol}: {len(closes)} prices, latest=${closes[-1]:.2f}")
+        
+        return dates, closes
+        
+    except Exception as e:
+        if logger:
+            logger.warning(f"yfinance failed for {symbol}: {str(e)}")
+        return [], []
+
+# ----------------------- Stooq with proper symbol formatting -----------------------
 
 def _stooq_daily(symbol: str, logger=None) -> Tuple[List[str], List[float]]:
     """Get daily prices from Stooq (free, no API key needed)."""
     try:
-        # Stooq provides CSV data for most US stocks
-        url = f"https://stooq.com/q/d/l/?s={symbol.lower()}&i=d"
+        # Stooq requires .US suffix for US stocks/ETFs
+        stooq_symbol = symbol.lower()
+        if not stooq_symbol.endswith('.us'):
+            stooq_symbol = stooq_symbol + '.us'
+        
+        url = f"https://stooq.com/q/d/l/?s={stooq_symbol}&i=d"
         
         if logger:
-            logger.info(f"Trying Stooq for {symbol}")
+            logger.info(f"Trying Stooq for {symbol} as {stooq_symbol}")
         
         from urllib.request import urlopen, Request
-        req = Request(url, headers={"User-Agent": "ci-digest/1.0"})
+        req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urlopen(req, timeout=15.0) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
         
         lines = raw.strip().split("\n")
         if len(lines) < 2:
+            if logger:
+                logger.warning(f"Stooq returned no data for {stooq_symbol}")
             return [], []
         
         dates = []
@@ -154,7 +196,7 @@ def _stooq_daily(symbol: str, logger=None) -> Tuple[List[str], List[float]]:
                     continue
         
         if logger and len(closes) > 0:
-            logger.info(f"Stooq success for {symbol}: {len(closes)} prices, latest={closes[-1]:.2f}")
+            logger.info(f"Stooq success for {symbol}: {len(closes)} prices, latest=${closes[-1]:.2f}")
         
         return dates[-120:], closes[-120:]  # Return last 120 days
         
@@ -172,9 +214,9 @@ def _news_headline_via_newsapi(symbol: str, name: str, logger=None) -> Optional[
         return None
     
     try:
-        # Very light symbol search; rely on NewsAPI recency + provider filtering
-        q = f"{symbol} OR \"{name}\""
-        url = f"https://newsapi.org/v2/everything?q={q}&pageSize=3&sortBy=publishedAt&language=en&apiKey={NEWSAPI_KEY}"
+        # Try both symbol and company name
+        q = f'"{symbol}" OR "{name}"'
+        url = f"https://newsapi.org/v2/everything?q={q}&pageSize=5&sortBy=publishedAt&language=en&apiKey={NEWSAPI_KEY}"
         
         if logger:
             logger.info(f"Fetching news for {symbol} from NewsAPI")
@@ -198,7 +240,7 @@ def _news_headline_via_newsapi(symbol: str, name: str, logger=None) -> Optional[
         
         for art in arts:
             title = (art.get("title") or "").strip()
-            if not title:
+            if not title or "[Removed]" in title:
                 continue
             when = art.get("publishedAt")
             src = (art.get("source") or {}).get("name")
@@ -226,7 +268,7 @@ def _yahoo_rss_news(symbol: str, logger=None) -> Optional[Dict[str, Any]]:
             logger.info(f"Trying Yahoo RSS for {symbol}")
         
         from urllib.request import urlopen, Request
-        req = Request(url, headers={"User-Agent": "ci-digest/1.0"})
+        req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urlopen(req, timeout=10.0) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
         
@@ -238,14 +280,19 @@ def _yahoo_rss_news(symbol: str, logger=None) -> Optional[Dict[str, Any]]:
             title_match = re.search(r'<title>(.*?)</title>', item)
             link_match = re.search(r'<link>(.*?)</link>', item)
             pubdate_match = re.search(r'<pubDate>(.*?)</pubDate>', item)
+            desc_match = re.search(r'<description>(.*?)</description>', item)
             
             if title_match:
                 title = title_match.group(1).strip()
                 # Clean CDATA
                 title = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', title)
+                title = title.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
                 
                 url = link_match.group(1) if link_match else None
                 when = pubdate_match.group(1) if pubdate_match else None
+                desc = desc_match.group(1) if desc_match else ""
+                desc = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', desc)
+                desc = desc.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
                 
                 if logger:
                     logger.info(f"Yahoo RSS found for {symbol}: {title[:50]}...")
@@ -255,7 +302,7 @@ def _yahoo_rss_news(symbol: str, logger=None) -> Optional[Dict[str, Any]]:
                     "url": url,
                     "when": when,
                     "source": "Yahoo Finance",
-                    "description": ""
+                    "description": desc[:200] if desc else ""
                 }
         
         return None
@@ -271,8 +318,8 @@ def _alpha_daily(symbol: str, logger=None) -> Tuple[List[str], List[float]]:
     """Daily prices via Alpha Vantage (equities/commodities). Returns (dates, closes)."""
     if not ALPHA_KEY:
         if logger:
-            logger.warning("Alpha Vantage API key not configured, trying Stooq fallback")
-        return _stooq_daily(symbol, logger)
+            logger.warning("Alpha Vantage API key not configured, trying yfinance")
+        return _yfinance_daily(symbol, logger)
     
     try:
         from urllib.parse import urlencode
@@ -291,20 +338,25 @@ def _alpha_daily(symbol: str, logger=None) -> Tuple[List[str], List[float]]:
         
         if not data:
             if logger:
-                logger.warning(f"Alpha Vantage returned no data for {symbol}, trying Stooq")
-            return _stooq_daily(symbol, logger)
+                logger.warning(f"Alpha Vantage returned no data for {symbol}, trying yfinance")
+            return _yfinance_daily(symbol, logger)
         
         # Check for rate limit or error
         if "Note" in data or "Information" in data:
             if logger:
-                logger.warning(f"Alpha Vantage rate limit for {symbol}: {data.get('Note', data.get('Information', ''))}")
-            return _stooq_daily(symbol, logger)
+                logger.warning(f"Alpha Vantage rate limit for {symbol}: {data.get('Note', data.get('Information', ''))}, trying yfinance")
+            return _yfinance_daily(symbol, logger)
+        
+        if "Error Message" in data:
+            if logger:
+                logger.warning(f"Alpha Vantage error for {symbol}: {data.get('Error Message', '')}, trying yfinance")
+            return _yfinance_daily(symbol, logger)
         
         ts = data.get("Time Series (Daily)")
         if not isinstance(ts, dict):
             if logger:
-                logger.warning(f"Alpha Vantage unexpected format for {symbol}, trying Stooq")
-            return _stooq_daily(symbol, logger)
+                logger.warning(f"Alpha Vantage unexpected format for {symbol}, trying yfinance")
+            return _yfinance_daily(symbol, logger)
         
         keys = sorted(ts.keys())
         dates: List[str] = []
@@ -321,14 +373,19 @@ def _alpha_daily(symbol: str, logger=None) -> Tuple[List[str], List[float]]:
                 continue
         
         if logger and len(closes) > 0:
-            logger.info(f"Alpha Vantage success for {symbol}: {len(closes)} prices, latest={closes[-1]:.2f}")
+            logger.info(f"Alpha Vantage success for {symbol}: {len(closes)} prices, latest=${closes[-1]:.2f}")
+        
+        if not closes:
+            if logger:
+                logger.warning(f"Alpha Vantage parsed no prices for {symbol}, trying yfinance")
+            return _yfinance_daily(symbol, logger)
         
         return dates, closes
         
     except Exception as e:
         if logger:
-            logger.error(f"Alpha Vantage exception for {symbol}: {str(e)}, trying Stooq")
-        return _stooq_daily(symbol, logger)
+            logger.error(f"Alpha Vantage exception for {symbol}: {str(e)}, trying yfinance")
+        return _yfinance_daily(symbol, logger)
 
 def _coingecko_price(symbol: str, id_hint: Optional[str], logger=None) -> Optional[Dict[str, Any]]:
     """Minimal CoinGecko price call via market data endpoint (public)."""
@@ -375,36 +432,62 @@ def _coingecko_price(symbol: str, id_hint: Optional[str], logger=None) -> Option
 
 _BREAKING_KWS = {
     "urgent": ["breaking", "just in", "alert", "exclusive", "developing"],
-    "major": ["announces", "launches", "unveils", "reveals", "reports", "surges", "plunges", "soars", "crashes"],
-    "earnings": ["earnings", "revenue", "profit", "beat", "miss", "guidance"],
-    "deal": ["acquisition", "merger", "buyout", "partnership", "deal"],
-    "reg": ["sec", "fda", "approval", "investigation", "lawsuit", "ruling"],
+    "major": ["announces", "launches", "unveils", "reveals", "reports", "surges", "plunges", "soars", "crashes", "jumps", "spikes"],
+    "earnings": ["earnings", "revenue", "profit", "beat", "miss", "guidance", "quarterly"],
+    "deal": ["acquisition", "merger", "buyout", "partnership", "deal", "buys", "sells"],
+    "reg": ["sec", "fda", "approval", "investigation", "lawsuit", "ruling", "regulatory"],
 }
 _BACKUP_KWS = {
-    "analysis": ["analysis", "outlook", "forecast", "expects"],
-    "market": ["market", "stocks", "trading", "investors", "wall street"],
-    "sector": ["tech", "ai", "crypto", "energy", "healthcare"],
+    "analysis": ["analysis", "outlook", "forecast", "expects", "prediction"],
+    "market": ["market", "stocks", "trading", "investors", "wall street", "nasdaq", "s&p"],
+    "sector": ["tech", "ai", "crypto", "energy", "healthcare", "semiconductor", "bitcoin", "ethereum"],
 }
 
 def _score_headline(headline: str, published: Optional[datetime]) -> Tuple[int, int]:
     bl = headline.lower()
     breaking, backup = 0, 0
-    for kw in _BREAKING_KWS["urgent"]:   breaking += 25 if kw in bl else 0
-    for kw in _BREAKING_KWS["major"]:    breaking += 20 if kw in bl else 0
-    for kw in _BREAKING_KWS["earnings"]: breaking += 18 if kw in bl else 0
-    for kw in _BREAKING_KWS["deal"]:     breaking += 18 if kw in bl else 0
-    for kw in _BREAKING_KWS["reg"]:      breaking += 15 if kw in bl else 0
+    
+    # Check breaking keywords
+    for kw in _BREAKING_KWS["urgent"]:   
+        if kw in bl: breaking += 25
+    for kw in _BREAKING_KWS["major"]:    
+        if kw in bl: breaking += 20
+    for kw in _BREAKING_KWS["earnings"]: 
+        if kw in bl: breaking += 18
+    for kw in _BREAKING_KWS["deal"]:     
+        if kw in bl: breaking += 18
+    for kw in _BREAKING_KWS["reg"]:      
+        if kw in bl: breaking += 15
+    
+    # Check backup keywords
     for group, kws in _BACKUP_KWS.items():
         for kw in kws:
             if kw in bl:
                 backup += 8 if group == "analysis" else 10 if group == "market" else 9
+    
     # Recency boost
     if published:
-        hours_ago = (datetime.now(timezone.utc) - published).total_seconds() / 3600
-        if hours_ago < 2:   breaking += 20; backup += 20
-        elif hours_ago < 6: breaking += 15; backup += 15
-        elif hours_ago < 12:breaking += 10; backup += 10
-        elif hours_ago < 24:breaking += 5;  backup += 5
+        try:
+            hours_ago = (datetime.now(timezone.utc) - published).total_seconds() / 3600
+            if hours_ago < 2:   
+                breaking += 20
+                backup += 20
+            elif hours_ago < 6: 
+                breaking += 15
+                backup += 15
+            elif hours_ago < 12:
+                breaking += 10
+                backup += 10
+            elif hours_ago < 24:
+                breaking += 5
+                backup += 5
+        except:
+            pass
+    
+    # Ensure any article with keywords gets at least some score
+    if breaking == 0 and backup > 0:
+        breaking = backup // 2  # Give it half the backup score as breaking score
+    
     return breaking, backup
 
 # ----------------------- Main -----------------------
@@ -447,6 +530,9 @@ async def build_nextgen_html(logger) -> str:
         # Continue without engine news - we'll use NewsAPI/other sources
 
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    
+    # Collect all news articles for later hero selection
+    all_news_items = []
 
     for i, a in enumerate(assets):
         sym = a["symbol"]
@@ -455,7 +541,7 @@ async def build_nextgen_html(logger) -> str:
         
         logger.info(f"Processing {i+1}/{len(assets)}: {sym} ({cat})")
 
-        # --------- Headline (prefer engine; otherwise NewsAPI/Yahoo/CoinGecko) ----------
+        # --------- Headline (prefer engine; otherwise NewsAPI/Yahoo) ----------
         headline = None; h_url = None; h_source = None; h_when = None; desc = ""
         
         m = engine_news.get(sym)
@@ -492,7 +578,13 @@ async def build_nextgen_html(logger) -> str:
         low_52w = high_52w = None
         
         if cat in ("equity", "etf_index", "commodity"):
+            # Try Alpha Vantage first (with yfinance fallback)
             dt, cl = _alpha_daily(sym, logger)
+            
+            # If still no data, try Stooq as last resort
+            if not cl:
+                dt, cl = _stooq_daily(sym, logger)
+            
             if cl:
                 price = cl[-1]
                 if len(cl) >= 2: 
@@ -501,18 +593,21 @@ async def build_nextgen_html(logger) -> str:
                     pct_1w = ((cl[-1]/cl[-6])-1.0)*100.0
                 if len(cl) >= 22: 
                     pct_1m = ((cl[-1]/cl[-22])-1.0)*100.0
-                # crude YTD estimate (first trading day this year)
-                ytd_idx = max(0, len(cl)-1-130)  # fallback
+                # crude YTD estimate
+                ytd_days = datetime.now().timetuple().tm_yday
+                ytd_idx = max(0, len(cl) - ytd_days) if ytd_days < len(cl) else 0
                 if cl and ytd_idx < len(cl):
                     pct_ytd = ((cl[-1]/cl[ytd_idx])-1.0)*100.0
+                
+                # Calculate 52-week range
                 if len(cl) >= 252:
                     low_52w, high_52w = min(cl[-252:]), max(cl[-252:])
-                else:
-                    low_52w, high_52w = min(cl), max(cl) if cl else (None, None)
+                elif cl:
+                    low_52w, high_52w = min(cl), max(cl)
                 
                 logger.info(f"  Price data for {sym}: ${price:.2f}, 1d={pct_1d:.1f}%" if pct_1d else f"  Price data for {sym}: ${price:.2f}")
             else:
-                logger.warning(f"  No price data for {sym}")
+                logger.warning(f"  No price data for {sym} from any source")
                 failed += 1
                 
         elif cat == "crypto":
@@ -534,78 +629,127 @@ async def build_nextgen_html(logger) -> str:
         if price and low_52w and high_52w and high_52w > low_52w:
             range_pct = ((price - low_52w) / (high_52w - low_52w)) * 100.0
 
-        enriched.append({
+        asset_data = {
             **a,
             "price": price,
             "pct_1d": pct_1d, "pct_1w": pct_1w, "pct_1m": pct_1m, "pct_ytd": pct_ytd,
             "low_52w": low_52w, "high_52w": high_52w, "range_pct": range_pct,
             "headline": headline, "news_url": h_url, "source": h_source, "when": h_when, "description": desc,
-        })
+        }
+        
+        enriched.append(asset_data)
+        
+        # Collect news item for hero selection
+        if headline:
+            all_news_items.append({
+                "asset": asset_data,
+                "title": headline,
+                "url": h_url or f"https://finance.yahoo.com/quote/{sym}/news",
+                "source": h_source,
+                "when": h_when,
+                "description": desc,
+                "category": cat,
+                "symbol": sym
+            })
 
     logger.info(f"=== Data collection complete: {len(enriched)} assets, {up} up, {down} down, {failed} failed ===")
+    logger.info(f"=== Total news items collected: {len(all_news_items)} ===")
 
     # ----------------- Build hero lists -----------------
 
-    def _belongs_to_section(asset: Dict[str, Any], section: str) -> bool:
-        return (asset.get("category") == section)
-
-    # Score and collect candidates
+    # Score ALL news items for breaking potential
     breaking_candidates: List[Tuple[int, Dict[str, Any]]] = []
-    section_candidates: Dict[str, List[Tuple[int, Dict[str, Any]]]] = {"etf_index": [], "equity": [], "commodity": [], "crypto": []}
+    section_candidates: Dict[str, List[Tuple[int, Dict[str, Any]]]] = {
+        "etf_index": [], "equity": [], "commodity": [], "crypto": []
+    }
 
-    for e in enriched:
-        title = (e.get("headline") or "").strip()
-        if not title:
-            continue
-        pub = _parse_iso(e.get("when")) if e.get("when") else None
+    for item in all_news_items:
+        title = item["title"]
+        pub = _parse_iso(item["when"]) if item["when"] else None
+        
+        # Skip old articles
         if pub and pub < seven_days_ago:
             continue
-
-        b, g = _score_headline(title, pub)
-        # Breaking threshold: >15
-        if b > 15:
-            breaking_candidates.append((b, e))
-        # General: >5 into the section
-        if g > 5:
-            sec = e.get("category")
+        
+        b_score, g_score = _score_headline(title, pub)
+        
+        logger.info(f"  Scored '{title[:50]}...': breaking={b_score}, general={g_score}")
+        
+        # Lower threshold to 10 for breaking news to ensure we get some
+        if b_score > 10:
+            breaking_candidates.append((b_score, item))
+        
+        # Add to section candidates
+        if g_score > 5:
+            sec = item["category"]
             if sec in section_candidates:
-                section_candidates[sec].append((g, e))
+                section_candidates[sec].append((g_score, item))
 
+    # Sort and select top breaking news
     breaking_candidates.sort(key=lambda x: x[0], reverse=True)
     heroes_breaking = []
-    for score, e in breaking_candidates[:2]:  # top 1–2
-        heroes_breaking.append({
-            "title": e["headline"],
-            "url": e.get("news_url") or f"https://finance.yahoo.com/quote/{e.get('ticker','')}/news",
-            "source": e.get("source"),
-            "when": e.get("when"),
-            "description": e.get("description") or "",
-        })
     
-    logger.info(f"Found {len(heroes_breaking)} breaking news items")
+    # Take top 2 breaking news items (or whatever we have)
+    for score, item in breaking_candidates[:2]:
+        heroes_breaking.append({
+            "title": item["title"],
+            "url": item["url"],
+            "source": item["source"],
+            "when": item["when"],
+            "description": item["description"],
+        })
+        logger.info(f"Selected breaking news (score={score}): {item['title'][:50]}...")
+    
+    if not heroes_breaking and all_news_items:
+        # If no breaking news qualified, take the 2 most recent articles
+        logger.info("No breaking news found, using most recent articles instead")
+        sorted_by_date = sorted(all_news_items, 
+                               key=lambda x: _parse_iso(x["when"]) if x["when"] else datetime.min.replace(tzinfo=timezone.utc), 
+                               reverse=True)
+        for item in sorted_by_date[:2]:
+            heroes_breaking.append({
+                "title": item["title"],
+                "url": item["url"],
+                "source": item["source"],
+                "when": item["when"],
+                "description": item["description"],
+            })
+            logger.info(f"Selected recent news: {item['title'][:50]}...")
+    
+    logger.info(f"Final breaking news count: {len(heroes_breaking)}")
 
+    # Select section heroes
     heroes_by_section: Dict[str, List[Dict[str, Any]]] = {}
-    for sec, arr in section_candidates.items():
-        arr.sort(key=lambda x: x[0], reverse=True)
+    for sec, candidates in section_candidates.items():
+        candidates.sort(key=lambda x: x[0], reverse=True)
         chosen = []
         seen_titles = set()
-        for score, e in arr:
-            if len(chosen) >= 3:  # cap 3 per section
+        
+        for score, item in candidates[:5]:  # Check more candidates
+            if len(chosen) >= 3:
                 break
-            t = (e.get("headline") or "").strip()
+            
+            t = item["title"].strip()
             if not t or t in seen_titles:
                 continue
+            
+            # Don't duplicate breaking news in sections
+            if any(h["title"] == t for h in heroes_breaking):
+                continue
+                
             seen_titles.add(t)
             chosen.append({
                 "title": t,
-                "url": e.get("news_url") or f"https://finance.yahoo.com/quote/{e.get('ticker','')}/news",
-                "source": e.get("source"),
-                "when": e.get("when"),
-                "description": e.get("description") or "",
+                "url": item["url"],
+                "source": item["source"],
+                "when": item["when"],
+                "description": item["description"],
             })
+            logger.info(f"Selected {sec} hero (score={score}): {t[:50]}...")
+        
         if chosen:
             heroes_by_section[sec] = chosen
-            logger.info(f"Found {len(chosen)} hero news items for section {sec}")
+            logger.info(f"Final {sec} hero count: {len(chosen)}")
 
     # ----------------- Summary + render -----------------
 
@@ -613,7 +757,7 @@ async def build_nextgen_html(logger) -> str:
     summary = {
         "as_of_ct": now_c,
         "up_count": up, "down_count": down,
-        "heroes_breaking": heroes_breaking,
+        "heroes_breaking": heroes_breaking,  # This is what the renderer expects
         "heroes_by_section": heroes_by_section,
         "data_quality": {
             "successful_entities": len(enriched) - failed,
@@ -622,6 +766,10 @@ async def build_nextgen_html(logger) -> str:
         },
     }
 
+    logger.info(f"=== Summary prepared ===")
+    logger.info(f"  Breaking heroes: {len(heroes_breaking)}")
+    logger.info(f"  Section heroes: {sum(len(v) for v in heroes_by_section.values())} total")
+    
     logger.info("=== Rendering email HTML ===")
     html = render_email(summary, enriched)
     logger.info(f"=== HTML generated: {len(html)} characters ===")
