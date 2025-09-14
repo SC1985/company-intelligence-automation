@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from html import escape
-from typing import Dict, List, Optional, Any, Iterable
+from typing import Dict, List, Optional, Any, Iterable, Tuple
 
 try:
     from zoneinfo import ZoneInfo  # Python 3.9+
