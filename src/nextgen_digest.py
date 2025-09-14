@@ -74,6 +74,18 @@ def _http_get_json(url: str, timeout: float = 25.0, headers: Optional[Dict[str, 
                 continue
             return None
 
+def _http_get_text(url: str, timeout: float = 15.0, logger=None) -> Optional[str]:
+    """Get plain text/HTML response."""
+    try:
+        from urllib.request import urlopen, Request
+        req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        if logger:
+            logger.warning(f"HTTP GET text failed: {str(e)}")
+        return None
+
 # ----------------------- Config / Sources -----------------------
 
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
@@ -84,6 +96,15 @@ COINGECKO_IDS = {
     "ETH-USD": "ethereum",
     "XRP-USD": "ripple",
     "DOGE-USD": "dogecoin",
+}
+
+# Map commodity ETFs to their underlying commodities
+COMMODITY_MAP = {
+    "GLD": {"name": "Gold", "unit": "oz", "symbol": "GOLD"},
+    "SLV": {"name": "Silver", "unit": "oz", "symbol": "SILVER"},
+    "USO": {"name": "WTI Crude Oil", "unit": "barrel", "symbol": "WTI"},
+    "UNG": {"name": "Natural Gas", "unit": "MMBtu", "symbol": "NATGAS"},
+    "CPER": {"name": "Copper", "unit": "lb", "symbol": "COPPER"},
 }
 
 # ----------------------- Data Loading -----------------------
@@ -117,6 +138,107 @@ def _load_watchlist() -> List[Dict[str, Any]]:
             }
             assets.append(out)
     return assets
+
+# ----------------------- Commodity Price Fetching -----------------------
+
+def _fetch_commodity_prices(logger=None) -> Dict[str, Dict[str, Any]]:
+    """Fetch actual commodity spot prices from various sources."""
+    prices = {}
+    
+    # Try fetching from Alpha Vantage if available
+    if ALPHA_KEY:
+        # Gold and Silver from Alpha Vantage CURRENCY_EXCHANGE_RATE
+        for metal, code in [("GOLD", "XAU"), ("SILVER", "XAG")]:
+            try:
+                url = f"https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency={code}&to_currency=USD&apikey={ALPHA_KEY}"
+                data = _http_get_json(url, logger=logger)
+                if data and "Realtime Currency Exchange Rate" in data:
+                    rate_data = data["Realtime Currency Exchange Rate"]
+                    price = float(rate_data.get("5. Exchange Rate", 0))
+                    if price > 0:
+                        prices[metal] = {
+                            "price": price,
+                            "unit": "oz",
+                            "name": "Gold" if metal == "GOLD" else "Silver"
+                        }
+                        if logger:
+                            logger.info(f"Got {metal} price from Alpha Vantage: ${price:.2f}/oz")
+            except Exception as e:
+                if logger:
+                    logger.warning(f"Failed to get {metal} from Alpha Vantage: {e}")
+    
+    # Try fetching from YFinance symbols
+    commodity_symbols = {
+        "GOLD": "GC=F",  # Gold futures
+        "SILVER": "SI=F",  # Silver futures
+        "WTI": "CL=F",  # WTI Crude futures
+        "NATGAS": "NG=F",  # Natural Gas futures
+        "COPPER": "HG=F",  # Copper futures
+    }
+    
+    try:
+        import yfinance as yf
+        for commodity, symbol in commodity_symbols.items():
+            if commodity not in prices:  # Skip if already have price
+                try:
+                    ticker = yf.Ticker(symbol)
+                    info = ticker.info
+                    hist = ticker.history(period="5d")
+                    
+                    if not hist.empty:
+                        current_price = float(hist['Close'].iloc[-1])
+                        
+                        # Calculate percentage changes
+                        pct_1d = 0
+                        if len(hist) >= 2:
+                            pct_1d = ((hist['Close'].iloc[-1] / hist['Close'].iloc[-2]) - 1) * 100
+                        
+                        # Get 52-week data
+                        hist_year = ticker.history(period="1y")
+                        low_52w = float(hist_year['Low'].min()) if not hist_year.empty else current_price
+                        high_52w = float(hist_year['High'].max()) if not hist_year.empty else current_price
+                        
+                        prices[commodity] = {
+                            "price": current_price,
+                            "pct_1d": pct_1d,
+                            "low_52w": low_52w,
+                            "high_52w": high_52w,
+                            "unit": COMMODITY_MAP.get(commodity, {}).get("unit", "unit"),
+                            "name": COMMODITY_MAP.get(commodity, {}).get("name", commodity)
+                        }
+                        
+                        if logger:
+                            logger.info(f"Got {commodity} from yfinance: ${current_price:.2f}")
+                except Exception as e:
+                    if logger:
+                        logger.warning(f"Failed to get {commodity} from yfinance: {e}")
+    except ImportError:
+        if logger:
+            logger.warning("yfinance not available for commodity prices")
+    
+    # Fallback: scrape from public sources (example with gold)
+    if "GOLD" not in prices:
+        try:
+            # This is a simplified example - in production you'd want more robust scraping
+            import re
+            html = _http_get_text("https://www.kitco.com/market/", logger=logger)
+            if html:
+                # Look for gold price pattern (this is very fragile and just an example)
+                match = re.search(r'Gold.*?\$([0-9,]+\.[0-9]+)', html)
+                if match:
+                    price_str = match.group(1).replace(',', '')
+                    prices["GOLD"] = {
+                        "price": float(price_str),
+                        "unit": "oz",
+                        "name": "Gold"
+                    }
+                    if logger:
+                        logger.info(f"Scraped GOLD price: ${price_str}/oz")
+        except Exception as e:
+            if logger:
+                logger.warning(f"Failed to scrape gold price: {e}")
+    
+    return prices
 
 # ----------------------- YFinance Fallback -----------------------
 
@@ -499,6 +621,10 @@ async def build_nextgen_html(logger) -> str:
     assets = _load_watchlist()  # PRESERVES ORDER
     logger.info(f"Loaded {len(assets)} assets from watchlist")
     
+    # Fetch commodity prices once
+    commodity_prices = _fetch_commodity_prices(logger)
+    logger.info(f"Fetched {len(commodity_prices)} commodity prices")
+    
     up = down = 0
     failed = 0
 
@@ -531,7 +657,7 @@ async def build_nextgen_html(logger) -> str:
 
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
     
-    # Collect all news articles for later hero selection
+    # Collect all news items for later hero selection
     all_news_items = []
 
     for i, a in enumerate(assets):
@@ -544,27 +670,39 @@ async def build_nextgen_html(logger) -> str:
         # --------- Headline (prefer engine; otherwise NewsAPI/Yahoo) ----------
         headline = None; h_url = None; h_source = None; h_when = None; desc = ""
         
-        m = engine_news.get(sym)
-        if m and m.get("title"):
-            headline = m["title"]; h_url = m.get("url"); h_source = m.get("source")
-            h_when = m.get("when"); desc = m.get("description") or ""
-            logger.info(f"  Using engine news for {sym}")
-        else:
-            # Try NewsAPI first
-            if NEWSAPI_KEY:
-                r = _news_headline_via_newsapi(sym, name, logger)
-                if r and r.get("title"):
-                    headline = r["title"]; h_url = r.get("url"); h_source = r.get("source"); 
-                    h_when = r.get("when"); desc = r.get("description") or ""
-                    logger.info(f"  Using NewsAPI news for {sym}")
-            
-            # Fallback to Yahoo RSS if no NewsAPI result
-            if not headline:
-                r = _yahoo_rss_news(sym, logger)
-                if r and r.get("title"):
-                    headline = r["title"]; h_url = r.get("url"); h_source = r.get("source")
-                    h_when = r.get("when"); desc = r.get("description") or ""
-                    logger.info(f"  Using Yahoo RSS news for {sym}")
+        # For commodities, try to get commodity-specific news
+        if cat == "commodity" and sym in COMMODITY_MAP:
+            commodity_name = COMMODITY_MAP[sym]["name"]
+            # Try news for the actual commodity
+            r = _news_headline_via_newsapi(commodity_name, commodity_name, logger) if NEWSAPI_KEY else None
+            if r and r.get("title"):
+                headline = r["title"]; h_url = r.get("url"); h_source = r.get("source")
+                h_when = r.get("when"); desc = r.get("description") or ""
+                logger.info(f"  Using commodity news for {commodity_name}")
+        
+        # Standard news fetching
+        if not headline:
+            m = engine_news.get(sym)
+            if m and m.get("title"):
+                headline = m["title"]; h_url = m.get("url"); h_source = m.get("source")
+                h_when = m.get("when"); desc = m.get("description") or ""
+                logger.info(f"  Using engine news for {sym}")
+            else:
+                # Try NewsAPI first
+                if NEWSAPI_KEY:
+                    r = _news_headline_via_newsapi(sym, name, logger)
+                    if r and r.get("title"):
+                        headline = r["title"]; h_url = r.get("url"); h_source = r.get("source"); 
+                        h_when = r.get("when"); desc = r.get("description") or ""
+                        logger.info(f"  Using NewsAPI news for {sym}")
+                
+                # Fallback to Yahoo RSS if no NewsAPI result
+                if not headline:
+                    r = _yahoo_rss_news(sym, logger)
+                    if r and r.get("title"):
+                        headline = r["title"]; h_url = r.get("url"); h_source = r.get("source")
+                        h_when = r.get("when"); desc = r.get("description") or ""
+                        logger.info(f"  Using Yahoo RSS news for {sym}")
 
         # Enforce 7-day cutoff on articles (skip if older)
         if h_when:
@@ -576,8 +714,44 @@ async def build_nextgen_html(logger) -> str:
         # --------- Pricing ----------
         price = None; pct_1d = pct_1w = pct_1m = pct_ytd = None
         low_52w = high_52w = None
+        commodity_unit = None
+        commodity_display_name = None
         
-        if cat in ("equity", "etf_index", "commodity"):
+        if cat == "commodity" and sym in COMMODITY_MAP:
+            # Use actual commodity prices
+            commodity_key = COMMODITY_MAP[sym]["symbol"]
+            commodity_data = commodity_prices.get(commodity_key, {})
+            
+            if commodity_data:
+                price = commodity_data.get("price")
+                pct_1d = commodity_data.get("pct_1d")
+                pct_1w = commodity_data.get("pct_1w")
+                pct_1m = commodity_data.get("pct_1m")
+                pct_ytd = commodity_data.get("pct_ytd")
+                low_52w = commodity_data.get("low_52w")
+                high_52w = commodity_data.get("high_52w")
+                commodity_unit = commodity_data.get("unit", COMMODITY_MAP[sym]["unit"])
+                commodity_display_name = COMMODITY_MAP[sym]["name"]
+                
+                logger.info(f"  Using commodity price for {commodity_display_name}: ${price:.2f}/{commodity_unit}" if price else f"  No commodity price for {commodity_display_name}")
+            else:
+                # Fallback to ETF price if commodity price not available
+                dt, cl = _alpha_daily(sym, logger)
+                if not cl:
+                    dt, cl = _stooq_daily(sym, logger)
+                
+                if cl:
+                    price = cl[-1]
+                    # Keep ETF percentage calculations
+                    if len(cl) >= 2: 
+                        pct_1d = ((cl[-1]/cl[-2])-1.0)*100.0
+                    # ... rest of calculations
+                    logger.info(f"  Fallback to ETF price for {sym}: ${price:.2f}")
+                else:
+                    logger.warning(f"  No price data for commodity {sym}")
+                    failed += 1
+                
+        elif cat in ("equity", "etf_index"):
             # Try Alpha Vantage first (with yfinance fallback)
             dt, cl = _alpha_daily(sym, logger)
             
@@ -635,6 +809,8 @@ async def build_nextgen_html(logger) -> str:
             "pct_1d": pct_1d, "pct_1w": pct_1w, "pct_1m": pct_1m, "pct_ytd": pct_ytd,
             "low_52w": low_52w, "high_52w": high_52w, "range_pct": range_pct,
             "headline": headline, "news_url": h_url, "source": h_source, "when": h_when, "description": desc,
+            "commodity_unit": commodity_unit,  # Add unit for commodities
+            "commodity_display_name": commodity_display_name,  # Add display name
         }
         
         enriched.append(asset_data)
