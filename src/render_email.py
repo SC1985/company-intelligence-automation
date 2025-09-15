@@ -143,7 +143,7 @@ def _index_pill(value: Any, prefix: str = '') -> str:
 
 
 # ---------------------------------------------------------------------------
-# NEW: Daily Focus Section
+# NEW: Daily Focus Section (DARK MODE FRIENDLY)
 # ---------------------------------------------------------------------------
 
 def _get_daily_focus(assets: List[Dict[str, Any]], today: datetime = None) -> Optional[Dict[str, Any]]:
@@ -207,31 +207,33 @@ def _get_daily_focus(assets: List[Dict[str, Any]], today: datetime = None) -> Op
 
 
 def _render_daily_focus(focus: Dict[str, Any]) -> str:
-    """Render the daily focus section."""
+    """Render the daily focus section with dark mode friendly colors."""
     if not focus:
         return ''
     
+    # Use a subtle dark background with light text that works in both modes
     return f'''
-    <div style="background:linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
-                border:2px solid #F59E0B;border-radius:12px;padding:14px;margin:12px 0;">
-        <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px;">
+    <div style="background:linear-gradient(135deg, #1F2937 0%, #374151 100%);
+                border:1px solid #4B5563;border-radius:12px;padding:14px;margin:12px 0;">
+        <div style="font-size:11px;font-weight:700;color:#F59E0B;margin-bottom:6px;
+                    text-transform:uppercase;letter-spacing:0.5px;">
             📍 TODAY'S FOCUS
         </div>
-        <div style="font-size:16px;font-weight:700;color:#111827;margin-bottom:4px;">
+        <div style="font-size:16px;font-weight:700;color:#FFFFFF;margin-bottom:4px;">
             {focus['icon']} {escape(focus['title'])}
         </div>
-        <div style="font-size:13px;color:#451A03;margin-bottom:6px;">
+        <div style="font-size:13px;color:#D1D5DB;margin-bottom:6px;">
             {escape(focus['detail'])}
         </div>
-        <div style="font-size:12px;color:#78350F;font-style:italic;">
-            <strong>Action:</strong> {escape(focus['action'])}
+        <div style="font-size:12px;color:#9CA3AF;">
+            <span style="color:#F59E0B;font-weight:600;">Action:</span> {escape(focus['action'])}
         </div>
     </div>
     '''
 
 
 # ---------------------------------------------------------------------------
-# NEW: Economic Calendar
+# NEW: Economic Calendar (DARK MODE FRIENDLY)
 # ---------------------------------------------------------------------------
 
 def _get_economic_calendar(today: datetime = None) -> List[Dict[str, Any]]:
@@ -261,19 +263,23 @@ def _get_economic_calendar(today: datetime = None) -> List[Dict[str, Any]]:
 
 
 def _render_economic_calendar(events: List[Dict[str, Any]], assets: List[Dict[str, Any]]) -> str:
-    """Render the economic calendar section."""
+    """Render the economic calendar section with dark mode friendly colors."""
     if not events:
         return ''
     
+    # Use dark background with light text
     html = '''
-    <div style="background:#F0F9FF;border:1px solid #0284C7;border-radius:12px;padding:12px;margin:12px 0;">
-        <div style="font-size:11px;font-weight:700;color:#075985;margin-bottom:8px;">
+    <div style="background:linear-gradient(135deg, #1E293B 0%, #334155 100%);
+                border:1px solid #475569;border-radius:12px;padding:12px;margin:12px 0;">
+        <div style="font-size:11px;font-weight:700;color:#60A5FA;margin-bottom:8px;
+                    text-transform:uppercase;letter-spacing:0.5px;">
             📅 ECONOMIC CALENDAR
         </div>
     '''
     
     for event in events[:3]:  # Show top 3 events
-        impact_color = '#DC2626' if event['impact'] == 'High' else '#F59E0B' if event['impact'] == 'Medium' else '#6B7280'
+        # Impact colors adjusted for dark background
+        impact_color = '#EF4444' if event['impact'] == 'High' else '#F59E0B' if event['impact'] == 'Medium' else '#6B7280'
         
         # Find affected holdings
         affected_symbols = []
@@ -285,11 +291,12 @@ def _render_economic_calendar(events: List[Dict[str, Any]], assets: List[Dict[st
                 ])
         
         html += f'''
-        <div style="margin:8px 0;padding:8px;background:white;border-radius:8px;border-left:3px solid {impact_color};">
+        <div style="margin:8px 0;padding:8px;background:rgba(255,255,255,0.05);
+                    border-radius:8px;border-left:3px solid {impact_color};">
             <div style="font-size:13px;">
                 <span style="color:{impact_color};font-weight:700;">{escape(event['time'])} ET</span>
-                <span style="font-weight:600;color:#111827;"> • {escape(event['event'])}</span>
-                {f' • {escape(event.get("forecast", ""))}' if event.get('forecast') else ''}
+                <span style="font-weight:600;color:#F3F4F6;"> • {escape(event['event'])}</span>
+                {f'<span style="color:#9CA3AF;"> • {escape(event.get("forecast", ""))}</span>' if event.get('forecast') else ''}
             </div>
             {f'<div style="font-size:11px;color:#6B7280;margin-top:2px;">Impact: {", ".join(affected_symbols[:5])}</div>' if affected_symbols else ''}
         </div>
