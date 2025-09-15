@@ -80,8 +80,9 @@ def _load_watchlist() -> List[Dict[str, Any]]:
     with open(path_watch, "r", encoding="utf-8") as f:
         data = json.load(f)
     
-    # Process the flat watchlist structure
+    # Process the flat watchlist structure (it's already a list)
     assets: List[Dict[str, Any]] = []
+    
     for item in data:
         # Skip comment entries
         if "comment" in item:
