@@ -277,11 +277,11 @@ def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any
 
 
 # ---------------------------------------------------------------------------
-# Market Indices Bar (FIXED with smaller width percentage to prevent wrapping)
+# Market Indices Bar (FIXED for proper mobile 2x2 wrapping)
 # ---------------------------------------------------------------------------
 
 def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
-    """Render market indices with individual containers using smaller widths to prevent wrapping."""
+    """Render market indices with individual containers and proper mobile wrapping."""
     if not indices:
         return ''
     
@@ -304,10 +304,10 @@ def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
         dd_pill = _index_pill(pct_1d)
         ytd_pill = _index_pill(pct_ytd, 'YTD ')
         
-        # Build each index with REDUCED width to prevent wrapping
+        # Build each index with class for mobile targeting
         cell_html = (
             '<div class="index-cell-wrapper" style="display:inline-block;width:23%;vertical-align:top;margin:0 0.5%;">'
-            '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;'
+            '<div class="index-cell-inner" style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;'
             'padding:8px 4px;text-align:center;box-sizing:border-box;'
             'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
             '<div style="font-weight:700;font-size:13px;color:#111827;margin-bottom:4px;">'
@@ -321,9 +321,9 @@ def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
         
         index_cells.append(cell_html)
     
-    # Create the indices bar with proper container
+    # Create the indices bar with wrapper for mobile control
     indices_bar = (
-        '<div style="text-align:center;margin:12px 0 18px 0;font-size:0;white-space:nowrap;">'
+        '<div class="indices-container" style="text-align:center;margin:12px 0 18px 0;font-size:0;white-space:nowrap;">'
         + ''.join(index_cells) +
         '</div>'
     )
@@ -663,7 +663,7 @@ def render_email(*args: Any, **kwargs: Any) -> str:
     # Compose final HTML
     as_of = _fmt_ct(summary.get('as_of_ct'), force_time=True, tz_suffix_policy='always')
     
-    # Enhanced responsive CSS with FIXED indices 2x2 mobile layout
+    # Enhanced responsive CSS with PROPERLY FIXED indices 2x2 mobile layout
     css = (
         '<style>'
         '@media only screen and (max-width: 640px) {'
@@ -673,8 +673,9 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         '.section-container td{padding:14px 8px!important}'
         '.outer-padding{padding:8px 4px!important}'
         '.main-container{padding:12px 8px!important;background:#FFFFFF!important}'
-        '/* Indices bar mobile 2x2 grid - properly fixed */'
-        '.index-cell-wrapper{width:47%!important;display:inline-block!important;vertical-align:top!important;margin:0 1%!important}'
+        '/* Indices bar mobile 2x2 grid - FORCE WRAPPING */'
+        '.indices-container{white-space:normal!important}'
+        '.index-cell-wrapper{width:47%!important;display:inline-block!important;vertical-align:top!important;margin:1%!important}'
         '}'
         '</style>'
     )
