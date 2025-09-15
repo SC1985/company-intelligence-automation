@@ -277,11 +277,11 @@ def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any
 
 
 # ---------------------------------------------------------------------------
-# Market Indices Bar (FIXED with div-based layout for proper mobile wrapping)
+# Market Indices Bar (FIXED with smaller width percentage to prevent wrapping)
 # ---------------------------------------------------------------------------
 
 def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
-    """Render market indices with individual containers using div layout for proper mobile wrapping."""
+    """Render market indices with individual containers using smaller widths to prevent wrapping."""
     if not indices:
         return ''
     
@@ -304,11 +304,11 @@ def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
         dd_pill = _index_pill(pct_1d)
         ytd_pill = _index_pill(pct_ytd, 'YTD ')
         
-        # Build each index as a div with inline-block
+        # Build each index with REDUCED width to prevent wrapping
         cell_html = (
-            '<div class="index-cell-wrapper" style="display:inline-block;width:24%;vertical-align:top;padding:3px;">'
+            '<div class="index-cell-wrapper" style="display:inline-block;width:23%;vertical-align:top;margin:0 0.5%;">'
             '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;'
-            'padding:8px 4px;text-align:center;'
+            'padding:8px 4px;text-align:center;box-sizing:border-box;'
             'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
             '<div style="font-weight:700;font-size:13px;color:#111827;margin-bottom:4px;">'
             + escape(abbrev) + '</div>'
@@ -321,9 +321,9 @@ def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
         
         index_cells.append(cell_html)
     
-    # Create the indices bar using div container with text-align center
+    # Create the indices bar with proper container
     indices_bar = (
-        '<div style="text-align:center;margin:12px 0 18px 0;font-size:0;">'  # font-size:0 removes spacing
+        '<div style="text-align:center;margin:12px 0 18px 0;font-size:0;white-space:nowrap;">'
         + ''.join(index_cells) +
         '</div>'
     )
@@ -674,7 +674,7 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         '.outer-padding{padding:8px 4px!important}'
         '.main-container{padding:12px 8px!important;background:#FFFFFF!important}'
         '/* Indices bar mobile 2x2 grid - properly fixed */'
-        '.index-cell-wrapper{width:48%!important;display:inline-block!important;vertical-align:top!important;padding:3px!important}'
+        '.index-cell-wrapper{width:47%!important;display:inline-block!important;vertical-align:top!important;margin:0 1%!important}'
         '}'
         '</style>'
     )
