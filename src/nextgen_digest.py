@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 import json, os, time, re
+import traceback
 
 try:
     from zoneinfo import ZoneInfo
@@ -74,68 +75,80 @@ COINGECKO_IDS = {
 
 def _load_watchlist() -> List[Dict[str, Any]]:
     """Load watchlist.json from ../data WITHOUT changing order."""
-    here = os.path.dirname(os.path.abspath(__file__))
-    path_watch = os.path.normpath(os.path.join(here, "..", "data", "watchlist.json"))
-    
-    with open(path_watch, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    
-    # Process the flat watchlist structure (it's already a list)
-    assets: List[Dict[str, Any]] = []
-    
-    for item in data:
-        # Skip comment entries
-        if "comment" in item:
-            continue
-            
-        sym = str(item.get("symbol") or "").upper()
-        if not sym:
-            continue
-            
-        # Determine category from asset_class
-        asset_class = item.get("asset_class", "equity")
-        if asset_class == "etf":
-            category = "etf_index"
-        elif asset_class == "commodity":
-            category = "commodity"
-        elif asset_class == "crypto":
-            category = "crypto"
-        else:
-            category = "equity"
-            
-        out = {
-            "ticker": sym,
-            "symbol": sym,
-            "name": item.get("name") or sym,
-            "category": category,
-            "industry": item.get("industry"),
-            "coingecko_id": item.get("coingecko_id"),
-        }
-        assets.append(out)
-    
-    return assets
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        path_watch = os.path.normpath(os.path.join(here, "..", "data", "watchlist.json"))
+        
+        with open(path_watch, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        # Process the flat watchlist structure (it's already a list)
+        assets: List[Dict[str, Any]] = []
+        
+        for item in data:
+            # Skip comment entries
+            if not isinstance(item, dict):
+                continue
+            if "comment" in item:
+                continue
+                
+            sym = str(item.get("symbol") or "").upper()
+            if not sym:
+                continue
+                
+            # Determine category from asset_class
+            asset_class = item.get("asset_class", "equity")
+            if asset_class == "etf":
+                category = "etf_index"
+            elif asset_class == "commodity":
+                category = "commodity"
+            elif asset_class == "crypto":
+                category = "crypto"
+            else:
+                category = "equity"
+                
+            out = {
+                "ticker": sym,
+                "symbol": sym,
+                "name": item.get("name") or sym,
+                "category": category,
+                "industry": item.get("industry"),
+                "coingecko_id": item.get("coingecko_id"),
+            }
+            assets.append(out)
+        
+        return assets
+    except Exception as e:
+        print(f"Error loading watchlist: {e}")
+        traceback.print_exc()
+        raise
 
 # ----------------------- Headlines (NewsAPI / Yahoo / CoinGecko) -----------------------
 
 def _news_headline_via_newsapi(symbol: str, name: str) -> Optional[Dict[str, Any]]:
     if not NEWSAPI_KEY:
         return None
-    # Very light symbol search; rely on NewsAPI recency + provider filtering
-    q = f"{symbol} OR \"{name}\""
-    url = f"https://newsapi.org/v2/everything?q={q}&pageSize=3&sortBy=publishedAt&language=en&apiKey={NEWSAPI_KEY}"
-    data = _http_get_json(url, timeout=20.0)
-    if not data or data.get("status") != "ok":
+    try:
+        # Very light symbol search; rely on NewsAPI recency + provider filtering
+        q = f"{symbol} OR \"{name}\""
+        url = f"https://newsapi.org/v2/everything?q={q}&pageSize=3&sortBy=publishedAt&language=en&apiKey={NEWSAPI_KEY}"
+        data = _http_get_json(url, timeout=20.0)
+        if not data or data.get("status") != "ok":
+            return None
+        arts = data.get("articles") or []
+        for art in arts:
+            if not isinstance(art, dict):
+                continue
+            title = (art.get("title") or "").strip()
+            if not title:
+                continue
+            when = art.get("publishedAt")
+            src = (art.get("source") or {}).get("name") if isinstance(art.get("source"), dict) else None
+            url = art.get("url")
+            desc = art.get("description") or ""
+            return {"title": title, "when": when, "source": src, "url": url, "description": desc}
+    except Exception:
         return None
-    arts = data.get("articles") or []
-    for art in arts:
-        title = (art.get("title") or "").strip()
-        if not title:
-            continue
-        when = art.get("publishedAt")
-        src = (art.get("source") or {}).get("name")
-        url = art.get("url")
-        desc = art.get("description") or ""
-        return {"title": title, "when": when, "source": src, "url": url, "description": desc}
     return None
 
 def _news_headline_via_yahoo(symbol: str) -> Optional[Dict[str, Any]]:
@@ -194,39 +207,42 @@ def _alpha_daily(symbol: str) -> Tuple[List[str], List[float]]:
     """Daily prices via Alpha Vantage (equities/commodities). Returns (dates, closes)."""
     if not ALPHA_KEY:
         return [], []
-    from urllib.parse import urlencode
-    qs = urlencode({
-        "function": "TIME_SERIES_DAILY_ADJUSTED",
-        "symbol": symbol,
-        "outputsize": "full",  # Changed to 'full' to get more historical data for YTD
-        "apikey": ALPHA_KEY,
-    })
-    url = f"https://www.alphavantage.co/query?{qs}"
-    data = _http_get_json(url, timeout=30.0)
-    ts = data.get("Time Series (Daily)") if isinstance(data, dict) else None
-    if not isinstance(ts, dict):
+    try:
+        from urllib.parse import urlencode
+        qs = urlencode({
+            "function": "TIME_SERIES_DAILY_ADJUSTED",
+            "symbol": symbol,
+            "outputsize": "full",  # Changed to 'full' to get more historical data for YTD
+            "apikey": ALPHA_KEY,
+        })
+        url = f"https://www.alphavantage.co/query?{qs}"
+        data = _http_get_json(url, timeout=30.0)
+        ts = data.get("Time Series (Daily)") if isinstance(data, dict) else None
+        if not isinstance(ts, dict):
+            return [], []
+        
+        # Get all dates and sort them
+        all_dates = sorted(ts.keys())
+        
+        # We need enough data for YTD (current year + some from last year)
+        # and for 52-week range, so get last 400 trading days
+        dates_to_use = all_dates[-400:] if len(all_dates) > 400 else all_dates
+        
+        dates: List[str] = []
+        closes: List[float] = []
+        for k in dates_to_use:
+            row = ts.get(k) or {}
+            ac = row.get("5. adjusted close") or row.get("4. close")
+            try:
+                price = float(str(ac).replace(",", ""))
+            except Exception:
+                continue
+            dates.append(k)
+            closes.append(price)
+        
+        return dates, closes
+    except Exception:
         return [], []
-    
-    # Get all dates and sort them
-    all_dates = sorted(ts.keys())
-    
-    # We need enough data for YTD (current year + some from last year)
-    # and for 52-week range, so get last 400 trading days
-    dates_to_use = all_dates[-400:] if len(all_dates) > 400 else all_dates
-    
-    dates: List[str] = []
-    closes: List[float] = []
-    for k in dates_to_use:
-        row = ts.get(k) or {}
-        ac = row.get("5. adjusted close") or row.get("4. close")
-        try:
-            price = float(str(ac).replace(",", ""))
-        except Exception:
-            continue
-        dates.append(k)
-        closes.append(price)
-    
-    return dates, closes
 
 def _coingecko_price(symbol: str, id_hint: Optional[str]) -> Optional[Dict[str, Any]]:
     """Get comprehensive price data from CoinGecko including YTD."""
@@ -335,208 +351,236 @@ def _score_headline(headline: str, published: Optional[datetime]) -> Tuple[int, 
 # ----------------------- Main -----------------------
 
 async def build_nextgen_html(logger) -> str:
-    assets = _load_watchlist()  # PRESERVES ORDER
-    up = down = 0
-    failed = 0
-
-    # Collect per-asset fields we render (we will not reorder assets)
-    enriched: List[Dict[str, Any]] = []
-
-    # Gather news map; use engine if available, else NewsAPI/Yahoo/CoinGecko when possible
-    engine_news: Dict[str, Dict[str, Any]] = {}
     try:
-        from main import StrategicIntelligenceEngine  # optional
-        engine = StrategicIntelligenceEngine()
-        logger.info("NextGen: attempting news via engine")
-        news = await engine._synthesize_strategic_news()
-        # Expecting iterable of {symbol,title,url,when,source,description}
-        for item in news or []:
-            sym = str(item.get("symbol") or "").upper()
-            if not sym: 
-                continue
-            engine_news[sym] = {
-                "title": item.get("title"),
-                "url": item.get("url"),
-                "when": item.get("when"),
-                "source": item.get("source"),
-                "description": item.get("description"),
-            }
-        logger.info(f"Engine provided news for {len(engine_news)} symbols")
-    except Exception as e:
-        logger.warning(f"Engine news unavailable: {e}")
-
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-
-    for a in assets:
-        sym = a["symbol"]
-        name = a["name"]
-        cat  = a["category"]
-
-        # --------- Headline (prefer engine; otherwise NewsAPI/Yahoo/CoinGecko) ----------
-        headline = None; h_url = None; h_source = None; h_when = None; desc = ""
-        m = engine_news.get(sym)
-        if m and m.get("title"):
-            headline = m["title"]; h_url = m.get("url"); h_source = m.get("source")
-            h_when = m.get("when"); desc = m.get("description") or ""
-        elif NEWSAPI_KEY:
-            r = _news_headline_via_newsapi(sym, name)
-            if r and r.get("title"):
-                headline = r["title"]; h_url = r.get("url"); h_source = r.get("source"); h_when = r.get("when"); desc = r.get("description") or ""
-        elif cat == "crypto":
-            # Try light coingecko news (often sparse) — safe to skip
-            pass
-
-        # Enforce 7-day cutoff on articles (skip if older)
-        if h_when:
-            pub_dt = _parse_iso(h_when)
-            if pub_dt and pub_dt < seven_days_ago:
-                # too old
-                headline = None; h_url = None; h_source = None; h_when = None; desc = ""
-
-        # --------- Pricing ----------
-        price = None; pct_1d = pct_1w = pct_1m = pct_ytd = None
-        low_52w = high_52w = None
+        assets = _load_watchlist()  # PRESERVES ORDER
+        logger.info(f"Loaded {len(assets)} assets from watchlist")
         
-        if cat in ("equity", "etf_index", "commodity"):
-            dt, cl = _alpha_daily(sym)
-            if cl and len(cl) > 0:
-                price = cl[-1]
+        up = down = 0
+        failed = 0
+
+        # Collect per-asset fields we render (we will not reorder assets)
+        enriched: List[Dict[str, Any]] = []
+
+        # Gather news map; use engine if available, else NewsAPI/Yahoo/CoinGecko when possible
+        engine_news: Dict[str, Dict[str, Any]] = {}
+        try:
+            from main import StrategicIntelligenceEngine  # optional
+            engine = StrategicIntelligenceEngine()
+            logger.info("NextGen: attempting news via engine")
+            news = await engine._synthesize_strategic_news()
+            
+            # Handle the news result more carefully
+            if news:
+                logger.info(f"Engine returned news of type: {type(news)}")
+                # If news is a string, skip it
+                if isinstance(news, str):
+                    logger.warning("Engine returned string instead of iterable, skipping")
+                else:
+                    # Try to iterate over news
+                    for item in news or []:
+                        # Check if item is a dict
+                        if not isinstance(item, dict):
+                            logger.warning(f"News item is not a dict: {type(item)}")
+                            continue
+                        
+                        sym = str(item.get("symbol") or "").upper()
+                        if not sym: 
+                            continue
+                        engine_news[sym] = {
+                            "title": item.get("title"),
+                            "url": item.get("url"),
+                            "when": item.get("when"),
+                            "source": item.get("source"),
+                            "description": item.get("description"),
+                        }
+                    logger.info(f"Engine provided news for {len(engine_news)} symbols")
+        except Exception as e:
+            logger.warning(f"Engine news unavailable: {e}")
+            traceback.print_exc()
+
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+        for a in assets:
+            try:
+                sym = a["symbol"]
+                name = a["name"]
+                cat  = a["category"]
+
+                # --------- Headline (prefer engine; otherwise NewsAPI/Yahoo/CoinGecko) ----------
+                headline = None; h_url = None; h_source = None; h_when = None; desc = ""
+                m = engine_news.get(sym)
+                if m and m.get("title"):
+                    headline = m["title"]; h_url = m.get("url"); h_source = m.get("source")
+                    h_when = m.get("when"); desc = m.get("description") or ""
+                elif NEWSAPI_KEY:
+                    r = _news_headline_via_newsapi(sym, name)
+                    if r and r.get("title"):
+                        headline = r["title"]; h_url = r.get("url"); h_source = r.get("source"); h_when = r.get("when"); desc = r.get("description") or ""
+                elif cat == "crypto":
+                    # Try light coingecko news (often sparse) — safe to skip
+                    pass
+
+                # Enforce 7-day cutoff on articles (skip if older)
+                if h_when:
+                    pub_dt = _parse_iso(h_when)
+                    if pub_dt and pub_dt < seven_days_ago:
+                        # too old
+                        headline = None; h_url = None; h_source = None; h_when = None; desc = ""
+
+                # --------- Pricing ----------
+                price = None; pct_1d = pct_1w = pct_1m = pct_ytd = None
+                low_52w = high_52w = None
                 
-                # Calculate 1D change
-                if len(cl) >= 2: 
-                    pct_1d = ((cl[-1]/cl[-2])-1.0)*100.0
-                
-                # Calculate 1W change (5 trading days)
-                if len(cl) >= 6: 
-                    pct_1w = ((cl[-1]/cl[-6])-1.0)*100.0
-                
-                # Calculate 1M change (22 trading days)
-                if len(cl) >= 22: 
-                    pct_1m = ((cl[-1]/cl[-22])-1.0)*100.0
-                
-                # Calculate YTD using the helper function
-                pct_ytd = _calculate_ytd_from_daily(dt, cl)
-                
-                # Calculate 52-week range
-                if len(cl) >= 252:
-                    low_52w = min(cl[-252:])
-                    high_52w = max(cl[-252:])
-                elif len(cl) > 0:
-                    # Use available data if less than 252 days
-                    low_52w = min(cl)
-                    high_52w = max(cl)
-                    
-        elif cat == "crypto":
-            cg = _coingecko_price(sym, a.get("coingecko_id"))
-            if cg and cg.get("price") is not None:
-                price = cg["price"]
-                pct_1d = cg.get("pct_1d")
-                pct_1w = cg.get("pct_1w")
-                pct_1m = cg.get("pct_1m")
-                pct_ytd = cg.get("pct_ytd")
-                low_52w = cg.get("low_52w")
-                high_52w = cg.get("high_52w")
+                if cat in ("equity", "etf_index", "commodity"):
+                    dt, cl = _alpha_daily(sym)
+                    if cl and len(cl) > 0:
+                        price = cl[-1]
+                        
+                        # Calculate 1D change
+                        if len(cl) >= 2: 
+                            pct_1d = ((cl[-1]/cl[-2])-1.0)*100.0
+                        
+                        # Calculate 1W change (5 trading days)
+                        if len(cl) >= 6: 
+                            pct_1w = ((cl[-1]/cl[-6])-1.0)*100.0
+                        
+                        # Calculate 1M change (22 trading days)
+                        if len(cl) >= 22: 
+                            pct_1m = ((cl[-1]/cl[-22])-1.0)*100.0
+                        
+                        # Calculate YTD using the helper function
+                        pct_ytd = _calculate_ytd_from_daily(dt, cl)
+                        
+                        # Calculate 52-week range
+                        if len(cl) >= 252:
+                            low_52w = min(cl[-252:])
+                            high_52w = max(cl[-252:])
+                        elif len(cl) > 0:
+                            # Use available data if less than 252 days
+                            low_52w = min(cl)
+                            high_52w = max(cl)
+                            
+                elif cat == "crypto":
+                    cg = _coingecko_price(sym, a.get("coingecko_id"))
+                    if cg and cg.get("price") is not None:
+                        price = cg["price"]
+                        pct_1d = cg.get("pct_1d")
+                        pct_1w = cg.get("pct_1w")
+                        pct_1m = cg.get("pct_1m")
+                        pct_ytd = cg.get("pct_ytd")
+                        low_52w = cg.get("low_52w")
+                        high_52w = cg.get("high_52w")
 
-        if pct_1d is not None:
-            if pct_1d >= 0: up += 1
-            else: down += 1
+                if pct_1d is not None:
+                    if pct_1d >= 0: up += 1
+                    else: down += 1
 
-        # Calculate range percentage for the range bar
-        range_pct = 50.0  # default
-        if price and low_52w and high_52w and high_52w > low_52w:
-            range_pct = ((price - low_52w) / (high_52w - low_52w)) * 100.0
+                # Calculate range percentage for the range bar
+                range_pct = 50.0  # default
+                if price and low_52w and high_52w and high_52w > low_52w:
+                    range_pct = ((price - low_52w) / (high_52w - low_52w)) * 100.0
 
-        enriched.append({
-            **a,
-            "price": price,
-            "pct_1d": pct_1d, 
-            "pct_1w": pct_1w, 
-            "pct_1m": pct_1m, 
-            "pct_ytd": pct_ytd,
-            "low_52w": low_52w, 
-            "high_52w": high_52w,
-            "range_pct": range_pct,
-            "headline": headline, 
-            "news_url": h_url, 
-            "source": h_source, 
-            "when": h_when, 
-            "description": desc,
-        })
+                enriched.append({
+                    **a,
+                    "price": price,
+                    "pct_1d": pct_1d, 
+                    "pct_1w": pct_1w, 
+                    "pct_1m": pct_1m, 
+                    "pct_ytd": pct_ytd,
+                    "low_52w": low_52w, 
+                    "high_52w": high_52w,
+                    "range_pct": range_pct,
+                    "headline": headline, 
+                    "news_url": h_url, 
+                    "source": h_source, 
+                    "when": h_when, 
+                    "description": desc,
+                })
+            except Exception as e:
+                logger.error(f"Error processing asset {a.get('symbol', 'unknown')}: {e}")
+                failed += 1
+                traceback.print_exc()
 
-    # ----------------- Build hero lists -----------------
+        # ----------------- Build hero lists -----------------
 
-    def _belongs_to_section(asset: Dict[str, Any], section: str) -> bool:
-        return (asset.get("category") == section)
+        def _belongs_to_section(asset: Dict[str, Any], section: str) -> bool:
+            return (asset.get("category") == section)
 
-    # Score and collect candidates
-    breaking_candidates: List[Tuple[int, Dict[str, Any]]] = []
-    section_candidates: Dict[str, List[Tuple[int, Dict[str, Any]]]] = {"etf_index": [], "equity": [], "commodity": [], "crypto": []}
+        # Score and collect candidates
+        breaking_candidates: List[Tuple[int, Dict[str, Any]]] = []
+        section_candidates: Dict[str, List[Tuple[int, Dict[str, Any]]]] = {"etf_index": [], "equity": [], "commodity": [], "crypto": []}
 
-    for e in enriched:
-        title = (e.get("headline") or "").strip()
-        if not title:
-            continue
-        pub = _parse_iso(e.get("when")) if e.get("when") else None
-        if pub and pub < seven_days_ago:
-            continue
-
-        b, g = _score_headline(title, pub)
-        # Breaking threshold: >15
-        if b > 15:
-            breaking_candidates.append((b, e))
-        # General: >5 into the section
-        if g > 5:
-            sec = e.get("category")
-            if sec in section_candidates:
-                section_candidates[sec].append((g, e))
-
-    breaking_candidates.sort(key=lambda x: x[0], reverse=True)
-    heroes_breaking = []
-    for score, e in breaking_candidates[:2]:  # top 1–2
-        heroes_breaking.append({
-            "title": e["headline"],
-            "url": e.get("news_url") or f"https://finance.yahoo.com/quote/{e.get('ticker','')}/news",
-            "source": e.get("source"),
-            "when": e.get("when"),
-            "description": e.get("description") or "",
-        })
-
-    heroes_by_section: Dict[str, List[Dict[str, Any]]] = {}
-    for sec, arr in section_candidates.items():
-        arr.sort(key=lambda x: x[0], reverse=True)
-        chosen = []
-        seen_titles = set()
-        for score, e in arr:
-            if len(chosen) >= 3:  # cap 3 per section
-                break
-            t = (e.get("headline") or "").strip()
-            if not t or t in seen_titles:
+        for e in enriched:
+            title = (e.get("headline") or "").strip()
+            if not title:
                 continue
-            seen_titles.add(t)
-            chosen.append({
-                "title": t,
+            pub = _parse_iso(e.get("when")) if e.get("when") else None
+            if pub and pub < seven_days_ago:
+                continue
+
+            b, g = _score_headline(title, pub)
+            # Breaking threshold: >15
+            if b > 15:
+                breaking_candidates.append((b, e))
+            # General: >5 into the section
+            if g > 5:
+                sec = e.get("category")
+                if sec in section_candidates:
+                    section_candidates[sec].append((g, e))
+
+        breaking_candidates.sort(key=lambda x: x[0], reverse=True)
+        heroes_breaking = []
+        for score, e in breaking_candidates[:2]:  # top 1–2
+            heroes_breaking.append({
+                "title": e["headline"],
                 "url": e.get("news_url") or f"https://finance.yahoo.com/quote/{e.get('ticker','')}/news",
                 "source": e.get("source"),
                 "when": e.get("when"),
                 "description": e.get("description") or "",
             })
-        if chosen:
-            heroes_by_section[sec] = chosen
 
-    # ----------------- Summary + render -----------------
+        heroes_by_section: Dict[str, List[Dict[str, Any]]] = {}
+        for sec, arr in section_candidates.items():
+            arr.sort(key=lambda x: x[0], reverse=True)
+            chosen = []
+            seen_titles = set()
+            for score, e in arr:
+                if len(chosen) >= 3:  # cap 3 per section
+                    break
+                t = (e.get("headline") or "").strip()
+                if not t or t in seen_titles:
+                    continue
+                seen_titles.add(t)
+                chosen.append({
+                    "title": t,
+                    "url": e.get("news_url") or f"https://finance.yahoo.com/quote/{e.get('ticker','')}/news",
+                    "source": e.get("source"),
+                    "when": e.get("when"),
+                    "description": e.get("description") or "",
+                })
+            if chosen:
+                heroes_by_section[sec] = chosen
 
-    now_c = _ct_now()
-    summary = {
-        "as_of_ct": now_c,
-        "up_count": up, "down_count": down,
-        "heroes_breaking": heroes_breaking,
-        "heroes_by_section": heroes_by_section,
-        "data_quality": {
-            "successful_entities": len(enriched),
-            "failed_entities": failed,
-            "total_entities": len(assets),
-        },
-    }
+        # ----------------- Summary + render -----------------
 
-    html = render_email(summary, enriched)
-    return html
+        now_c = _ct_now()
+        summary = {
+            "as_of_ct": now_c,
+            "up_count": up, "down_count": down,
+            "heroes_breaking": heroes_breaking,
+            "heroes_by_section": heroes_by_section,
+            "data_quality": {
+                "successful_entities": len(enriched),
+                "failed_entities": failed,
+                "total_entities": len(assets),
+            },
+        }
+
+        logger.info(f"Rendering email with {len(enriched)} enriched assets")
+        html = render_email(summary, enriched)
+        return html
+        
+    except Exception as e:
+        logger.error(f"Fatal error in build_nextgen_html: {e}")
+        traceback.print_exc()
+        raise
