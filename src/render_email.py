@@ -121,12 +121,41 @@ def _chip_row(chip1: str, chip2: str) -> str:
     return '<div style="margin:2px 0;">' + chip1 + chip2 + '</div>'
 
 
+def _index_pill(value: Any, prefix: str = '') -> str:
+    """Render a colored pill for index changes - compact version."""
+    v = _safe_float(value, None)
+    if v is None:
+        bg, color, sign, txt = '#6B7280', '#FFFFFF', '', '--'
+    else:
+        if v >= 0:
+            bg, color, sign = '#10B981', '#FFFFFF', '▲'
+        else:
+            bg, color, sign = '#EF4444', '#FFFFFF', '▼'
+        txt = f'{abs(v):.1f}%'
+    
+    return (
+        '<span style="background:' + bg + ';color:' + color + ';padding:3px 7px;'
+        'border-radius:8px;font-size:11px;font-weight:600;display:inline-block;'
+        'margin:2px;white-space:nowrap;'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
+        + prefix + sign + txt + '</span>'
+    )
+
+
 # Mapping of category codes to human-readable names
 SECTION_NAMES: Dict[str, str] = {
-    'etf_index': 'ETFs & Indices',
+    'etf_index': 'Market Indices',
     'equity':    'Equities',
     'commodity': 'Commodities',
     'crypto':    'Digital Assets',
+}
+
+# Index symbol to abbreviation mapping
+INDEX_ABBREVIATIONS: Dict[str, str] = {
+    '^DJI': 'DOW',
+    '^GSPC': 'S&P',
+    '^IXIC': 'NAS',
+    '^RUT': 'R2K',
 }
 
 # Color and style definitions for each section and card - UPDATED FOR CONSISTENT BACKGROUNDS
@@ -188,10 +217,13 @@ def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any
     down_count = summary.get('down_count', 0)
     total = up_count + down_count
     
-    # Find the biggest mover
+    # Find the biggest mover (excluding indices)
     biggest_mover = None
     biggest_change = 0
     for asset in assets:
+        # Skip indices for biggest mover calculation
+        if asset.get('category') == 'etf_index':
+            continue
         pct = _safe_float(asset.get('pct_1d'), 0)
         if abs(pct) > abs(biggest_change):
             biggest_change = pct
@@ -242,6 +274,61 @@ def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any
         subtitle = "Your daily portfolio intelligence report"
     
     return title, subtitle
+
+
+# ---------------------------------------------------------------------------
+# Market Indices Bar (NEW)
+# ---------------------------------------------------------------------------
+
+def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
+    """Render a compact horizontal bar for market indices."""
+    if not indices:
+        return ''
+    
+    index_cells = []
+    for idx in indices[:4]:  # Limit to 4 indices
+        symbol = idx.get('symbol', '')
+        abbrev = INDEX_ABBREVIATIONS.get(symbol, symbol)
+        
+        price_v = _safe_float(idx.get('price'), None)
+        if price_v is None:
+            price_fmt = '--'
+        else:
+            # Format with commas
+            price_fmt = f'{price_v:,.2f}'
+        
+        pct_1d = idx.get('pct_1d')
+        pct_ytd = idx.get('pct_ytd')
+        
+        # Create pills for D/D and YTD
+        dd_pill = _index_pill(pct_1d)
+        ytd_pill = _index_pill(pct_ytd, 'YTD ')
+        
+        # Build the index cell
+        cell_html = (
+            '<td class="index-cell" style="text-align:center;padding:8px 4px;vertical-align:top;'
+            'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
+            '<div style="font-weight:700;font-size:13px;color:#111827;margin-bottom:4px;">'
+            + escape(abbrev) + '</div>'
+            '<div style="font-size:14px;color:#111827;font-weight:600;margin-bottom:4px;">'
+            + escape(price_fmt) + '</div>'
+            '<div style="white-space:nowrap;">' + dd_pill + '</div>'
+            '<div style="white-space:nowrap;">' + ytd_pill + '</div>'
+            '</td>'
+        )
+        
+        index_cells.append(cell_html)
+    
+    # Create the indices bar with responsive table
+    indices_bar = (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="border-collapse:collapse;background:#F9FAFB;border-radius:12px;'
+        'border:1px solid #E5E7EB;margin:12px 0 18px 0;">'
+        '<tr>' + ''.join(index_cells) + '</tr>'
+        '</table>'
+    )
+    
+    return indices_bar
 
 
 # ---------------------------------------------------------------------------
@@ -535,30 +622,48 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         A string containing the fully rendered HTML email.
     """
     summary, assets = _normalize_inputs(*args, **kwargs)
-    # Group assets by category (preserving order)
-    by_section: Dict[str, List[Dict[str, Any]]] = {'etf_index': [], 'equity': [], 'commodity': [], 'crypto': []}
+    
+    # Separate indices from other assets
+    indices = []
+    other_assets = []
+    
     for a in assets:
+        sec = (a.get('category') or 'equity').lower()
+        if sec == 'etf_index':
+            indices.append(a)
+        else:
+            other_assets.append(a)
+    
+    # Group remaining assets by category (preserving order)
+    by_section: Dict[str, List[Dict[str, Any]]] = {'equity': [], 'commodity': [], 'crypto': []}
+    for a in other_assets:
         sec = (a.get('category') or 'equity').lower()
         if sec not in by_section:
             by_section[sec] = []
         by_section[sec].append(a)
     
-    # Generate dynamic header
-    header_title, header_subtitle = _generate_dynamic_header(summary, assets)
+    # Generate dynamic header (using other_assets to exclude indices from calculations)
+    header_title, header_subtitle = _generate_dynamic_header(summary, other_assets)
+    
+    # Render indices bar
+    indices_html = _render_indices_bar(indices)
     
     # Render breaking news heroes (up to 2)
     breaking_html = _render_heroes(summary.get('heroes_breaking', []) or [])
+    
     # Render each section: heroes then cards
     section_html_parts: List[str] = []
-    for sec in ['etf_index', 'equity', 'commodity', 'crypto']:
+    for sec in ['equity', 'commodity', 'crypto']:
         if not by_section.get(sec):
             continue
         sec_heroes = (summary.get('heroes_by_section', {}).get(sec) or [])[:3]
         sec_html = _render_heroes(sec_heroes) + _grid([_build_asset_card(x) for x in by_section[sec]])
         section_html_parts.append(_section_container(SECTION_NAMES.get(sec, sec.title()), sec_html, sec))
+    
     # Compose final HTML
     as_of = _fmt_ct(summary.get('as_of_ct'), force_time=True, tz_suffix_policy='always')
-    # Moderate responsive CSS
+    
+    # Enhanced responsive CSS with indices support
     css = (
         '<style>'
         '@media only screen and (max-width: 640px) {'
@@ -568,10 +673,13 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         '.section-container td{padding:14px 8px!important}'
         '.outer-padding{padding:8px 4px!important}'
         '.main-container{padding:12px 8px!important;background:#FFFFFF!important}'
+        '/* Indices bar mobile 2x2 grid */'
+        '.index-cell{display:inline-block!important;width:50%!important;padding:8px!important}'
         '}'
         '</style>'
     )
-    # Main email with dynamic header
+    
+    # Main email with dynamic header and indices bar at top
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         + css + '<title>' + escape(header_title) + '</title></head>'
@@ -584,6 +692,7 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         '<div style="font-size:13px;color:#6B7280;margin-top:3px;">' + escape(header_subtitle) + '</div>'
         '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">As of ' + escape(as_of) + '</div>'
         '</td></tr>'
+        '<tr><td style="padding:0 14px;">' + indices_html + '</td></tr>'
         '<tr><td style="padding:0 14px;">' + breaking_html + '</td></tr>'
         '<tr><td style="padding:0 14px;">' + ''.join(section_html_parts) + '</td></tr>'
         '<tr><td style="padding:16px;color:#6B7280;font-size:11px;text-align:center;">You are receiving this digest based on your watchlist.</td></tr>'
