@@ -1,42 +1,54 @@
 {
   "sections": [
     {
-      "name": "ETFs & Indices",
+      "name": "Market Indices",
       "category": "etf_index",
       "assets": [
         {
-          "symbol": "IWM",
-          "name": "iShares Russell 2000 ETF",
-          "asset_class": "etf",
-          "priority": "high",
-          "etf_type": "small_cap",
-          "investment_thesis": "Small-cap US companies exposure for growth opportunities",
-          "alert_thresholds": {
-            "price_change_percent": 2.5,
-            "volume_spike_multiplier": 1.5
-          }
-        },
-        {
-          "symbol": "QQQ",
-          "name": "Invesco QQQ Trust",
-          "asset_class": "etf",
+          "symbol": "^DJI",
+          "name": "Dow Jones Industrial Average",
+          "asset_class": "index",
           "priority": "critical",
-          "etf_type": "tech_index",
-          "investment_thesis": "Nasdaq-100 technology sector leadership exposure",
+          "index_type": "blue_chip",
+          "investment_thesis": "30 large-cap blue-chip industrials representing market leadership",
           "alert_thresholds": {
             "price_change_percent": 2.0,
             "volume_spike_multiplier": 1.5
           }
         },
         {
-          "symbol": "SPY",
-          "name": "SPDR S&P 500 ETF",
-          "asset_class": "etf",
+          "symbol": "^GSPC",
+          "name": "S&P 500 Index",
+          "asset_class": "index",
           "priority": "critical",
-          "etf_type": "broad_market",
-          "investment_thesis": "Core S&P 500 market benchmark and sentiment indicator",
+          "index_type": "broad_market",
+          "investment_thesis": "500 largest US companies, primary market benchmark",
           "alert_thresholds": {
             "price_change_percent": 1.5,
+            "volume_spike_multiplier": 1.5
+          }
+        },
+        {
+          "symbol": "^IXIC",
+          "name": "Nasdaq Composite Index",
+          "asset_class": "index",
+          "priority": "critical",
+          "index_type": "tech_heavy",
+          "investment_thesis": "Tech-heavy composite of all Nasdaq-listed stocks",
+          "alert_thresholds": {
+            "price_change_percent": 2.0,
+            "volume_spike_multiplier": 1.5
+          }
+        },
+        {
+          "symbol": "^RUT",
+          "name": "Russell 2000 Index",
+          "asset_class": "index",
+          "priority": "high",
+          "index_type": "small_cap",
+          "investment_thesis": "Small-cap companies index representing growth opportunities",
+          "alert_thresholds": {
+            "price_change_percent": 2.5,
             "volume_spike_multiplier": 1.5
           }
         }
