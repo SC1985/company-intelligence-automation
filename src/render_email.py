@@ -496,6 +496,7 @@ def render_email(*args: Any, **kwargs: Any) -> str:
     # Compose final HTML
     as_of = _fmt_ct(summary.get('as_of_ct'), force_time=True, tz_suffix_policy='always')
     # Enhanced responsive CSS with chip layout fixes
+    # Fixed: CSS comment is now inside the string, not outside
     css = (
         '<style>'
         '/* Chip wrapper for 2x2 grid in columns */'
@@ -505,7 +506,7 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         '.stack-col{display:block!important;width:100%!important;max-width:100%!important;padding:0!important;margin-bottom:16px}'
         '.section-title{font-size:36px!important;line-height:1.2!important}'
         '.chip-responsive{font-size:15px!important;padding:8px 16px!important;margin:3px 8px 5px 0!important}'
-        '.chip-wrapper{display:inline!important}'  /* Single row on mobile */
+        '.chip-wrapper{display:inline!important}' # Single row on mobile
         '.section-container td{padding:20px 8px!important}'
         '.outer-padding{padding:8px 2px!important}'
         '.main-container{padding:16px 8px!important;background:#FFFFFF!important}'
