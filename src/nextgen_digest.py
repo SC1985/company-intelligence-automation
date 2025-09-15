@@ -664,6 +664,103 @@ def _score_headline(headline: str, published: Optional[datetime]) -> Tuple[int, 
     
     return breaking, backup
 
+# ----------------------- NEW: Momentum Calculation -----------------------
+
+def _calculate_momentum(prices: List[float], volumes: List[float] = None) -> Dict[str, Any]:
+    """Calculate momentum indicators for an asset."""
+    indicators = {}
+    
+    if not prices or len(prices) < 2:
+        return indicators
+    
+    # Calculate consecutive days up/down
+    consecutive = 0
+    for i in range(len(prices) - 1, 0, -1):
+        if i == 0:
+            break
+        if prices[i] > prices[i-1]:
+            if consecutive >= 0:
+                consecutive += 1
+            else:
+                break
+        elif prices[i] < prices[i-1]:
+            if consecutive <= 0:
+                consecutive -= 1
+            else:
+                break
+        else:
+            break  # No change
+    
+    # Set momentum status based on consecutive days
+    if consecutive >= 3:
+        indicators['momentum'] = '🔥 Hot Streak'
+        indicators['momentum_color'] = '#10B981'
+        indicators['consecutive_days'] = consecutive
+    elif consecutive <= -3:
+        indicators['momentum'] = '❄️ Cold Streak'
+        indicators['momentum_color'] = '#EF4444'
+        indicators['consecutive_days'] = consecutive
+    elif consecutive >= 2:
+        indicators['momentum'] = '📈 Building'
+        indicators['momentum_color'] = '#F59E0B'
+        indicators['consecutive_days'] = consecutive
+    elif consecutive <= -2:
+        indicators['momentum'] = '📉 Weakening'
+        indicators['momentum_color'] = '#F59E0B'
+        indicators['consecutive_days'] = consecutive
+    else:
+        indicators['momentum'] = '➡️ Neutral'
+        indicators['momentum_color'] = '#6B7280'
+        indicators['consecutive_days'] = consecutive
+    
+    # Calculate simple RSI (14-day)
+    if len(prices) >= 15:
+        gains = []
+        losses = []
+        for i in range(len(prices) - 14, len(prices)):
+            if i == 0:
+                continue
+            change = prices[i] - prices[i-1]
+            if change > 0:
+                gains.append(change)
+                losses.append(0)
+            else:
+                gains.append(0)
+                losses.append(abs(change))
+        
+        avg_gain = sum(gains) / len(gains) if gains else 0
+        avg_loss = sum(losses) / len(losses) if losses else 0
+        
+        if avg_loss == 0:
+            rsi = 100
+        else:
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+        
+        indicators['rsi'] = round(rsi, 1)
+        
+        if rsi > 70:
+            indicators['rsi_signal'] = '⚠️ Overbought'
+        elif rsi < 30:
+            indicators['rsi_signal'] = '⚠️ Oversold'
+    
+    # Volume spike detection
+    if volumes and len(volumes) >= 20:
+        avg_volume = sum(volumes[-20:]) / 20
+        current_volume = volumes[-1] if volumes else 0
+        
+        if avg_volume > 0 and current_volume > 0:
+            volume_ratio = current_volume / avg_volume
+            
+            if volume_ratio > 2:
+                indicators['volume_alert'] = f'📢 Unusual Volume ({round(volume_ratio, 1)}x avg)'
+                indicators['volume_spike'] = volume_ratio
+            elif volume_ratio > 1.5:
+                indicators['volume_alert'] = f'📊 High Volume ({round(volume_ratio, 1)}x avg)'
+                indicators['volume_spike'] = volume_ratio
+    
+    return indicators
+
 # ----------------------- Main -----------------------
 
 async def build_nextgen_html(logger) -> str:
@@ -768,6 +865,7 @@ async def build_nextgen_html(logger) -> str:
         low_52w = high_52w = None
         commodity_unit = None
         commodity_display_name = None
+        momentum_data = {}  # Initialize momentum data
         
         if cat == "commodity" and sym in COMMODITY_MAP:
             # Use actual commodity prices
@@ -784,6 +882,9 @@ async def build_nextgen_html(logger) -> str:
                 high_52w = commodity_data.get("high_52w")
                 commodity_unit = commodity_data.get("unit", COMMODITY_MAP[sym]["unit"])
                 commodity_display_name = COMMODITY_MAP[sym]["name"]
+                
+                # Commodity momentum would need historical data
+                momentum_data = {}
                 
                 logger.info(f"  Using commodity price for {commodity_display_name}: ${price:.2f}/{commodity_unit}, 1D={pct_1d:.1f}%, 1W={pct_1w:.1f}%, 1M={pct_1m:.1f}%, YTD={pct_ytd:.1f}%" if price and pct_1d is not None else f"  No commodity price for {commodity_display_name}")
             else:
@@ -825,6 +926,10 @@ async def build_nextgen_html(logger) -> str:
                         low_52w, high_52w = min(cl[-252:]), max(cl[-252:])
                     elif cl:
                         low_52w, high_52w = min(cl), max(cl)
+                    
+                    # Calculate momentum for ETF fallback
+                    if len(cl) >= 2:
+                        momentum_data = _calculate_momentum(cl)
                     
                     logger.info(f"  Fallback to ETF price for {sym}: ${price:.2f}")
                 else:
@@ -875,6 +980,10 @@ async def build_nextgen_html(logger) -> str:
                 elif cl:
                     low_52w, high_52w = min(cl), max(cl)
                 
+                # Calculate momentum for equity/ETF
+                if len(cl) >= 2:
+                    momentum_data = _calculate_momentum(cl)
+                
                 logger.info(f"  Price data for {sym}: ${price:.2f}, 1d={pct_1d:.1f}%, YTD={pct_ytd:.1f}%" if pct_1d and pct_ytd else f"  Price data for {sym}: ${price:.2f}")
             else:
                 logger.warning(f"  No price data for {sym} from any source")
@@ -886,6 +995,9 @@ async def build_nextgen_html(logger) -> str:
                 price = cg["price"]; pct_1d = cg.get("pct_1d"); pct_1w = cg.get("pct_1w"); 
                 pct_1m = cg.get("pct_1m"); pct_ytd = cg.get("pct_ytd")
                 low_52w = cg.get("low_52w"); high_52w = cg.get("high_52w")
+                
+                # Crypto momentum would need historical data from separate API call
+                momentum_data = {}
             else:
                 logger.warning(f"  No crypto data for {sym}")
                 failed += 1
@@ -907,6 +1019,7 @@ async def build_nextgen_html(logger) -> str:
             "headline": headline, "news_url": h_url, "source": h_source, "when": h_when, "description": desc,
             "commodity_unit": commodity_unit,  # Add unit for commodities
             "commodity_display_name": commodity_display_name,  # Add display name
+            "momentum": momentum_data,  # Add momentum indicators
         }
         
         enriched.append(asset_data)
