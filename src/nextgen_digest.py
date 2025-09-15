@@ -167,7 +167,7 @@ def _fetch_commodity_prices(logger=None) -> Dict[str, Dict[str, Any]]:
                 if logger:
                     logger.warning(f"Failed to get {metal} from Alpha Vantage: {e}")
     
-    # Try fetching from YFinance symbols
+    # Try fetching from YFinance symbols with ENHANCED percentage calculations
     commodity_symbols = {
         "GOLD": "GC=F",  # Gold futures
         "SILVER": "SI=F",  # Silver futures
@@ -183,15 +183,36 @@ def _fetch_commodity_prices(logger=None) -> Dict[str, Dict[str, Any]]:
                 try:
                     ticker = yf.Ticker(symbol)
                     info = ticker.info
-                    hist = ticker.history(period="5d")
+                    
+                    # Get enough history for all calculations
+                    hist = ticker.history(period="1mo")  # Get 1 month for 1W and 1M calculations
                     
                     if not hist.empty:
                         current_price = float(hist['Close'].iloc[-1])
                         
-                        # Calculate percentage changes
+                        # Calculate 1D percentage change
                         pct_1d = 0
                         if len(hist) >= 2:
                             pct_1d = ((hist['Close'].iloc[-1] / hist['Close'].iloc[-2]) - 1) * 100
+                        
+                        # Calculate 1W percentage change (5 trading days)
+                        pct_1w = 0
+                        if len(hist) >= 6:
+                            pct_1w = ((hist['Close'].iloc[-1] / hist['Close'].iloc[-6]) - 1) * 100
+                        
+                        # Calculate 1M percentage change (22 trading days)
+                        pct_1m = 0
+                        if len(hist) >= 22:
+                            pct_1m = ((hist['Close'].iloc[-1] / hist['Close'].iloc[-22]) - 1) * 100
+                        
+                        # Calculate YTD percentage change
+                        pct_ytd = 0
+                        current_year = datetime.now().year
+                        hist_ytd = ticker.history(period="ytd")
+                        if not hist_ytd.empty and len(hist_ytd) > 1:
+                            # Get first trading day of the year
+                            first_price_ytd = hist_ytd['Close'].iloc[0]
+                            pct_ytd = ((current_price / first_price_ytd) - 1) * 100
                         
                         # Get 52-week data
                         hist_year = ticker.history(period="1y")
@@ -201,6 +222,9 @@ def _fetch_commodity_prices(logger=None) -> Dict[str, Dict[str, Any]]:
                         prices[commodity] = {
                             "price": current_price,
                             "pct_1d": pct_1d,
+                            "pct_1w": pct_1w,
+                            "pct_1m": pct_1m,
+                            "pct_ytd": pct_ytd,
                             "low_52w": low_52w,
                             "high_52w": high_52w,
                             "unit": COMMODITY_MAP.get(commodity, {}).get("unit", "unit"),
@@ -208,7 +232,7 @@ def _fetch_commodity_prices(logger=None) -> Dict[str, Dict[str, Any]]:
                         }
                         
                         if logger:
-                            logger.info(f"Got {commodity} from yfinance: ${current_price:.2f}")
+                            logger.info(f"Got {commodity} from yfinance: ${current_price:.2f}, 1D={pct_1d:.1f}%, 1W={pct_1w:.1f}%, 1M={pct_1m:.1f}%, YTD={pct_ytd:.1f}%")
                 except Exception as e:
                     if logger:
                         logger.warning(f"Failed to get {commodity} from yfinance: {e}")
@@ -230,7 +254,12 @@ def _fetch_commodity_prices(logger=None) -> Dict[str, Dict[str, Any]]:
                     prices["GOLD"] = {
                         "price": float(price_str),
                         "unit": "oz",
-                        "name": "Gold"
+                        "name": "Gold",
+                        # Set percentages to 0 if we can't calculate them
+                        "pct_1d": 0,
+                        "pct_1w": 0,
+                        "pct_1m": 0,
+                        "pct_ytd": 0
                     }
                     if logger:
                         logger.info(f"Scraped GOLD price: ${price_str}/oz")
@@ -510,7 +539,7 @@ def _alpha_daily(symbol: str, logger=None) -> Tuple[List[str], List[float]]:
         return _yfinance_daily(symbol, logger)
 
 def _coingecko_price(symbol: str, id_hint: Optional[str], logger=None) -> Optional[Dict[str, Any]]:
-    """Minimal CoinGecko price call via market data endpoint (public)."""
+    """Enhanced CoinGecko price call with YTD calculation fallback."""
     try:
         if not id_hint:
             id_hint = COINGECKO_IDS.get(symbol)
@@ -536,12 +565,35 @@ def _coingecko_price(symbol: str, id_hint: Optional[str], logger=None) -> Option
         pct_1d = (m.get("price_change_percentage_24h"))
         pct_1w = (m.get("price_change_percentage_7d"))
         pct_1m = (m.get("price_change_percentage_30d"))
-        pct_ytd = (m.get("price_change_percentage_ytd"))
+        pct_ytd = (m.get("price_change_percentage_1y_in_currency") or {}).get("usd")  # Try 1y as proxy
+        
+        # If YTD is still None, try to calculate it from price history
+        if pct_ytd is None:
+            try:
+                # Fetch historical price from Jan 1 of current year
+                current_year = datetime.now().year
+                jan1 = f"01-01-{current_year}"
+                hist_url = f"https://api.coingecko.com/api/v3/coins/{id_hint}/history?date={jan1}&localization=false"
+                
+                if logger:
+                    logger.info(f"Fetching YTD baseline for {symbol} from CoinGecko history")
+                
+                hist_data = _http_get_json(hist_url, timeout=20.0, logger=logger)
+                if hist_data and "market_data" in hist_data:
+                    jan1_price = (hist_data["market_data"].get("current_price") or {}).get("usd")
+                    if jan1_price and price:
+                        pct_ytd = ((price / jan1_price) - 1) * 100
+                        if logger:
+                            logger.info(f"Calculated YTD for {symbol}: {pct_ytd:.1f}%")
+            except Exception as e:
+                if logger:
+                    logger.warning(f"Failed to calculate YTD for {symbol}: {e}")
+        
         low_52w = (m.get("low_52w") or {}).get("usd")  # may be missing
         high_52w = (m.get("high_52w") or {}).get("usd")
         
         if logger and price:
-            logger.info(f"CoinGecko success for {symbol}: price=${price:.2f}, 1d={pct_1d:.1f}%")
+            logger.info(f"CoinGecko success for {symbol}: price=${price:.2f}, 1d={pct_1d:.1f}%, YTD={pct_ytd:.1f}%" if pct_ytd else f"CoinGecko success for {symbol}: price=${price:.2f}, 1d={pct_1d:.1f}%")
         
         return {"price": price, "pct_1d": pct_1d, "pct_1w": pct_1w, "pct_1m": pct_1m, "pct_ytd": pct_ytd,
                 "low_52w": low_52w, "high_52w": high_52w}
@@ -733,7 +785,7 @@ async def build_nextgen_html(logger) -> str:
                 commodity_unit = commodity_data.get("unit", COMMODITY_MAP[sym]["unit"])
                 commodity_display_name = COMMODITY_MAP[sym]["name"]
                 
-                logger.info(f"  Using commodity price for {commodity_display_name}: ${price:.2f}/{commodity_unit}" if price else f"  No commodity price for {commodity_display_name}")
+                logger.info(f"  Using commodity price for {commodity_display_name}: ${price:.2f}/{commodity_unit}, 1D={pct_1d:.1f}%, 1W={pct_1w:.1f}%, 1M={pct_1m:.1f}%, YTD={pct_ytd:.1f}%" if price and pct_1d is not None else f"  No commodity price for {commodity_display_name}")
             else:
                 # Fallback to ETF price if commodity price not available
                 dt, cl = _alpha_daily(sym, logger)
@@ -742,10 +794,38 @@ async def build_nextgen_html(logger) -> str:
                 
                 if cl:
                     price = cl[-1]
-                    # Keep ETF percentage calculations
+                    # Calculate percentages for ETF fallback
                     if len(cl) >= 2: 
                         pct_1d = ((cl[-1]/cl[-2])-1.0)*100.0
-                    # ... rest of calculations
+                    if len(cl) >= 6: 
+                        pct_1w = ((cl[-1]/cl[-6])-1.0)*100.0
+                    if len(cl) >= 22: 
+                        pct_1m = ((cl[-1]/cl[-22])-1.0)*100.0
+                    
+                    # FIXED YTD calculation for ETF fallback
+                    current_year = datetime.now().year
+                    current_date = datetime.now()
+                    
+                    # Find the index for the first trading day of the year
+                    ytd_idx = None
+                    for idx, date_str in enumerate(dt):
+                        try:
+                            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                            if date_obj.year == current_year:
+                                ytd_idx = idx
+                                break
+                        except:
+                            continue
+                    
+                    if ytd_idx is not None and ytd_idx < len(cl):
+                        pct_ytd = ((cl[-1]/cl[ytd_idx])-1.0)*100.0
+                    
+                    # 52-week range
+                    if len(cl) >= 252:
+                        low_52w, high_52w = min(cl[-252:]), max(cl[-252:])
+                    elif cl:
+                        low_52w, high_52w = min(cl), max(cl)
+                    
                     logger.info(f"  Fallback to ETF price for {sym}: ${price:.2f}")
                 else:
                     logger.warning(f"  No price data for commodity {sym}")
@@ -767,11 +847,27 @@ async def build_nextgen_html(logger) -> str:
                     pct_1w = ((cl[-1]/cl[-6])-1.0)*100.0
                 if len(cl) >= 22: 
                     pct_1m = ((cl[-1]/cl[-22])-1.0)*100.0
-                # crude YTD estimate
-                ytd_days = datetime.now().timetuple().tm_yday
-                ytd_idx = max(0, len(cl) - ytd_days) if ytd_days < len(cl) else 0
-                if cl and ytd_idx < len(cl):
+                
+                # FIXED YTD calculation
+                current_year = datetime.now().year
+                
+                # Find the index for the first trading day of the year
+                ytd_idx = None
+                for idx, date_str in enumerate(dt):
+                    try:
+                        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                        if date_obj.year == current_year:
+                            ytd_idx = idx
+                            break
+                    except:
+                        continue
+                
+                if ytd_idx is not None and ytd_idx < len(cl):
                     pct_ytd = ((cl[-1]/cl[ytd_idx])-1.0)*100.0
+                else:
+                    # If we don't have data from the start of the year, use the oldest available
+                    if cl and len(cl) > 1:
+                        pct_ytd = ((cl[-1]/cl[0])-1.0)*100.0
                 
                 # Calculate 52-week range
                 if len(cl) >= 252:
@@ -779,7 +875,7 @@ async def build_nextgen_html(logger) -> str:
                 elif cl:
                     low_52w, high_52w = min(cl), max(cl)
                 
-                logger.info(f"  Price data for {sym}: ${price:.2f}, 1d={pct_1d:.1f}%" if pct_1d else f"  Price data for {sym}: ${price:.2f}")
+                logger.info(f"  Price data for {sym}: ${price:.2f}, 1d={pct_1d:.1f}%, YTD={pct_ytd:.1f}%" if pct_1d and pct_ytd else f"  Price data for {sym}: ${price:.2f}")
             else:
                 logger.warning(f"  No price data for {sym} from any source")
                 failed += 1
