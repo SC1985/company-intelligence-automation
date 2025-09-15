@@ -277,11 +277,11 @@ def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any
 
 
 # ---------------------------------------------------------------------------
-# Market Indices Bar (FIXED for 2x2 mobile layout)
+# Market Indices Bar (FIXED with individual containers)
 # ---------------------------------------------------------------------------
 
 def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
-    """Render a compact horizontal bar for market indices with proper 2x2 mobile layout."""
+    """Render market indices with individual containers in a 1x4 desktop / 2x2 mobile layout."""
     if not indices:
         return ''
     
@@ -304,10 +304,11 @@ def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
         dd_pill = _index_pill(pct_1d)
         ytd_pill = _index_pill(pct_ytd, 'YTD ')
         
-        # Build each index as a div that can wrap
+        # Build each index as its own container
         cell_html = (
-            '<div class="index-cell" style="display:inline-block;width:25%;min-width:140px;'
-            'text-align:center;padding:8px 4px;vertical-align:top;'
+            '<td class="index-cell-wrapper" style="width:25%;padding:3px;">'
+            '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;'
+            'padding:8px 4px;text-align:center;'
             'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
             '<div style="font-weight:700;font-size:13px;color:#111827;margin-bottom:4px;">'
             + escape(abbrev) + '</div>'
@@ -315,18 +316,17 @@ def _render_indices_bar(indices: List[Dict[str, Any]]) -> str:
             + escape(price_fmt) + '</div>'
             '<div style="white-space:nowrap;">' + dd_pill + '</div>'
             '<div style="white-space:nowrap;">' + ytd_pill + '</div>'
-            '</div>'
+            '</div></td>'
         )
         
         index_cells.append(cell_html)
     
-    # Create the indices bar with div-based layout for proper wrapping
+    # Create the indices bar using table for reliable desktop layout
     indices_bar = (
-        '<div style="background:#F9FAFB;border-radius:12px;'
-        'border:1px solid #E5E7EB;margin:12px 0 18px 0;padding:4px;'
-        'text-align:center;font-size:0;">'  # font-size:0 removes spacing between inline-block elements
-        + ''.join(index_cells) +
-        '</div>'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="border-collapse:separate;margin:12px 0 18px 0;">'
+        '<tr>' + ''.join(index_cells) + '</tr>'
+        '</table>'
     )
     
     return indices_bar
@@ -674,9 +674,8 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         '.section-container td{padding:14px 8px!important}'
         '.outer-padding{padding:8px 4px!important}'
         '.main-container{padding:12px 8px!important;background:#FFFFFF!important}'
-        '/* Indices bar mobile 2x2 grid - FIXED */'
-        '.index-cell{width:50%!important;min-width:50%!important;display:inline-block!important;'
-        'padding:8px 4px!important;box-sizing:border-box!important}'
+        '/* Indices bar mobile 2x2 grid */'
+        '.index-cell-wrapper{display:inline-block!important;width:50%!important;padding:3px!important}'
         '}'
         '</style>'
     )
