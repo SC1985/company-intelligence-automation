@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from html import escape
 from typing import Dict, List, Optional, Any, Iterable
 
@@ -140,6 +140,206 @@ def _index_pill(value: Any, prefix: str = '') -> str:
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">'
         + prefix + sign + txt + '</span>'
     )
+
+
+# ---------------------------------------------------------------------------
+# NEW: Daily Focus Section
+# ---------------------------------------------------------------------------
+
+def _get_daily_focus(assets: List[Dict[str, Any]], today: datetime = None) -> Optional[Dict[str, Any]]:
+    """Determine the most important event for today."""
+    if today is None:
+        today = datetime.now(timezone.utc)
+    
+    focus_items = []
+    
+    # Check for earnings (would need earnings dates in asset data)
+    for asset in assets:
+        if asset.get('earnings_date'):
+            earnings_dt = _parse_to_dt(asset['earnings_date'])
+            if earnings_dt and earnings_dt.date() == today.date():
+                focus_items.append({
+                    'priority': 10,
+                    'icon': '📊',
+                    'title': f"{asset['symbol']} Earnings Today",
+                    'detail': f"Reports {asset.get('earnings_timing', 'after close')}",
+                    'action': 'Review analyst expectations'
+                })
+    
+    # Check for major economic events (hardcoded for now, could be API-driven)
+    economic_events = {
+        # Format: 'YYYY-MM-DD': [events]
+        '2025-01-15': {
+            'icon': '📈',
+            'title': 'CPI Inflation Data',
+            'detail': '8:30 AM ET • Forecast: +0.3% MoM',
+            'action': 'Watch commodity & growth stock positions',
+            'priority': 8
+        },
+        '2025-01-29': {
+            'icon': '🏛️',
+            'title': 'FOMC Rate Decision',
+            'detail': '2:00 PM ET • Expected: No Change',
+            'action': 'Prepare for volatility in rate-sensitive sectors',
+            'priority': 9
+        },
+    }
+    
+    today_str = today.strftime('%Y-%m-%d')
+    if today_str in economic_events:
+        focus_items.append(economic_events[today_str])
+    
+    # Pick highest priority item
+    if focus_items:
+        return max(focus_items, key=lambda x: x['priority'])
+    
+    # Default focus if nothing special today
+    if not focus_items:
+        # Market sentiment focus
+        return {
+            'icon': '📈',
+            'title': 'Market Positioning',
+            'detail': f"{today.strftime('%A')} Trading Session",
+            'action': 'Monitor momentum indicators for entry points'
+        }
+    
+    return None
+
+
+def _render_daily_focus(focus: Dict[str, Any]) -> str:
+    """Render the daily focus section."""
+    if not focus:
+        return ''
+    
+    return f'''
+    <div style="background:linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+                border:2px solid #F59E0B;border-radius:12px;padding:14px;margin:12px 0;">
+        <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px;">
+            📍 TODAY'S FOCUS
+        </div>
+        <div style="font-size:16px;font-weight:700;color:#111827;margin-bottom:4px;">
+            {focus['icon']} {escape(focus['title'])}
+        </div>
+        <div style="font-size:13px;color:#451A03;margin-bottom:6px;">
+            {escape(focus['detail'])}
+        </div>
+        <div style="font-size:12px;color:#78350F;font-style:italic;">
+            <strong>Action:</strong> {escape(focus['action'])}
+        </div>
+    </div>
+    '''
+
+
+# ---------------------------------------------------------------------------
+# NEW: Economic Calendar
+# ---------------------------------------------------------------------------
+
+def _get_economic_calendar(today: datetime = None) -> List[Dict[str, Any]]:
+    """Get today's economic events. In production, this would call an API."""
+    if today is None:
+        today = datetime.now(timezone.utc)
+    
+    # Hardcoded calendar - in production, fetch from API
+    calendar = {
+        '2025-01-15': [
+            {'time': '08:30', 'event': 'Core CPI', 'impact': 'High', 'forecast': '+0.3%', 'affects': ['commodity', 'crypto']},
+            {'time': '08:30', 'event': 'Retail Sales', 'impact': 'Medium', 'forecast': '+0.5%', 'affects': ['equity']},
+            {'time': '14:00', 'event': 'Beige Book', 'impact': 'Low', 'affects': ['equity']},
+        ],
+        '2025-01-16': [
+            {'time': '08:30', 'event': 'Initial Jobless Claims', 'impact': 'Medium', 'forecast': '215K', 'affects': ['equity']},
+            {'time': '08:30', 'event': 'Housing Starts', 'impact': 'Low', 'forecast': '1.35M', 'affects': ['commodity']},
+        ],
+        '2025-01-29': [
+            {'time': '14:00', 'event': 'FOMC Decision', 'impact': 'High', 'forecast': '5.25-5.50%', 'affects': ['equity', 'crypto']},
+            {'time': '14:30', 'event': 'Powell Press Conference', 'impact': 'High', 'affects': ['equity', 'crypto']},
+        ],
+    }
+    
+    today_str = today.strftime('%Y-%m-%d')
+    return calendar.get(today_str, [])
+
+
+def _render_economic_calendar(events: List[Dict[str, Any]], assets: List[Dict[str, Any]]) -> str:
+    """Render the economic calendar section."""
+    if not events:
+        return ''
+    
+    html = '''
+    <div style="background:#F0F9FF;border:1px solid #0284C7;border-radius:12px;padding:12px;margin:12px 0;">
+        <div style="font-size:11px;font-weight:700;color:#075985;margin-bottom:8px;">
+            📅 ECONOMIC CALENDAR
+        </div>
+    '''
+    
+    for event in events[:3]:  # Show top 3 events
+        impact_color = '#DC2626' if event['impact'] == 'High' else '#F59E0B' if event['impact'] == 'Medium' else '#6B7280'
+        
+        # Find affected holdings
+        affected_symbols = []
+        if 'affects' in event:
+            for category in event['affects']:
+                affected_symbols.extend([
+                    a['symbol'] for a in assets 
+                    if a.get('category') == category
+                ])
+        
+        html += f'''
+        <div style="margin:8px 0;padding:8px;background:white;border-radius:8px;border-left:3px solid {impact_color};">
+            <div style="font-size:13px;">
+                <span style="color:{impact_color};font-weight:700;">{escape(event['time'])} ET</span>
+                <span style="font-weight:600;color:#111827;"> • {escape(event['event'])}</span>
+                {f' • {escape(event.get("forecast", ""))}' if event.get('forecast') else ''}
+            </div>
+            {f'<div style="font-size:11px;color:#6B7280;margin-top:2px;">Impact: {", ".join(affected_symbols[:5])}</div>' if affected_symbols else ''}
+        </div>
+        '''
+    
+    html += '</div>'
+    return html
+
+
+# ---------------------------------------------------------------------------
+# NEW: Momentum Indicators
+# ---------------------------------------------------------------------------
+
+def _render_momentum_badge(momentum: Dict[str, Any]) -> str:
+    """Render momentum indicators as a badge."""
+    if not momentum:
+        return ''
+    
+    html = '<div style="margin:8px 0;padding:6px;background:#F3F4F6;border-radius:8px;">'
+    
+    # Momentum streak
+    if 'momentum' in momentum:
+        color = momentum.get('momentum_color', '#6B7280')
+        html += f'''
+        <span style="background:{color};color:white;padding:3px 8px;border-radius:6px;
+                     font-size:11px;font-weight:600;margin-right:6px;">
+            {escape(momentum['momentum'])}
+        </span>
+        '''
+    
+    # RSI indicator
+    if 'rsi_signal' in momentum and momentum['rsi_signal']:
+        html += f'''
+        <span style="background:#FEF3C7;color:#92400E;padding:3px 8px;border-radius:6px;
+                     font-size:11px;font-weight:600;margin-right:6px;">
+            RSI: {momentum.get('rsi', 'N/A')} {escape(momentum['rsi_signal'])}
+        </span>
+        '''
+    
+    # Volume alert
+    if 'volume_alert' in momentum:
+        html += f'''
+        <span style="background:#DBEAFE;color:#1E40AF;padding:3px 8px;border-radius:6px;
+                     font-size:11px;font-weight:600;">
+            {escape(momentum['volume_alert'])}
+        </span>
+        '''
+    
+    html += '</div>'
+    return html
 
 
 # Mapping of category codes to human-readable names
@@ -380,7 +580,7 @@ def _render_heroes(heroes: Iterable[Dict[str, Any]]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Card rendering
+# Card rendering (UPDATED with momentum indicators)
 # ---------------------------------------------------------------------------
 
 def _card_shell(inner: str, section: str) -> str:
@@ -396,7 +596,7 @@ def _card_shell(inner: str, section: str) -> str:
 
 
 def _build_asset_card(c: Dict[str, Any]) -> str:
-    """Build a complete HTML card for a given asset - MODERATE PADDING, 2x2 CHIPS."""
+    """Build a complete HTML card for a given asset - WITH MOMENTUM INDICATORS."""
     section = (c.get('category') or 'equity').lower()
     ticker = str(c.get('ticker') or c.get('symbol') or '')
     name = c.get('name') or ticker or 'Unknown'
@@ -444,6 +644,9 @@ def _build_asset_card(c: Dict[str, Any]) -> str:
         + '</div>'
     )
     
+    # Add momentum indicators if present
+    momentum_html = _render_momentum_badge(c.get('momentum', {}))
+    
     range_html = _range_bar(c.get('range_pct') or 50.0, c.get('low_52w') or 0.0, c.get('high_52w') or 0.0)
     bullets_html = ''
     headline = c.get('headline')
@@ -471,7 +674,8 @@ def _build_asset_card(c: Dict[str, Any]) -> str:
         '<td style="text-align:right;font-size:15px;">' + price_fmt + '</td>'
         '</tr></table></td></tr>'
         '<tr><td>' + chips_html + '</td></tr>'
-        '<tr><td>' + range_html + '</td></tr>'
+        + (f'<tr><td>{momentum_html}</td></tr>' if momentum_html else '')
+        + '<tr><td>' + range_html + '</td></tr>'
         + bullets_html +
         '<tr><td style="border-top:1px solid #E5E7EB;padding-top:10px;">'
         + _button('News', c.get('news_url') or f'https://finance.yahoo.com/quote/{escape(ticker)}/news')
@@ -645,15 +849,26 @@ def render_email(*args: Any, **kwargs: Any) -> str:
     # Generate dynamic header (using other_assets to exclude indices from calculations)
     header_title, header_subtitle = _generate_dynamic_header(summary, other_assets)
     
+    # NEW: Get daily focus and economic calendar
+    today = datetime.now(timezone.utc)
+    daily_focus = _get_daily_focus(other_assets, today)
+    economic_events = _get_economic_calendar(today)
+    
     # Render indices bar
     indices_html = _render_indices_bar(indices)
+    
+    # NEW: Render daily focus section
+    daily_focus_html = _render_daily_focus(daily_focus)
+    
+    # NEW: Render economic calendar
+    economic_calendar_html = _render_economic_calendar(economic_events, other_assets)
     
     # Render breaking news heroes (up to 2)
     breaking_html = _render_heroes(summary.get('heroes_breaking', []) or [])
     
-    # Render each section: heroes then cards
+    # Render each section: heroes then cards (COMMODITIES MOVED TO END)
     section_html_parts: List[str] = []
-    for sec in ['equity', 'commodity', 'crypto']:
+    for sec in ['equity', 'crypto', 'commodity']:  # Changed order - commodity last
         if not by_section.get(sec):
             continue
         sec_heroes = (summary.get('heroes_by_section', {}).get(sec) or [])[:3]
@@ -694,6 +909,8 @@ def render_email(*args: Any, **kwargs: Any) -> str:
         '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">As of ' + escape(as_of) + '</div>'
         '</td></tr>'
         '<tr><td style="padding:0 14px;">' + indices_html + '</td></tr>'
+        '<tr><td style="padding:0 14px;">' + daily_focus_html + '</td></tr>'
+        '<tr><td style="padding:0 14px;">' + economic_calendar_html + '</td></tr>'
         '<tr><td style="padding:0 14px;">' + breaking_html + '</td></tr>'
         '<tr><td style="padding:0 14px;">' + ''.join(section_html_parts) + '</td></tr>'
         '<tr><td style="padding:16px;color:#6B7280;font-size:11px;text-align:center;">You are receiving this digest based on your watchlist.</td></tr>'
