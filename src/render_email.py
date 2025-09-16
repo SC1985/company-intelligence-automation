@@ -830,12 +830,12 @@ def _grid(cards: List[str]) -> str:
 
 
 def _section_container(title: str, inner_html: str, section_type: str) -> str:
-    """Wrap section content in a container - WHITE BACKGROUND WITH LEFT BORDER."""
+    """Wrap section content in a container - WHITE BACKGROUND WITH COLORED LEFT BORDER AND GRAY OUTLINE."""
     style = SECTION_STYLES.get(section_type, SECTION_STYLES['equity'])
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="border-collapse:collapse;background:' + style['bg'] + ';'
-        'border-left:4px solid ' + style['border'] + ';border-radius:14px;margin:18px 0;'
+        'border:1px solid #E5E7EB;border-left:4px solid ' + style['border'] + ';border-radius:14px;margin:18px 0;'
         'box-shadow:0 1px 5px ' + style['shadow'] + ';"><tr><td style="padding:20px 14px;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
         '<tr><td class="section-title" style="font-weight:700;font-size:26px;color:#111827;'
@@ -1013,7 +1013,7 @@ def render_email(*args: Any, **kwargs: Any) -> str:
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         + css + '<title>' + escape(header_title) + '</title></head>'
-        '<body style="margin:0;padding:0;background:#FFFFFF;"><center style="width:100%;background:#FFFFFF;">'
+        '<body style="margin:0;padding:0;background:#F9FAFB;"><center style="width:100%;background:#F9FAFB;">'
         '<table role="presentation" cellpadding="0" cellspacing="0" width="600" '
         'style="margin:0 auto;background:#FFFFFF;border-radius:14px;overflow:hidden;">'
         '<tr><td style="padding:18px 14px 10px 14px;text-align:left;">'
