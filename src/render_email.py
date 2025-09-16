@@ -143,76 +143,208 @@ def _index_pill(value: Any, prefix: str = '') -> str:
 
 
 # ---------------------------------------------------------------------------
-# NEW: Daily Focus Section (Matching email color scheme)
+# UPDATED: Portfolio-Aware Daily Focus Section
 # ---------------------------------------------------------------------------
 
 def _get_daily_focus(assets: List[Dict[str, Any]], today: datetime = None) -> Optional[Dict[str, Any]]:
-    """Determine the most important event for today."""
+    """Generate dynamic focus based on actual portfolio performance and momentum."""
     if today is None:
         today = datetime.now(timezone.utc)
     
+    # Exclude indices from analysis (focus on tradeable positions)
+    tradeable_assets = [a for a in assets if a.get('category', '').lower() != 'etf_index']
+    
     focus_items = []
     
-    # Check for earnings (would need earnings dates in asset data)
-    for asset in assets:
-        if asset.get('earnings_date'):
-            earnings_dt = _parse_to_dt(asset['earnings_date'])
-            if earnings_dt and earnings_dt.date() == today.date():
-                focus_items.append({
-                    'priority': 10,
-                    'icon': '📊',
-                    'title': f"{asset['symbol']} Earnings Today",
-                    'detail': f"Reports {asset.get('earnings_timing', 'after close')}",
-                    'action': 'Review analyst expectations'
-                })
+    # 1. BIGGEST MOVER ALERT - Find most significant price movement
+    biggest_mover = None
+    biggest_change = 0
     
-    # Check for major economic events (hardcoded for now, could be API-driven)
-    economic_events = {
-        # Format: 'YYYY-MM-DD': [events]
-        '2025-01-15': {
-            'icon': '📈',
-            'title': 'CPI Inflation Data',
-            'detail': '8:30 AM ET • Forecast: +0.3% MoM',
-            'action': 'Watch commodity & growth stock positions',
-            'priority': 8
-        },
-        '2025-01-29': {
-            'icon': '🏛️',
-            'title': 'FOMC Rate Decision',
-            'detail': '2:00 PM ET • Expected: No Change',
-            'action': 'Prepare for volatility in rate-sensitive sectors',
-            'priority': 9
-        },
-    }
+    for asset in tradeable_assets:
+        pct_1d = _safe_float(asset.get('pct_1d'), 0)
+        if abs(pct_1d) > abs(biggest_change):
+            biggest_change = pct_1d
+            biggest_mover = asset
     
-    today_str = today.strftime('%Y-%m-%d')
-    if today_str in economic_events:
-        focus_items.append(economic_events[today_str])
+    if biggest_mover and abs(biggest_change) >= 3.0:  # Only if significant move
+        symbol = biggest_mover.get('symbol', 'Unknown')
+        name = biggest_mover.get('commodity_display_name') or biggest_mover.get('name', symbol)
+        
+        if biggest_change > 0:
+            icon = '🚀' if biggest_change >= 8 else '📈'
+            title = f"{name} Surges +{abs(biggest_change):.1f}%"
+            if biggest_change >= 10:
+                action = f"Consider taking profits on {symbol} position"
+            elif biggest_change >= 6:
+                action = f"Monitor {symbol} for potential resistance levels"
+            else:
+                action = f"Watch {symbol} momentum for continuation signals"
+        else:
+            icon = '⚠️' if biggest_change <= -8 else '📉'
+            title = f"{name} Drops {biggest_change:.1f}%"
+            if biggest_change <= -10:
+                action = f"Evaluate {symbol} for potential buying opportunity"
+            elif biggest_change <= -6:
+                action = f"Monitor {symbol} support levels closely"
+            else:
+                action = f"Watch {symbol} for potential reversal signals"
+        
+        focus_items.append({
+            'priority': 10,
+            'icon': icon,
+            'title': title,
+            'detail': f"Leading portfolio movement today",
+            'action': action
+        })
     
-    # Pick highest priority item
+    # 2. MOMENTUM SIGNALS - Check for technical breakouts/breakdowns
+    momentum_alerts = []
+    volume_alerts = []
+    
+    for asset in tradeable_assets:
+        symbol = asset.get('symbol', 'Unknown')
+        name = asset.get('commodity_display_name') or asset.get('name', symbol)
+        momentum = asset.get('momentum', {})
+        
+        # Hot/Cold streak detection
+        if 'momentum' in momentum:
+            momentum_text = momentum.get('momentum', '')
+            consecutive = momentum.get('consecutive_days', 0)
+            
+            if '🔥 Hot Streak' in momentum_text and abs(consecutive) >= 3:
+                momentum_alerts.append(f"{symbol} ({abs(consecutive)} days up)")
+            elif '❄️ Cold Streak' in momentum_text and abs(consecutive) >= 3:
+                momentum_alerts.append(f"{symbol} ({abs(consecutive)} days down)")
+        
+        # Volume spike detection
+        if 'volume_alert' in momentum:
+            volume_multiplier = momentum.get('volume_spike', 0)
+            if volume_multiplier >= 2.0:
+                volume_alerts.append(f"{symbol} ({volume_multiplier:.1f}x vol)")
+    
+    if momentum_alerts or volume_alerts:
+        signals = []
+        if momentum_alerts:
+            signals.append(f"Streaks: {', '.join(momentum_alerts[:3])}")
+        if volume_alerts:
+            signals.append(f"Volume: {', '.join(volume_alerts[:2])}")
+        
+        focus_items.append({
+            'priority': 8,
+            'icon': '⚡',
+            'title': 'Momentum Signals Detected',
+            'detail': ' • '.join(signals),
+            'action': 'Review technical levels for breakout/breakdown plays'
+        })
+    
+    # 3. SMART MARKET EVENTS - Only relevant to actual holdings
+    relevant_events = _get_relevant_economic_events(tradeable_assets, today)
+    if relevant_events:
+        event = relevant_events[0]  # Take most important
+        focus_items.append({
+            'priority': event.get('priority', 7),
+            'icon': event.get('icon', '📊'),
+            'title': event.get('title', 'Market Event'),
+            'detail': event.get('detail', ''),
+            'action': event.get('action', 'Monitor market reaction')
+        })
+    
+    # Pick highest priority focus item
     if focus_items:
         return max(focus_items, key=lambda x: x['priority'])
     
-    # Default focus if nothing special today
-    if not focus_items:
-        # Market sentiment focus
-        return {
-            'icon': '📈',
-            'title': 'Market Positioning',
-            'detail': f"{today.strftime('%A')} Trading Session",
-            'action': 'Monitor momentum indicators for entry points'
+    # Fallback: Portfolio health check with rotation
+    day_of_year = today.timetuple().tm_yday
+    fallback_options = [
+        {
+            'icon': '🎯',
+            'title': 'Portfolio Rebalancing Day',
+            'detail': 'Review position sizes and risk allocation',
+            'action': 'Consider trimming overweight positions'
+        },
+        {
+            'icon': '🔍',
+            'title': 'Technical Analysis Review',
+            'detail': 'Scan holdings for chart patterns and levels',
+            'action': 'Update stop losses and target prices'
+        },
+        {
+            'icon': '📊',
+            'title': 'Sector Rotation Check',
+            'detail': 'Analyze relative strength across categories',
+            'action': 'Identify leadership changes in portfolio'
+        },
+        {
+            'icon': '💡',
+            'title': 'Risk Assessment Day',
+            'detail': 'Evaluate portfolio correlation and volatility',
+            'action': 'Consider hedging strategies if needed'
         }
+    ]
     
-    return None
+    return fallback_options[day_of_year % len(fallback_options)]
+
+
+def _get_relevant_economic_events(assets: List[Dict[str, Any]], today: datetime) -> List[Dict[str, Any]]:
+    """Get economic events that are actually relevant to the user's holdings."""
+    today_str = today.strftime('%Y-%m-%d')
+    
+    # Analyze user's portfolio composition
+    has_crypto = any(a.get('category') == 'crypto' for a in assets)
+    has_commodities = any(a.get('category') == 'commodity' for a in assets)
+    has_growth_stocks = any(a.get('symbol') in ['NVDA', 'AMD'] for a in assets)  # Tech growth
+    has_small_caps = any(a.get('symbol') in ['SKYQ', 'KOPN'] for a in assets)  # Speculative
+    has_nuclear = any(a.get('symbol') in ['OKLO', 'SMR'] for a in assets)  # Nuclear energy
+    
+    # Calendar of events that matter to specific holdings
+    relevant_calendar = {
+        '2025-01-15': [
+            {
+                'icon': '📊',
+                'title': 'CPI Inflation Data (8:30 AM ET)',
+                'detail': 'Core CPI expected +0.3% • Impacts commodities & crypto positions',
+                'action': f'Watch {"gold/silver" if has_commodities else ""}{"BTC/ETH" if has_crypto else ""} reaction',
+                'priority': 9
+            } if has_commodities or has_crypto else None
+        ],
+        '2025-01-16': [
+            {
+                'icon': '💼',
+                'title': 'Jobless Claims (8:30 AM ET)',
+                'detail': 'Employment strength affects growth stock sentiment',
+                'action': 'Monitor NVDA/AMD for employment-driven moves',
+                'priority': 7
+            } if has_growth_stocks else None
+        ],
+        '2025-01-29': [
+            {
+                'icon': '🏛️',
+                'title': 'Fed Decision (2:00 PM ET)',
+                'detail': 'Rate policy impacts growth stocks and crypto significantly',
+                'action': 'Prepare for volatility in speculative positions',
+                'priority': 9
+            } if has_growth_stocks or has_crypto or has_small_caps else None
+        ],
+        '2025-02-05': [
+            {
+                'icon': '⚡',
+                'title': 'Energy Policy Update',
+                'detail': 'Nuclear energy regulations and incentives review',
+                'action': 'Monitor OKLO and SMR for policy-driven catalysts',
+                'priority': 8
+            } if has_nuclear else None
+        ]
+    }
+    
+    events = relevant_calendar.get(today_str, [])
+    return [event for event in events if event is not None]
 
 
 def _render_daily_focus(focus: Dict[str, Any]) -> str:
-    """Render the daily focus section matching the email's color scheme."""
+    """Render the portfolio-aware daily focus section."""
     if not focus:
         return ''
     
-    # Match the existing email color scheme - light bg, dark text
-    # Email clients will handle dark mode transformation
     return f'''
     <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:14px;margin:12px 0;">
         <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px;
@@ -233,70 +365,47 @@ def _render_daily_focus(focus: Dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# NEW: Economic Calendar (Matching email color scheme)
+# UPDATED: Smart Economic Calendar (Portfolio-Aware)
 # ---------------------------------------------------------------------------
 
-def _get_economic_calendar(today: datetime = None) -> List[Dict[str, Any]]:
-    """Get today's economic events. In production, this would call an API."""
+def _get_economic_calendar(assets: List[Dict[str, Any]], today: datetime = None) -> List[Dict[str, Any]]:
+    """Get economic events relevant to user's actual holdings."""
     if today is None:
         today = datetime.now(timezone.utc)
     
-    # Hardcoded calendar - in production, fetch from API
-    calendar = {
-        '2025-01-15': [
-            {'time': '08:30', 'event': 'Core CPI', 'impact': 'High', 'forecast': '+0.3%', 'affects': ['commodity', 'crypto']},
-            {'time': '08:30', 'event': 'Retail Sales', 'impact': 'Medium', 'forecast': '+0.5%', 'affects': ['equity']},
-            {'time': '14:00', 'event': 'Beige Book', 'impact': 'Low', 'affects': ['equity']},
-        ],
-        '2025-01-16': [
-            {'time': '08:30', 'event': 'Initial Jobless Claims', 'impact': 'Medium', 'forecast': '215K', 'affects': ['equity']},
-            {'time': '08:30', 'event': 'Housing Starts', 'impact': 'Low', 'forecast': '1.35M', 'affects': ['commodity']},
-        ],
-        '2025-01-29': [
-            {'time': '14:00', 'event': 'FOMC Decision', 'impact': 'High', 'forecast': '5.25-5.50%', 'affects': ['equity', 'crypto']},
-            {'time': '14:30', 'event': 'Powell Press Conference', 'impact': 'High', 'affects': ['equity', 'crypto']},
-        ],
-    }
-    
-    today_str = today.strftime('%Y-%m-%d')
-    return calendar.get(today_str, [])
+    # Use the same logic as daily focus to get relevant events
+    tradeable_assets = [a for a in assets if a.get('category', '').lower() != 'etf_index']
+    return _get_relevant_economic_events(tradeable_assets, today)
 
 
 def _render_economic_calendar(events: List[Dict[str, Any]], assets: List[Dict[str, Any]]) -> str:
-    """Render the economic calendar section matching the email's color scheme."""
+    """Render economic calendar with only portfolio-relevant events."""
     if not events:
         return ''
     
-    # Match the existing email color scheme
     html = '''
     <div style="background:#EFF6FF;border:1px solid #0284C7;border-radius:12px;padding:12px;margin:12px 0;">
         <div style="font-size:11px;font-weight:700;color:#075985;margin-bottom:8px;
                     text-transform:uppercase;letter-spacing:0.5px;">
-            📅 ECONOMIC CALENDAR
+            📅 RELEVANT EVENTS
         </div>
     '''
     
-    for event in events[:3]:  # Show top 3 events
-        impact_color = '#DC2626' if event['impact'] == 'High' else '#F59E0B' if event['impact'] == 'Medium' else '#6B7280'
-        
-        # Find affected holdings
-        affected_symbols = []
-        if 'affects' in event:
-            for category in event['affects']:
-                affected_symbols.extend([
-                    a['symbol'] for a in assets 
-                    if a.get('category') == category
-                ])
+    for event in events[:2]:  # Show top 2 relevant events
+        impact_color = '#DC2626'  # All relevant events are high impact by definition
         
         html += f'''
         <div style="margin:8px 0;padding:8px;background:#FFFFFF;
                     border-radius:8px;border-left:3px solid {impact_color};">
-            <div style="font-size:13px;">
-                <span style="color:{impact_color};font-weight:700;">{escape(event['time'])} ET</span>
-                <span style="font-weight:600;color:#111827;"> • {escape(event['event'])}</span>
-                {f'<span style="color:#6B7280;"> • {escape(event.get("forecast", ""))}</span>' if event.get('forecast') else ''}
+            <div style="font-size:13px;font-weight:600;color:#111827;margin-bottom:2px;">
+                {event['icon']} {escape(event['title'])}
             </div>
-            {f'<div style="font-size:11px;color:#6B7280;margin-top:2px;">Impact: {", ".join(affected_symbols[:5])}</div>' if affected_symbols else ''}
+            <div style="font-size:11px;color:#6B7280;margin-bottom:2px;">
+                {escape(event['detail'])}
+            </div>
+            <div style="font-size:11px;color:#1E40AF;font-weight:500;">
+                Action: {escape(event['action'])}
+            </div>
         </div>
         '''
     
@@ -475,7 +584,7 @@ def _generate_dynamic_header(summary: Dict[str, Any], assets: List[Dict[str, Any
             else:
                 subtitle += f" • {name} down {abs(biggest_change):.1f}%"
     else:
-        title = "Intelligence Digest"
+        title = "Investment Edge"
         subtitle = "Your daily portfolio intelligence report"
     
     return title, subtitle
@@ -854,18 +963,18 @@ def render_email(*args: Any, **kwargs: Any) -> str:
     # Generate dynamic header (using other_assets to exclude indices from calculations)
     header_title, header_subtitle = _generate_dynamic_header(summary, other_assets)
     
-    # NEW: Get daily focus and economic calendar
+    # Get daily focus and economic calendar with portfolio awareness
     today = datetime.now(timezone.utc)
     daily_focus = _get_daily_focus(other_assets, today)
-    economic_events = _get_economic_calendar(today)
+    economic_events = _get_economic_calendar(other_assets, today)
     
     # Render indices bar
     indices_html = _render_indices_bar(indices)
     
-    # NEW: Render daily focus section
+    # Render daily focus section (now portfolio-aware)
     daily_focus_html = _render_daily_focus(daily_focus)
     
-    # NEW: Render economic calendar
+    # Render economic calendar (now portfolio-aware)
     economic_calendar_html = _render_economic_calendar(economic_events, other_assets)
     
     # Render breaking news heroes (up to 2)
