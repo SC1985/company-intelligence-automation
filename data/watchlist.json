@@ -107,27 +107,15 @@
           }
         },
         {
-          "symbol": "AMD",
-          "name": "Advanced Micro Devices Inc.",
+          "symbol": "BBAI",
+          "name": "BigBear.ai Holdings Inc.",
           "asset_class": "equity",
-          "industry": "Semiconductors",
-          "priority": "high",
-          "investment_thesis": "CPU/GPU innovation leader challenging Intel/NVIDIA with AI capabilities",
+          "industry": "AI/Analytics",
+          "priority": "speculative",
+          "investment_thesis": "AI-powered decision intelligence for defense and commercial sectors",
           "alert_thresholds": {
-            "price_change_percent": 5.0,
-            "volume_spike_multiplier": 2.0
-          }
-        },
-        {
-          "symbol": "NVDA",
-          "name": "NVIDIA Corporation",
-          "asset_class": "equity",
-          "industry": "AI Semiconductors",
-          "priority": "critical",
-          "investment_thesis": "AI computing infrastructure backbone with data center GPU dominance",
-          "alert_thresholds": {
-            "price_change_percent": 4.0,
-            "volume_spike_multiplier": 1.75
+            "price_change_percent": 8.0,
+            "volume_spike_multiplier": 3.0
           }
         }
       ]
