@@ -1013,7 +1013,7 @@ def render_email(*args: Any, **kwargs: Any) -> str:
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         + css + '<title>' + escape(header_title) + '</title></head>'
-        '<body style="margin:0;padding:0;background:#F9FAFB;"><center style="width:100%;background:#F9FAFB;">'
+        '<body style="margin:0;padding:0;background:#FFFFFF;"><center style="width:100%;background:#FFFFFF;">'
         '<table role="presentation" cellpadding="0" cellspacing="0" width="600" '
         'style="margin:0 auto;background:#FFFFFF;border-radius:14px;overflow:hidden;">'
         '<tr><td style="padding:18px 14px 10px 14px;text-align:left;">'
